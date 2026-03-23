@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: logistics_backend
+    restart: always
+    env_file: .env
+    expose:
+      - "8000"
+    depends_on:
+      - nginx
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: logistics_frontend_build
+    volumes:
+      - frontend_dist:/app/dist
+    command: npm run build
+
+  nginx:
+    image: nginx:alpine
+    container_name: logistics_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+
+  # NOTE: No db service here — production uses AWS Aurora PostgreSQL
+  # Set DATABASE_URL in .env to point to your Aurora endpoint
+
+volumes:
+  frontend_dist:
