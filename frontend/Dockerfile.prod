@@ -1,12 +1,19 @@
-# Production Dockerfile — builds static files served by nginx
+# Production Dockerfile — builds static files, served by nginx
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+
+# Install deps first (layer cache)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
+
+# Copy source and build
 COPY . .
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
-# Final stage: just the dist files
-FROM alpine:3.19
+
+# ── Output stage: just the compiled dist ──────────────────────────────────────
+FROM alpine:3.19 AS dist
 COPY --from=builder /app/dist /app/dist

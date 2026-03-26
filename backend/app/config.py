@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
 
-    # CORS
+    # CORS / Hosts
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_HOSTS: str = "*"           # comma-separated; production should list real domains
+
+    # Security
+    MIN_PASSWORD_LENGTH: int = 8
 
     # Currency API
     CURRENCY_API_KEY: str = ""
@@ -39,6 +43,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",")]
 
     @property
     def is_production(self) -> bool:

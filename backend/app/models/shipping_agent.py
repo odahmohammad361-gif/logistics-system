@@ -10,21 +10,27 @@ class ShippingAgent(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False, index=True)
     name_ar = Column(String(200), nullable=True)
-    country = Column(String(100), nullable=True)   # e.g. China
+    country = Column(String(100), nullable=True)
     contact_person = Column(String(150), nullable=True)
     phone = Column(String(30), nullable=True)
     whatsapp = Column(String(30), nullable=True)
+    wechat_id = Column(String(100), nullable=True)        # WeChat contact ID
     email = Column(String(255), nullable=True)
 
-    # Sea cargo prices (USD)
-    price_20gp = Column(Numeric(10, 2), nullable=True)   # 20GP container
-    price_40ft = Column(Numeric(10, 2), nullable=True)   # 40FT container
-    price_40hq = Column(Numeric(10, 2), nullable=True)   # 40HQ container
+    # Warehouse (origin — where they pick up cargo)
+    warehouse_address = Column(Text, nullable=True)
+    warehouse_city = Column(String(100), nullable=True)   # e.g. Guangzhou, Shenzhen
 
-    # Air cargo (USD per KG)
+    # Bank details (for paying freight invoices)
+    bank_name = Column(String(200), nullable=True)
+    bank_account = Column(String(100), nullable=True)
+    bank_swift = Column(String(20), nullable=True)
+
+    # Quick reference prices (USD) — general ballpark; detailed quotes in shipping_quotes
+    price_20gp = Column(Numeric(10, 2), nullable=True)
+    price_40ft = Column(Numeric(10, 2), nullable=True)
+    price_40hq = Column(Numeric(10, 2), nullable=True)
     price_air_kg = Column(Numeric(10, 2), nullable=True)
-
-    # Transit time (days)
     transit_sea_days = Column(Integer, nullable=True)
     transit_air_days = Column(Integer, nullable=True)
 
@@ -35,3 +41,4 @@ class ShippingAgent(Base):
 
     # Relationships
     containers = relationship("Container", back_populates="shipping_agent")
+    quotes = relationship("ShippingQuote", back_populates="agent")

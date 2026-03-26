@@ -58,6 +58,20 @@ class Container(Base):
 
     notes = Column(Text, nullable=True)
 
+    # B/L and seal (can be auto-extracted via OCR)
+    seal_no = Column(String(50), nullable=True)
+    bl_number = Column(String(50), nullable=True)
+
+    # LCL mode: multiple clients sharing one container
+    is_lcl = Column(Boolean, default=False, nullable=False)
+
+    # Shipping & payment terms
+    shipping_term = Column(String(30), nullable=True)     # FOB, CIF, etc.
+    payment_terms = Column(String(100), nullable=True)    # T/T, L/C, etc.
+
+    # Cargo mode label for air/sea
+    cargo_mode = Column(String(10), nullable=True)        # FCL, LCL (for sea); AIR
+
     # Audit
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
@@ -68,4 +82,5 @@ class Container(Base):
     # Relationships
     client = relationship("Client", back_populates="containers")
     shipping_agent = relationship("ShippingAgent", back_populates="containers")
+    lcl_clients = relationship("ContainerClient", back_populates="container", cascade="all, delete-orphan")
     created_by = relationship("User", foreign_keys=[created_by_id])

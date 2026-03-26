@@ -1,13 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+import time
 
 from app.config import settings
-from app.api.v1 import auth, users, clients, invoices, containers, shipping_agents, clearance_agents, market, company
-
-limiter = Limiter(key_func=get_remote_address)
+from app.core.limiter import limiter
+from app.api.v1 import auth, users, clients, invoices, containers, shipping_agents, clearance_agents, market, company, branches, reference
 
 app = FastAPI(
     title="Logistics System API",
@@ -15,20 +15,47 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs" if not settings.is_production else None,
     redoc_url="/api/redoc" if not settings.is_production else None,
+    openapi_url="/api/openapi.json" if not settings.is_production else None,
 )
 
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS
+# Trusted hosts (production only — prevents Host header injection)
+if settings.is_production:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
+
+# CORS — explicit methods/headers, no wildcard in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["Content-Disposition"],
+    max_age=600,
 )
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    # Remove fingerprinting headers
+    if "server" in response.headers:
+        del response.headers["server"]
+    if "x-powered-by" in response.headers:
+        del response.headers["x-powered-by"]
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if settings.is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    response.headers["X-Process-Time"] = str(round(time.time() - start, 4))
+    return response
 
 # Routers
 API_PREFIX = "/api/v1"
@@ -42,6 +69,8 @@ app.include_router(shipping_agents.router,  prefix=f"{API_PREFIX}/shipping-agent
 app.include_router(clearance_agents.router, prefix=f"{API_PREFIX}/clearance-agents", tags=["Clearance Agents"])
 app.include_router(market.router,           prefix=f"{API_PREFIX}/market",           tags=["Market Board"])
 app.include_router(company.router,          prefix=f"{API_PREFIX}/company",          tags=["Company"])
+app.include_router(branches.router,         prefix=f"{API_PREFIX}/branches",         tags=["Branches"])
+app.include_router(reference.router,        prefix=f"{API_PREFIX}/reference",        tags=["Reference"])
 
 
 @app.get("/health", tags=["Health"])
