@@ -23,6 +23,8 @@ interface AgentForm {
   country: string
   warehouse_city: string
   warehouse_address: string
+  serves_sea: boolean
+  serves_air: boolean
   // Quick reference prices
   price_20gp: number | ''
   price_40ft: number | ''
@@ -35,6 +37,7 @@ interface AgentForm {
 
 interface QuoteForm {
   service_mode: string
+  carrier: string
   container_type: string
   incoterm: string
   port_of_loading: string
@@ -98,6 +101,8 @@ export default function ShippingAgentsPage() {
         price_air_kg: v.price_air_kg !== '' ? Number(v.price_air_kg) : null,
         transit_sea_days: v.transit_sea_days !== '' ? Number(v.transit_sea_days) : null,
         transit_air_days: v.transit_air_days !== '' ? Number(v.transit_air_days) : null,
+        serves_sea: v.serves_sea,
+        serves_air: v.serves_air,
       }
       return editingAgent ? updateAgent(editingAgent.id, payload) : createAgent(payload)
     },
@@ -121,6 +126,7 @@ export default function ShippingAgentsPage() {
     mutationFn: ({ agentId, data }: { agentId: number; data: QuoteForm }) => {
       const payload: Record<string, unknown> = {
         service_mode: data.service_mode,
+        carrier: data.carrier || null,
         incoterm: data.incoterm || null,
         port_of_loading: data.port_of_loading || null,
         port_of_discharge: data.port_of_discharge || null,
@@ -159,6 +165,7 @@ export default function ShippingAgentsPage() {
     agentForm.reset({
       name: '', phone: '', email: '', wechat_id: '', country: '',
       warehouse_city: '', warehouse_address: '',
+      serves_sea: true, serves_air: false,
       price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '',
       transit_sea_days: '', transit_air_days: '', notes: '',
     })
@@ -181,6 +188,8 @@ export default function ShippingAgentsPage() {
       price_air_kg: agent.price_air_kg != null ? Number(agent.price_air_kg) : '',
       transit_sea_days: agent.transit_sea_days != null ? agent.transit_sea_days : '',
       transit_air_days: agent.transit_air_days != null ? agent.transit_air_days : '',
+      serves_sea: agent.serves_sea ?? true,
+      serves_air: agent.serves_air ?? false,
       notes: agent.notes ?? '',
     })
     setAgentModal(true)
@@ -225,7 +234,19 @@ export default function ShippingAgentsPage() {
                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Name */}
                   <div>
-                    <p className="text-sm text-white font-medium">{agent.name}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm text-white font-medium">{agent.name}</p>
+                      {agent.serves_sea && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300">
+                          <Ship size={8} /> SEA
+                        </span>
+                      )}
+                      {agent.serves_air && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300">
+                          <Wind size={8} /> AIR
+                        </span>
+                      )}
+                    </div>
                     {agent.wechat_id && (
                       <p className="text-xs text-green-400 mt-0.5">WeChat: {agent.wechat_id}</p>
                     )}
@@ -341,6 +362,27 @@ export default function ShippingAgentsPage() {
             <Input type="email" label={t('common.email')} {...agentForm.register('email')} />
           </FormSection>
 
+          {/* Service modes */}
+          <FormSection title={t('agents.service_modes')}>
+            <div className="flex gap-3">
+              {(['serves_sea', 'serves_air'] as const).map((key) => (
+                <label key={key} className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all text-sm font-medium',
+                  agentForm.watch(key)
+                    ? 'border-brand-primary bg-brand-primary/15 text-brand-primary-light'
+                    : 'border-brand-border text-brand-text-muted hover:border-brand-border-focus',
+                )}>
+                  <input type="checkbox" className="sr-only" {...agentForm.register(key)} />
+                  {key === 'serves_sea' ? (
+                    <><Ship size={14} /> {t('agents.serves_sea')}</>
+                  ) : (
+                    <><Wind size={14} /> {t('agents.serves_air')}</>
+                  )}
+                </label>
+              ))}
+            </div>
+          </FormSection>
+
           <FormSection title={t('common.location')}>
             <FormRow>
               <Input label={t('common.city')} {...agentForm.register('warehouse_city')} />
@@ -434,6 +476,12 @@ export default function ShippingAgentsPage() {
                 {...quoteForm.register('incoterm')}
               />
             </FormRow>
+            {/* Carrier / shipping line */}
+            <Input
+              label={t('bookings.carrier_line')}
+              placeholder={isAir ? 'Emirates SkyCargo, Turkish Cargo…' : 'CMA CGM, MSC, PIL, Evergreen…'}
+              {...quoteForm.register('carrier')}
+            />
             <FormRow>
               <Input label={t('containers.origin_port')} {...quoteForm.register('port_of_loading')} />
               <Input label={t('containers.destination_port')} {...quoteForm.register('port_of_discharge')} />

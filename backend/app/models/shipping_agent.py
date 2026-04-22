@@ -34,11 +34,14 @@ class ShippingAgent(Base):
     transit_sea_days = Column(Integer, nullable=True)
     transit_air_days = Column(Integer, nullable=True)
 
+    # Service modes offered by this agent
+    serves_sea = Column(Boolean, default=True, nullable=False)
+    serves_air = Column(Boolean, default=False, nullable=False)
+
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
-    containers = relationship("Container", back_populates="shipping_agent")
     quotes = relationship("ShippingQuote", back_populates="agent")

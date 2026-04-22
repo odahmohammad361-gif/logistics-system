@@ -1,4 +1,7 @@
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,20 +15,35 @@ router = APIRouter()
 
 
 def _generate_client_code(db: Session, branch_code: str) -> str:
-    """Generate sequential client code like JO-0001, CN-0042"""
+    """
+    Generate sequential client code like JO-0001, JO-0042.
+    Uses the last existing code (by ID) to avoid gaps from soft-deletes.
+    """
     prefix = f"{branch_code}-"
-    count = db.query(Client).filter(Client.client_code.like(f"{prefix}%")).count()
-    return f"{prefix}{str(count + 1).zfill(4)}"
+    last = (
+        db.query(Client)
+        .filter(Client.client_code.like(f"{prefix}%"))
+        .order_by(Client.id.desc())
+        .first()
+    )
+    if last:
+        try:
+            last_num = int(last.client_code.rsplit("-", 1)[-1])
+        except (ValueError, IndexError):
+            last_num = 0
+    else:
+        last_num = 0
+    return f"{prefix}{str(last_num + 1).zfill(4)}"
 
 
+# ── Create ─────────────────────────────────────────────────────────────────────
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 def create_client(
     payload: ClientCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
-    # Resolve branch
-    branch_code = "JO"  # default
+    branch_code = "JO"  # default branch
     if payload.branch_id:
         branch = db.query(Branch).filter(Branch.id == payload.branch_id).first()
         if not branch:
@@ -45,11 +63,12 @@ def create_client(
     return client
 
 
+# ── List ───────────────────────────────────────────────────────────────────────
 @router.get("", response_model=ClientListResponse)
 def list_clients(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=500),
-    search: str = Query("", description="Search by name or code"),
+    search: str = Query("", description="Search by name, code, phone"),
     branch_id: int = Query(None),
     is_active: bool = Query(None),
     db: Session = Depends(get_db),
@@ -73,10 +92,10 @@ def list_clients(
 
     total = q.count()
     results = q.order_by(Client.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-
     return ClientListResponse(total=total, page=page, page_size=page_size, results=results)
 
 
+# ── Get one ────────────────────────────────────────────────────────────────────
 @router.get("/{client_id}", response_model=ClientResponse)
 def get_client(
     client_id: int,
@@ -89,6 +108,54 @@ def get_client(
     return client
 
 
+# ── Barcode (SVG) ──────────────────────────────────────────────────────────────
+@router.get("/{client_id}/barcode")
+def get_client_barcode(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns a Code128 barcode SVG for the given client.
+    The barcode encodes the client_code (e.g. JO-0001).
+    """
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    try:
+        from barcode import Code128          # type: ignore[import]
+        from barcode.writer import SVGWriter  # type: ignore[import]
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Barcode library not installed. Run: pip install python-barcode",
+        )
+
+    buffer = io.BytesIO()
+    barcode = Code128(client.client_code, writer=SVGWriter())
+    barcode.write(
+        buffer,
+        options={
+            "module_height": 12.0,
+            "module_width": 0.35,
+            "quiet_zone": 6.0,
+            "font_size": 8,
+            "text_distance": 4.0,
+            "background": "#ffffff",
+            "foreground": "#000000",
+            "write_text": True,
+        },
+    )
+    buffer.seek(0)
+    return Response(
+        content=buffer.read(),
+        media_type="image/svg+xml",
+        headers={"Content-Disposition": f'inline; filename="{client.client_code}.svg"'},
+    )
+
+
+# ── Update ─────────────────────────────────────────────────────────────────────
 @router.patch("/{client_id}", response_model=ClientResponse)
 def update_client(
     client_id: int,
@@ -113,6 +180,7 @@ def update_client(
     return client
 
 
+# ── Delete (soft) ──────────────────────────────────────────────────────────────
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(
     client_id: int,
@@ -122,6 +190,5 @@ def delete_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    # Soft delete
     client.is_active = False
     db.commit()

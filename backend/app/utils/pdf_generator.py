@@ -14,6 +14,24 @@ from app.utils.number_to_words import amount_to_words_en, amount_to_words_ar
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
 
 
+def _barcode_svg(text: str) -> str:
+    """Generate an inline SVG barcode string for the given text."""
+    try:
+        from barcode import Code128          # type: ignore[import]
+        from barcode.writer import SVGWriter  # type: ignore[import]
+        buf = __import__('io').BytesIO()
+        Code128(text, writer=SVGWriter()).write(buf, options={
+            "module_height": 8.0, "module_width": 0.25,
+            "quiet_zone": 3.0, "font_size": 6,
+            "text_distance": 2.5, "background": "#ffffff",
+            "foreground": "#000000", "write_text": True,
+        })
+        buf.seek(0)
+        return buf.read().decode("utf-8")
+    except Exception:
+        return ""
+
+
 def _img_b64(path: Optional[str]) -> str:
     """Return base64-encoded image src for embedding in HTML."""
     if not path:
@@ -80,12 +98,10 @@ LABELS = {
 }
 
 CSS_STYLE = """
-@import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap');
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: 'Noto Naskh Arabic', Arial, sans-serif;
+    font-family: 'Tahoma', 'Arial', 'Segoe UI', sans-serif;
     font-size: 10px;
     color: #222;
     background: #fff;
@@ -233,6 +249,40 @@ td.text-right { text-align: right; }
 .sc-section ul { padding-left: 14px; }
 .sc-section li { margin-bottom: 2px; }
 
+/* Invoice barcode (top-right header) */
+.barcode-area {
+    text-align: right;
+    margin-bottom: 4px;
+}
+.barcode-area svg {
+    max-height: 36px;
+    max-width: 160px;
+}
+
+/* Client footer barcode */
+.client-footer {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px dashed #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.client-footer-info {
+    font-size: 8px;
+    color: #555;
+    line-height: 1.6;
+}
+.client-footer-info b {
+    font-size: 9px;
+    color: #222;
+}
+.client-footer-barcode svg {
+    max-height: 40px;
+    max-width: 180px;
+}
+
 @page {
     size: A4;
     margin: 10mm 8mm;
@@ -282,16 +332,48 @@ def _build_html(inv, company, lang: str) -> str:
     co_phone = company.phone if company else ""
     co_email = company.email if company else ""
 
-    # Client block
+    # Client block (may be None for dummy invoices)
     cl = inv.client
-    cl_name = (cl.name_ar or cl.name) if is_ar else cl.name
-    cl_company = (cl.company_name_ar or cl.company_name) if is_ar else cl.company_name
-    cl_addr = cl.address or ""
-    cl_phone = cl.phone or ""
-    cl_email = cl.email or ""
+    if cl:
+        cl_name = (cl.name_ar or cl.name) if is_ar else cl.name
+        cl_company = (cl.company_name_ar or cl.company_name) if is_ar else cl.company_name
+        cl_addr = cl.address or ""
+        cl_phone = cl.phone or ""
+        cl_email = cl.email or ""
+    else:
+        # Dummy invoice — use buyer_name
+        cl_name = getattr(inv, "buyer_name", None) or ("مشتري وهمي" if is_ar else "Manual Buyer")
+        cl_company = None
+        cl_addr = cl_phone = cl_email = ""
 
     logo_html = f'<img src="{logo_src}" class="logo-img">' if logo_src else ""
     stamp_html = f'<img src="{stamp_src}" class="stamp-img">' if (stamp_src and show_stamp_in_signature) else ""
+
+    # Barcode for invoice number (header)
+    barcode_svg = _barcode_svg(inv.invoice_number)
+    barcode_html = f'<div class="barcode-area">{barcode_svg}</div>' if barcode_svg else ""
+
+    # Client barcode (footer) — only for real clients
+    client_label = "رمز العميل" if is_ar else "Client Code"
+    if cl:
+        client_barcode_svg = _barcode_svg(cl.client_code)
+        client_footer_html = f"""
+    <div class="client-footer">
+      <div class="client-footer-info">
+        <b>{cl_name}</b><br>
+        {client_label}: <b>{cl.client_code}</b>
+      </div>
+      <div class="client-footer-barcode">{client_barcode_svg}</div>
+    </div>""" if client_barcode_svg else ""
+    else:
+        dummy_label = "غير معتمدة" if is_ar else "Unapproved Invoice"
+        client_footer_html = f"""
+    <div class="client-footer">
+      <div class="client-footer-info">
+        <b>{cl_name}</b><br>
+        <span style="color:#8B0000">{dummy_label}</span>
+      </div>
+    </div>"""
 
     # Meta rows
     meta_lines = []
@@ -485,6 +567,9 @@ def _build_html(inv, company, lang: str) -> str:
   <!-- Stamp overlay (non-bottom-right positions) -->
   {stamp_overlay_html}
 
+  <!-- Barcode -->
+  {barcode_html}
+
   <!-- Header -->
   <div class="header">
     <div>
@@ -541,6 +626,9 @@ def _build_html(inv, company, lang: str) -> str:
       <div class="sig-label">{L['authorized']}</div>
     </div>
   </div>
+
+  <!-- Client code + barcode footer -->
+  {client_footer_html}
 
 </div>
 </body>

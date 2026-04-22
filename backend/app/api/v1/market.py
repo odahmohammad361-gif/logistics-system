@@ -10,7 +10,6 @@ from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.market_rate import MarketRate
 from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
-from app.models.container import Container
 from app.models.client import Client
 from app.models.shipping_quote import ShippingQuote, QuoteStatus
 from app.models.shipping_agent import ShippingAgent
@@ -139,15 +138,12 @@ def _top_clients_by_shipments(db: Session, limit: int = 10) -> list[TopClientEnt
             Client.name,
             Client.name_ar,
             Client.client_code,
-            func.count(Container.id).label("container_count"),
+            func.count(Invoice.id).label("invoice_count"),
         )
-        .join(Container, Container.client_id == Client.id)
-        .filter(
-            Client.is_active == True,
-            Container.is_active == True,
-        )
+        .join(Invoice, Invoice.client_id == Client.id)
+        .filter(Client.is_active == True)
         .group_by(Client.id, Client.name, Client.name_ar, Client.client_code)
-        .order_by(desc("container_count"))
+        .order_by(desc("invoice_count"))
         .limit(limit)
         .all()
     )
@@ -158,8 +154,8 @@ def _top_clients_by_shipments(db: Session, limit: int = 10) -> list[TopClientEnt
             name=r.name,
             name_ar=r.name_ar,
             client_code=r.client_code,
-            value=Decimal(str(r.container_count or 0)),
-            label=f"{r.container_count} shipment{'s' if r.container_count != 1 else ''}",
+            value=Decimal(str(r.invoice_count or 0)),
+            label=f"{r.invoice_count} فاتورة",
         )
         for i, r in enumerate(rows)
     ]

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Production compose — no DB service (uses AWS Aurora PostgreSQL)
 # Usage:
 #   docker compose -f docker-compose.prod.yml up -d --build

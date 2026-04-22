@@ -16,7 +16,7 @@ interface Props {
  * - Paste from clipboard (Ctrl+V)
  */
 export default function ImageUploadZone({
-  label = 'Upload Image',
+  label = 'رفع صورة',
   currentImageUrl,
   onFile,
   accept = 'image/png,image/jpeg',
@@ -105,7 +105,7 @@ export default function ImageUploadZone({
           <div className="flex flex-col items-center gap-1 py-2 text-gray-500">
             <ImageIcon size={24} />
             <span className="text-xs">{label}</span>
-            <span className="text-xs text-gray-600">Click, drag & drop, or paste (Ctrl+V)</span>
+            <span className="text-xs text-gray-600">انقر أو اسحب وأفلت أو الصق (Ctrl+V)</span>
           </div>
         )}
       </div>

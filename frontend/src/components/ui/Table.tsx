@@ -28,11 +28,13 @@ export default function Table<T>({
   const totalPages = Math.ceil(total / pageSize)
 
   return (
-    <div className="card p-0 overflow-hidden">
+    <div className="rounded-xl border border-brand-border overflow-hidden"
+      style={{ background: '#0A1929', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-brand-surface/80 border-b border-brand-border">
+            <tr style={{ background: 'rgba(6,18,32,0.9)', borderBottom: '1px solid rgba(18,38,63,0.8)' }}>
               {columns.map((col) => (
                 <th key={col.key} className={clsx('table-head text-start', col.className)}>
                   {col.label}
@@ -42,23 +44,26 @@ export default function Table<T>({
           </thead>
           <tbody>
             {loading ? (
-              <>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-brand-border/30">
-                    {columns.map((col) => (
-                      <td key={col.key} className="py-3.5 px-4">
-                        <div className="h-4 bg-white/5 rounded animate-pulse" style={{ width: `${60 + (i * 13) % 40}%` }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </>
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b border-brand-border/30">
+                  {columns.map((col) => (
+                    <td key={col.key} className="py-3.5 px-4">
+                      <div
+                        className="skeleton h-4"
+                        style={{ width: `${55 + (i * 17) % 35}%` }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="py-16 text-center">
-                  <div className="flex flex-col items-center gap-2 text-gray-600">
-                    <Inbox size={32} strokeWidth={1.5} />
-                    <p className="text-sm">{t('common.no_data')}</p>
+                <td colSpan={columns.length} className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-3 text-brand-text-muted">
+                    <div className="w-14 h-14 rounded-full bg-brand-border/50 flex items-center justify-center">
+                      <Inbox size={24} strokeWidth={1.5} />
+                    </div>
+                    <p className="text-sm">{t('common.no_data', 'لا توجد بيانات')}</p>
                   </div>
                 </td>
               </tr>
@@ -79,27 +84,29 @@ export default function Table<T>({
 
       {/* Pagination */}
       {total > pageSize && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-brand-border/60 bg-brand-surface/30">
-          <span className="text-xs text-gray-500">
-            {t('common.results')}: <span className="text-gray-300 font-medium">{total}</span>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-brand-border/60"
+          style={{ background: 'rgba(6,18,32,0.6)' }}>
+          <span className="text-xs text-brand-text-muted">
+            {t('common.results', 'النتائج')}:{' '}
+            <span className="text-brand-text-dim font-medium">{total}</span>
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => onPageChange?.(page - 1)}
               disabled={page <= 1}
-              className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white disabled:opacity-25 transition-colors"
+              className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-text hover:bg-white/5 disabled:opacity-25 transition-colors"
             >
-              <ChevronLeft size={15} />
+              <ChevronLeft size={14} />
             </button>
-            <span className="text-xs text-gray-400 px-2 min-w-[4rem] text-center">
+            <span className="text-xs text-brand-text-dim px-2 min-w-[4rem] text-center tabular-nums">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => onPageChange?.(page + 1)}
               disabled={page >= totalPages}
-              className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white disabled:opacity-25 transition-colors"
+              className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-text hover:bg-white/5 disabled:opacity-25 transition-colors"
             >
-              <ChevronRight size={15} />
+              <ChevronRight size={14} />
             </button>
           </div>
         </div>

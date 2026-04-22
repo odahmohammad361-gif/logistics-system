@@ -13,7 +13,6 @@ from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
 from app.models.invoice_item import InvoiceItem
-from app.models.container import Container
 from app.models.client import Client
 from app.models.company_settings import CompanySettings
 from app.schemas.invoice import (
@@ -38,13 +37,15 @@ TYPE_PREFIX = {
 _AIR_DIVISOR = Decimal("6000")
 
 
-def _generate_invoice_number(db: Session, inv_type: InvoiceType, year: int) -> str:
+def _generate_invoice_number(db: Session, inv_type: InvoiceType, client_code: str, year: int) -> str:
     prefix = TYPE_PREFIX[inv_type]
+    # Compact client code: "JO-0001" → "JO0001"
+    client_compact = client_code.replace("-", "")
+    pattern = f"{prefix}-{client_compact}-{year}-%"
     count = db.query(Invoice).filter(
-        Invoice.invoice_type == inv_type,
-        Invoice.invoice_number.like(f"{prefix}-{year}-%")
+        Invoice.invoice_number.like(pattern)
     ).count()
-    return f"{prefix}-{year}-{str(count + 1).zfill(4)}"
+    return f"{prefix}-{client_compact}-{year}-{str(count + 1).zfill(4)}"
 
 
 def _calc_totals(items_data: list, discount: Decimal) -> tuple[Decimal, Decimal]:
@@ -77,28 +78,32 @@ def create_invoice(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
-    client = db.query(Client).filter(Client.id == payload.client_id).first()
-    if not client:
-        raise HTTPException(404, "Client not found")
+    # Validate: need either client_id or buyer_name
+    if not payload.client_id and not payload.buyer_name:
+        raise HTTPException(422, "يجب تحديد عميل أو إدخال اسم المشتري يدوياً")
 
-    # Validate container link if provided
-    if payload.container_id:
-        container = db.query(Container).filter(
-            Container.id == payload.container_id,
-            Container.is_active == True,
-        ).first()
-        if not container:
-            raise HTTPException(404, "Container not found")
+    client = None
+    if payload.client_id:
+        client = db.query(Client).filter(Client.id == payload.client_id).first()
+        if not client:
+            raise HTTPException(404, "Client not found")
 
     year = payload.issue_date.year
-    inv_number = _generate_invoice_number(db, payload.invoice_type, year)
+    # For dummy invoices use "MAN" as client code segment
+    client_code = client.client_code if client else "MAN"
+    inv_number = _generate_invoice_number(db, payload.invoice_type, client_code, year)
 
     subtotal, total = _calc_totals(payload.items, payload.discount)
+
+    # Dummy invoices are always status=DUMMY
+    initial_status = InvoiceStatus.DUMMY if not payload.client_id else InvoiceStatus.DRAFT
 
     inv = Invoice(
         invoice_number=inv_number,
         invoice_type=payload.invoice_type,
+        status=initial_status,
         client_id=payload.client_id,
+        buyer_name=payload.buyer_name,
         issue_date=payload.issue_date,
         due_date=payload.due_date,
         origin=payload.origin,
@@ -112,7 +117,6 @@ def create_invoice(
         bl_number=payload.bl_number,
         vessel_name=payload.vessel_name,
         voyage_number=payload.voyage_number,
-        container_id=payload.container_id,
         stamp_position=payload.stamp_position or "bottom-right",
         bank_account_name=payload.bank_account_name,
         bank_account_no=payload.bank_account_no,
@@ -182,7 +186,16 @@ def list_invoices(
     if status:
         q = q.filter(Invoice.status == status)
     if search:
-        q = q.filter(Invoice.invoice_number.ilike(f"%{search}%"))
+        from sqlalchemy import or_
+        q = q.outerjoin(Client, Invoice.client_id == Client.id).filter(
+            or_(
+                Invoice.invoice_number.ilike(f"%{search}%"),
+                Invoice.buyer_name.ilike(f"%{search}%"),
+                Client.name.ilike(f"%{search}%"),
+                Client.name_ar.ilike(f"%{search}%"),
+                Client.client_code.ilike(f"%{search}%"),
+            )
+        )
 
     total = q.count()
     results = q.order_by(Invoice.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -211,14 +224,6 @@ def update_invoice(
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
-
-    if payload.container_id is not None:
-        container = db.query(Container).filter(
-            Container.id == payload.container_id,
-            Container.is_active == True,
-        ).first()
-        if not container:
-            raise HTTPException(404, "Container not found")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(inv, field, value)
@@ -419,40 +424,44 @@ def import_excel(
     return {"items": items, "count": len(items)}
 
 
-@router.post("/{invoice_id}/populate-from-container", response_model=InvoiceResponse)
-def populate_from_container(
+@router.get("/{invoice_id}/barcode")
+def get_invoice_barcode(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.STAFF)),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Copy container B/L, seal, and container number into the invoice fields.
-    Requires the invoice to have a container_id set.
-    """
+    """Returns a Code128 barcode SVG for the invoice number."""
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
-    if not inv.container_id:
-        raise HTTPException(400, "Invoice has no linked container")
 
-    container = db.query(Container).filter(Container.id == inv.container_id).first()
-    if not container:
-        raise HTTPException(404, "Linked container not found")
+    try:
+        from barcode import Code128          # type: ignore[import]
+        from barcode.writer import SVGWriter  # type: ignore[import]
+    except ImportError:
+        raise HTTPException(503, "Barcode library not installed. Run: pip install python-barcode")
 
-    if container.bl_number and not inv.bl_number:
-        inv.bl_number = container.bl_number
-    if container.seal_no and not inv.seal_no:
-        inv.seal_no = container.seal_no
-    if container.container_number and not inv.container_no:
-        inv.container_no = container.container_number
-    if container.port_of_loading and not inv.port_of_loading:
-        inv.port_of_loading = container.port_of_loading
-    if container.port_of_discharge and not inv.port_of_discharge:
-        inv.port_of_discharge = container.port_of_discharge
-
-    db.commit()
-    db.refresh(inv)
-    return inv
+    buffer = io.BytesIO()
+    barcode = Code128(inv.invoice_number, writer=SVGWriter())
+    barcode.write(
+        buffer,
+        options={
+            "module_height": 10.0,
+            "module_width": 0.3,
+            "quiet_zone": 4.0,
+            "font_size": 7,
+            "text_distance": 3.0,
+            "background": "#ffffff",
+            "foreground": "#000000",
+            "write_text": True,
+        },
+    )
+    buffer.seek(0)
+    return Response(
+        content=buffer.read(),
+        media_type="image/svg+xml",
+        headers={"Content-Disposition": f'inline; filename="{inv.invoice_number}.svg"'},
+    )
 
 
 @router.get("/{invoice_id}/pdf")

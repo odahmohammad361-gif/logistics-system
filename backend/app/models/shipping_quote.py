@@ -47,6 +47,10 @@ class ShippingQuote(Base):
     incoterm = Column(Enum(Incoterm, values_callable=lambda x: [e.value for e in x]), nullable=True)
     incoterm_point = Column(String(100), nullable=True)   # e.g. "FOB Guangzhou"
 
+    # ── Carrier / Shipping Line ───────────────────────────────────────────────
+    # The ocean/air carrier (CMA CGM, MSC, PIL, Evergreen, Emirates, etc.)
+    carrier = Column(String(100), nullable=True)
+
     # ── Route ────────────────────────────────────────────────────────────────
     port_of_loading = Column(String(100), nullable=True)    # e.g. Guangzhou, Shenzhen
     port_of_discharge = Column(String(100), nullable=True)  # e.g. Aqaba, Umm Qasr

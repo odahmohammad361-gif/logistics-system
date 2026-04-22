@@ -3,21 +3,24 @@ import { Loader2 } from 'lucide-react'
 
 interface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  size?: 'sm' | 'md' | 'lg'
   loading?: boolean
-  size?: 'sm' | 'md'
 }
 
 export default function Button({
-  variant = 'primary', loading, size = 'md', className, children, disabled, ...props
+  variant = 'primary', size = 'md', loading, className, children, disabled, ...props
 }: Props) {
   const base = clsx(
-    'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors',
-    'disabled:opacity-50 disabled:cursor-not-allowed',
-    size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-    variant === 'primary'   && 'bg-brand-green hover:bg-brand-green-dim text-black font-semibold',
-    variant === 'secondary' && 'bg-brand-surface hover:bg-brand-card text-white border border-brand-border',
-    variant === 'danger'    && 'bg-red-700 hover:bg-red-600 text-white',
-    variant === 'ghost'     && 'text-gray-400 hover:text-white hover:bg-white/5',
+    'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200',
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+    'disabled:opacity-40 disabled:cursor-not-allowed',
+    size === 'sm' && 'px-3 py-1.5 text-xs',
+    size === 'md' && 'px-4 py-2 text-sm',
+    size === 'lg' && 'px-5 py-2.5 text-base',
+    variant === 'primary'   && 'bg-brand-primary hover:bg-brand-primary-dark text-white shadow-sm',
+    variant === 'secondary' && 'bg-white/5 hover:bg-white/10 text-brand-text border border-brand-border hover:border-brand-border-light',
+    variant === 'danger'    && 'bg-brand-red/10 hover:bg-brand-red/20 text-brand-red border border-brand-red/30',
+    variant === 'ghost'     && 'text-brand-text-dim hover:text-brand-text hover:bg-white/5',
     className,
   )
   return (

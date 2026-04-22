@@ -1,28 +1,29 @@
 import clsx from 'clsx'
 
 const COLORS: Record<string, string> = {
-  // Invoice statuses
-  draft:      'bg-gray-700/50 text-gray-300',
-  sent:       'bg-blue-500/20 text-blue-300',
-  approved:   'bg-brand-green/20 text-brand-green',
-  paid:       'bg-emerald-500/20 text-emerald-400',
-  cancelled:  'bg-red-500/20 text-red-400',
-  // Container statuses
-  booking:    'bg-yellow-500/20 text-yellow-400',
-  in_transit: 'bg-blue-500/20 text-blue-300',
-  arrived:    'bg-purple-500/20 text-purple-300',
-  cleared:    'bg-brand-green/20 text-brand-green',
-  delivered:  'bg-emerald-500/20 text-emerald-400',
-  // Quote statuses
-  active:     'bg-brand-green/20 text-brand-green',
-  expired:    'bg-orange-500/20 text-orange-400',
-  rejected:   'bg-red-500/20 text-red-400',
+  // Invoice
+  draft:      'bg-brand-text-muted/20 text-brand-text-dim border border-brand-text-muted/20',
+  sent:       'bg-brand-blue/15 text-blue-300 border border-brand-blue/25',
+  approved:   'bg-brand-green/15 text-brand-green border border-brand-green/25',
+  paid:       'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25',
+  cancelled:  'bg-brand-red/15 text-brand-red border border-brand-red/25',
+  // Container
+  booking:    'bg-brand-yellow/15 text-brand-yellow border border-brand-yellow/25',
+  in_transit: 'bg-brand-blue/15 text-blue-300 border border-brand-blue/25',
+  arrived:    'bg-purple-500/15 text-purple-300 border border-purple-500/25',
+  cleared:    'bg-brand-green/15 text-brand-green border border-brand-green/25',
+  delivered:  'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25',
+  // Quote
+  active:     'bg-brand-green/15 text-brand-green border border-brand-green/25',
+  expired:    'bg-orange-500/15 text-orange-400 border border-orange-500/25',
+  rejected:   'bg-brand-red/15 text-brand-red border border-brand-red/25',
   // Generic
-  green:      'bg-brand-green/20 text-brand-green',
-  blue:       'bg-blue-500/20 text-blue-300',
-  yellow:     'bg-yellow-500/20 text-yellow-400',
-  red:        'bg-red-500/20 text-red-400',
-  gray:       'bg-gray-700/50 text-gray-300',
+  green:  'bg-brand-green/15 text-brand-green border border-brand-green/25',
+  blue:   'bg-brand-blue/15 text-blue-300 border border-brand-blue/25',
+  yellow: 'bg-brand-yellow/15 text-brand-yellow border border-brand-yellow/25',
+  red:    'bg-brand-red/15 text-brand-red border border-brand-red/25',
+  gray:   'bg-brand-text-muted/15 text-brand-text-dim border border-brand-text-muted/20',
+  indigo: 'bg-brand-primary/15 text-brand-primary-light border border-brand-primary/25',
 }
 
 interface Props {

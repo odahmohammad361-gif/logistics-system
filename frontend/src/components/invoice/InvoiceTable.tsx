@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { FileText, Download, Trash2, Eye, Pencil } from 'lucide-react'
 import Table from '@/components/ui/Table'
 import Badge from '@/components/ui/Badge'
-import Button from '@/components/ui/Button'
 import type { Invoice } from '@/types'
 
 interface Props {
@@ -40,16 +39,26 @@ export default function InvoiceTable({
       key: 'invoice_type',
       label: t('invoices.type'),
       render: (inv: Invoice) => (
-        <span className="text-xs font-semibold text-brand-green uppercase">{inv.invoice_type}</span>
+        <span className="text-xs font-semibold text-brand-green">
+          {t(`invoices.types.${inv.invoice_type}`, inv.invoice_type)}
+        </span>
       ),
     },
     {
       key: 'client_name',
       label: t('clients.title'),
-      render: (inv: Invoice) => (
+      render: (inv: Invoice) => inv.client ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); navigate(`/clients/${inv.client!.id}`) }}
+          className="text-start group"
+        >
+          <p className="text-sm text-white group-hover:text-brand-green transition-colors">{inv.client.name}</p>
+          <p className="text-xs text-gray-500 font-mono">{inv.client.client_code}</p>
+        </button>
+      ) : (
         <div>
-          <p className="text-sm text-white">{inv.client?.name}</p>
-          <p className="text-xs text-gray-500">{inv.client?.client_code}</p>
+          <p className="text-sm text-purple-400">{inv.buyer_name ?? '—'}</p>
+          <p className="text-[10px] text-purple-400/60">{t('invoices.unregistered')}</p>
         </div>
       ),
     },

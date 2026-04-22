@@ -138,7 +138,7 @@ def create_agent(
 @router.get("", response_model=AgentListResponse)
 def list_agents(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
     search: str = Query(""),
     country: str = Query(""),
     db: Session = Depends(get_db),

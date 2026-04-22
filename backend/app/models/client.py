@@ -41,4 +41,3 @@ class Client(Base):
     branch = relationship("Branch", back_populates="clients")
     created_by = relationship("User", foreign_keys=[created_by_id])
     invoices = relationship("Invoice", back_populates="client")
-    containers = relationship("Container", back_populates="client")

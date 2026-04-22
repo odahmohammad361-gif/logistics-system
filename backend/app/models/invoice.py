@@ -19,6 +19,7 @@ class InvoiceStatus(str, enum.Enum):
     APPROVED = "approved"
     PAID = "paid"
     CANCELLED = "cancelled"
+    DUMMY = "dummy"
 
 
 class Invoice(Base):
@@ -29,8 +30,9 @@ class Invoice(Base):
     invoice_type = Column(Enum(InvoiceType), nullable=False)
     status = Column(Enum(InvoiceStatus), nullable=False, default=InvoiceStatus.DRAFT)
 
-    # Client (buyer)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    # Client (buyer) — nullable for dummy/manual invoices
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    buyer_name = Column(Text, nullable=True)   # manual name when no real client
 
     # Dates
     issue_date = Column(DateTime(timezone=True), nullable=False)
@@ -71,9 +73,6 @@ class Invoice(Base):
     # Background document image (uploaded)
     document_background_path = Column(String(500), nullable=True)
 
-    # Link to container (used in PL type)
-    container_id = Column(Integer, ForeignKey("containers.id"), nullable=True)
-
     notes = Column(Text, nullable=True)
     notes_ar = Column(Text, nullable=True)
 
@@ -86,5 +85,4 @@ class Invoice(Base):
     # Relationships
     client = relationship("Client", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceItem.id")
-    container = relationship("Container", foreign_keys=[container_id])
     created_by = relationship("User", foreign_keys=[created_by_id])

@@ -1,40 +1,43 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useUIStore } from '@/store/uiStore'
-import { useAuthStore } from '@/store/authStore'
 import i18n from '@/i18n'
+import clsx from 'clsx'
 
-import RTLWrapper from '@/components/layout/RTLWrapper'
-import ProtectedRoute from '@/components/layout/ProtectedRoute'
-import Sidebar from '@/components/layout/Sidebar'
-import TopBar from '@/components/layout/TopBar'
+import RTLWrapper      from '@/components/layout/RTLWrapper'
+import ProtectedRoute  from '@/components/layout/ProtectedRoute'
+import Sidebar         from '@/components/layout/Sidebar'
+import TopBar          from '@/components/layout/TopBar'
 
-import Login from '@/pages/Login'
-import Dashboard from '@/pages/Dashboard'
-import Clients from '@/pages/Clients'
-import Invoices from '@/pages/Invoices'
-import InvoiceEdit from '@/pages/Invoices/edit'
-import Containers from '@/pages/Containers'
-import ShippingAgents from '@/pages/ShippingAgents'
+import Login           from '@/pages/Login'
+import Dashboard       from '@/pages/Dashboard'
+import Clients         from '@/pages/Clients'
+import ClientProfile   from '@/pages/Clients/profile'
+import Invoices        from '@/pages/Invoices'
+import InvoiceEdit     from '@/pages/Invoices/edit'
+import ShippingAgents  from '@/pages/ShippingAgents'
 import ClearanceAgents from '@/pages/ClearanceAgents'
-import Market from '@/pages/Market'
-import Users from '@/pages/Users'
-import Company from '@/pages/Company'
-import Portal from '@/pages/Portal'
+import Market          from '@/pages/Market'
+import Users           from '@/pages/Users'
+import Company         from '@/pages/Company'
+import Portal          from '@/pages/Portal'
+import Containers      from '@/pages/Containers'
+import ContainerDetail from '@/pages/Containers/detail'
+import Warehouses      from '@/pages/Warehouses'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, lang } = useUIStore()
   const isRTL = lang === 'ar'
-  const marginClass = isRTL
-    ? (sidebarOpen ? 'md:mr-64' : 'md:mr-16')
-    : (sidebarOpen ? 'md:ml-64' : 'md:ml-16')
+  const offset = sidebarOpen ? 'md:ps-64' : 'md:ps-16'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-brand-bg">
+    <div className={clsx('flex h-screen overflow-hidden bg-brand-bg', isRTL ? 'flex-row-reverse' : 'flex-row')}>
       <Sidebar />
-      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${marginClass}`}>
+      <div className={clsx('flex-1 flex flex-col overflow-hidden transition-all duration-300', offset)}>
         <TopBar />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 animate-fade-in">
+          {children}
+        </main>
       </div>
     </div>
   )
@@ -45,7 +48,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.lang = lang
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
+    document.documentElement.dir  = lang === 'ar' ? 'rtl' : 'ltr'
     i18n.changeLanguage(lang)
   }, [lang])
 
@@ -53,21 +56,24 @@ export default function App() {
     <RTLWrapper>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"     element={<Login />} />
           <Route path="/market/tv" element={<Portal />} />
 
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-            <Route path="/clients" element={<AppLayout><Clients /></AppLayout>} />
-            <Route path="/invoices" element={<AppLayout><Invoices /></AppLayout>} />
-            <Route path="/invoices/:id/edit" element={<AppLayout><InvoiceEdit /></AppLayout>} />
-            <Route path="/containers" element={<AppLayout><Containers /></AppLayout>} />
-            <Route path="/shipping-agents" element={<AppLayout><ShippingAgents /></AppLayout>} />
-            <Route path="/clearance-agents" element={<AppLayout><ClearanceAgents /></AppLayout>} />
-            <Route path="/market" element={<AppLayout><Market /></AppLayout>} />
-            <Route path="/users" element={<AppLayout><Users /></AppLayout>} />
-            <Route path="/company" element={<AppLayout><Company /></AppLayout>} />
+            <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard"           element={<AppLayout><Dashboard /></AppLayout>} />
+            <Route path="/clients"             element={<AppLayout><Clients /></AppLayout>} />
+            <Route path="/clients/:id"         element={<AppLayout><ClientProfile /></AppLayout>} />
+            <Route path="/invoices"            element={<AppLayout><Invoices /></AppLayout>} />
+            <Route path="/invoices/:id/edit"   element={<AppLayout><InvoiceEdit /></AppLayout>} />
+            <Route path="/shipping-agents"     element={<AppLayout><ShippingAgents /></AppLayout>} />
+            <Route path="/clearance-agents"    element={<AppLayout><ClearanceAgents /></AppLayout>} />
+            <Route path="/market"              element={<AppLayout><Market /></AppLayout>} />
+            <Route path="/containers"          element={<AppLayout><Containers /></AppLayout>} />
+            <Route path="/containers/:id"      element={<AppLayout><ContainerDetail /></AppLayout>} />
+            <Route path="/users"               element={<AppLayout><Users /></AppLayout>} />
+            <Route path="/company"             element={<AppLayout><Company /></AppLayout>} />
+            <Route path="/warehouses"          element={<AppLayout><Warehouses /></AppLayout>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

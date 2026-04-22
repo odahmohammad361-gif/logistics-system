@@ -68,14 +68,12 @@ export default function InvoiceEditPage() {
       <div className="flex items-center gap-3">
         <Button variant="secondary" size="sm" onClick={() => navigate('/invoices')}>
           <ArrowLeft size={14} />
-          {t('common.back')}
+          رجوع
         </Button>
         <div>
-          <h1 className="page-title">
-            {t('invoices.edit')} — {invoice.invoice_number}
-          </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {t('invoices.type')}: {invoice.invoice_type} · {t('common.status')}: {invoice.status}
+          <h1 className="page-title">تعديل الفاتورة — {invoice.invoice_number}</h1>
+          <p className="text-xs text-brand-text-muted mt-0.5">
+            النوع: {invoice.invoice_type} · الحالة: {invoice.status}
           </p>
         </div>
       </div>

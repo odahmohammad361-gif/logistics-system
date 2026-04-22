@@ -7,7 +7,7 @@ import time
 
 from app.config import settings
 from app.core.limiter import limiter
-from app.api.v1 import auth, users, clients, invoices, containers, shipping_agents, clearance_agents, market, company, branches, reference
+from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses
 
 app = FastAPI(
     title="Logistics System API",
@@ -64,13 +64,14 @@ app.include_router(auth.router,             prefix=f"{API_PREFIX}/auth",        
 app.include_router(users.router,            prefix=f"{API_PREFIX}/users",            tags=["Users"])
 app.include_router(clients.router,          prefix=f"{API_PREFIX}/clients",          tags=["Clients"])
 app.include_router(invoices.router,         prefix=f"{API_PREFIX}/invoices",         tags=["Invoices"])
-app.include_router(containers.router,       prefix=f"{API_PREFIX}/containers",       tags=["Containers"])
 app.include_router(shipping_agents.router,  prefix=f"{API_PREFIX}/shipping-agents",  tags=["Shipping Agents"])
 app.include_router(clearance_agents.router, prefix=f"{API_PREFIX}/clearance-agents", tags=["Clearance Agents"])
 app.include_router(market.router,           prefix=f"{API_PREFIX}/market",           tags=["Market Board"])
 app.include_router(company.router,          prefix=f"{API_PREFIX}/company",          tags=["Company"])
 app.include_router(branches.router,         prefix=f"{API_PREFIX}/branches",         tags=["Branches"])
 app.include_router(reference.router,        prefix=f"{API_PREFIX}/reference",        tags=["Reference"])
+app.include_router(bookings.router,         prefix=f"{API_PREFIX}/bookings",         tags=["Bookings"])
+app.include_router(warehouses.router,       prefix=f"{API_PREFIX}/warehouses",       tags=["Warehouses"])
 
 
 @app.get("/health", tags=["Health"])

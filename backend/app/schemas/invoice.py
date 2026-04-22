@@ -76,7 +76,8 @@ class InvoiceItemResponse(BaseModel):
 
 class InvoiceCreate(BaseModel):
     invoice_type: InvoiceType
-    client_id: int
+    client_id: Optional[int] = None     # None for dummy/manual invoices
+    buyer_name: Optional[str] = None    # manual buyer name (dummy invoices)
     issue_date: date
     due_date: Optional[date] = None
 
@@ -91,9 +92,6 @@ class InvoiceCreate(BaseModel):
     bl_number: Optional[str] = None
     vessel_name: Optional[str] = None
     voyage_number: Optional[str] = None
-
-    # Link to a Container record (used for PL)
-    container_id: Optional[int] = None
 
     # Stamp
     stamp_position: Optional[str] = "bottom-right"
@@ -114,9 +112,11 @@ class InvoiceCreate(BaseModel):
 
 
 class InvoiceUpdate(BaseModel):
+    invoice_type: Optional[InvoiceType] = None
     status: Optional[InvoiceStatus] = None
     issue_date: Optional[date] = None
     due_date: Optional[date] = None
+    currency: Optional[str] = None
     origin: Optional[str] = None
     payment_terms: Optional[str] = None
     shipping_term: Optional[str] = None
@@ -128,7 +128,6 @@ class InvoiceUpdate(BaseModel):
     bl_number: Optional[str] = None
     vessel_name: Optional[str] = None
     voyage_number: Optional[str] = None
-    container_id: Optional[int] = None
     stamp_position: Optional[str] = None
     bank_account_name: Optional[str] = None
     bank_account_no: Optional[str] = None
@@ -153,22 +152,14 @@ class ClientShort(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ContainerShort(BaseModel):
-    id: int
-    booking_number: str
-    container_number: Optional[str]
-    container_type: str
-    seal_no: Optional[str]
-    bl_number: Optional[str]
-    model_config = {"from_attributes": True}
-
 
 class InvoiceResponse(BaseModel):
     id: int
     invoice_number: str
     invoice_type: InvoiceType
     status: InvoiceStatus
-    client: ClientShort
+    client: Optional[ClientShort] = None
+    buyer_name: Optional[str] = None
     issue_date: datetime
     due_date: Optional[datetime]
     origin: Optional[str]
@@ -182,8 +173,6 @@ class InvoiceResponse(BaseModel):
     bl_number: Optional[str]
     vessel_name: Optional[str]
     voyage_number: Optional[str]
-    container_id: Optional[int]
-    container: Optional[ContainerShort]
     bank_account_name: Optional[str]
     bank_account_no: Optional[str]
     bank_swift: Optional[str]

@@ -1,5 +1,6 @@
 import api from './api'
 import type { Invoice, InvoiceListResponse } from '@/types'
+import type { ParsedItem } from '@/components/invoice/ExcelImportPanel'
 
 export const getInvoices = (params?: Record<string, unknown>) =>
   api.get<InvoiceListResponse>('/invoices', { params }).then((r) => r.data)
@@ -55,9 +56,13 @@ export const uploadItemImageBase64 = (invoiceId: number, itemId: number, base64:
 export const importInvoiceExcel = (file: File) => {
   const fd = new FormData()
   fd.append('file', file)
-  return api.post<{ items: Record<string, unknown>[]; count: number }>('/invoices/import-excel', fd).then((r) => r.data)
+  return api.post<{ items: ParsedItem[]; count: number }>('/invoices/import-excel', fd).then((r) => r.data)
 }
 
 /** Copy B/L, seal, container no from linked container into invoice fields */
 export const populateFromContainer = (invoiceId: number) =>
   api.post<Invoice>(`/invoices/${invoiceId}/populate-from-container`).then((r) => r.data)
+
+/** Fetch invoice barcode as blob (SVG) */
+export const getInvoiceBarcode = (id: number) =>
+  api.get<Blob>(`/invoices/${id}/barcode`, { responseType: 'blob' }).then((r) => r.data)

@@ -32,6 +32,8 @@ class AgentCreate(BaseModel):
     transit_sea_days: Optional[int] = None
     transit_air_days: Optional[int] = None
 
+    serves_sea: bool = True
+    serves_air: bool = False
     notes: Optional[str] = None
 
 
@@ -55,6 +57,8 @@ class AgentUpdate(BaseModel):
     price_air_kg: Optional[Decimal] = None
     transit_sea_days: Optional[int] = None
     transit_air_days: Optional[int] = None
+    serves_sea: Optional[bool] = None
+    serves_air: Optional[bool] = None
     notes: Optional[str] = None
 
 
@@ -81,6 +85,8 @@ class AgentResponse(BaseModel):
     price_air_kg: Optional[Decimal] = None
     transit_sea_days: Optional[int] = None
     transit_air_days: Optional[int] = None
+    serves_sea: bool = True
+    serves_air: bool = False
     notes: Optional[str] = None
     is_active: bool
     created_at: datetime
@@ -98,6 +104,7 @@ class AgentListResponse(BaseModel):
 
 class QuoteCreate(BaseModel):
     service_mode: QuoteServiceMode
+    carrier: Optional[str] = None            # Shipping line: CMA CGM, MSC, PIL, Evergreen …
     container_type: Optional[str] = None     # 20GP / 40FT / 40HQ (for SEA_FCL)
     incoterm: Optional[Incoterm] = None
     incoterm_point: Optional[str] = None     # e.g. "Guangzhou"
@@ -176,6 +183,7 @@ class QuoteResponse(BaseModel):
     client_id: Optional[int] = None
 
     service_mode: QuoteServiceMode
+    carrier: Optional[str] = None
     container_type: Optional[str] = None
     incoterm: Optional[Incoterm] = None
     incoterm_point: Optional[str] = None
