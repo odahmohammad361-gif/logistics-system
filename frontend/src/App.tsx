@@ -26,9 +26,14 @@ import ContainerDetail from '@/pages/Containers/detail'
 import Warehouses      from '@/pages/Warehouses'
 import Suppliers       from '@/pages/Suppliers'
 import Products        from '@/pages/Products'
-import ShopPage        from '@/pages/Shop'
+import ShopHome        from '@/pages/Shop'
+import ShopProducts    from '@/pages/Shop/products'
 import ProductDetail   from '@/pages/Shop/product'
 import ShopProfile     from '@/pages/Shop/profile'
+import ShopAbout       from '@/pages/Shop/about'
+import ShopContact     from '@/pages/Shop/contact'
+import ShopHowItWorks  from '@/pages/Shop/how-it-works'
+import ShopCalculator  from '@/pages/Shop/calculator'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, lang } = useUIStore()
@@ -63,9 +68,14 @@ export default function App() {
         <Routes>
           <Route path="/login"           element={<Login />} />
           <Route path="/market/tv"       element={<Portal />} />
-          <Route path="/shop"            element={<ShopPage />} />
-          <Route path="/shop/product/:id" element={<ProductDetail />} />
-          <Route path="/shop/profile"    element={<ShopProfile />} />
+          <Route path="/shop"               element={<ShopHome />} />
+          <Route path="/shop/products"      element={<ShopProducts />} />
+          <Route path="/shop/product/:id"   element={<ProductDetail />} />
+          <Route path="/shop/profile"       element={<ShopProfile />} />
+          <Route path="/shop/about"         element={<ShopAbout />} />
+          <Route path="/shop/contact"       element={<ShopContact />} />
+          <Route path="/shop/how-it-works"  element={<ShopHowItWorks />} />
+          <Route path="/shop/calculator"    element={<ShopCalculator />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
