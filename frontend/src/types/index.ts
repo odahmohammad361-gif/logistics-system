@@ -402,3 +402,106 @@ export interface BookingListResponse {
   page_size: number
   results: BookingListItem[]
 }
+
+// ── Supplier ──────────────────────────────────────────────────────────────────
+export interface Supplier {
+  id: number
+  code: string
+  name: string
+  name_ar: string | null
+  market_location: string | null
+  wechat_id: string | null
+  phone: string | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SupplierListResponse {
+  total: number
+  results: Supplier[]
+}
+
+// ── Product ───────────────────────────────────────────────────────────────────
+export interface ProductPhoto {
+  id: number
+  file_path: string
+  is_main: boolean
+  sort_order: number
+}
+
+export interface SupplierShort {
+  id: number
+  code: string
+  name: string
+  market_location: string | null
+}
+
+export interface Product {
+  id: number
+  code: string
+  name: string
+  name_ar: string | null
+  category: string | null
+  description: string | null
+  description_ar: string | null
+  supplier: SupplierShort | null
+  price_cny: string
+  pcs_per_carton: number
+  cbm_per_carton: string
+  min_order_cartons: number
+  is_active: boolean
+  is_featured: boolean
+  photos: ProductPhoto[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductListResponse {
+  total: number
+  page: number
+  page_size: number
+  results: Product[]
+}
+
+// ── Customer (shop) ───────────────────────────────────────────────────────────
+export interface Customer {
+  id: number
+  full_name: string
+  email: string
+  phone: string
+  telegram: string | null
+  country: string
+  is_verified: boolean
+  created_at: string
+}
+
+export interface CustomerTokenResponse {
+  access_token: string
+  token_type: string
+  customer: Customer
+}
+
+// ── Shipping Calculator ───────────────────────────────────────────────────────
+export interface ShippingOption {
+  container_type: string
+  capacity_cbm: number
+  containers_needed: number
+  cbm_used_percent: number
+  freight_per_container_usd: number
+  total_freight_usd: number
+  clearance_fees_usd: number
+  total_cost_usd: number
+  cost_per_cbm_usd: number
+  agent_name: string | null
+  clearance_agent: string | null
+  transit_days: number | null
+}
+
+export interface ShippingCalculatorResult {
+  destination: string
+  total_cbm: number
+  usd_to_cny_rate: number
+  options: ShippingOption[]
+}

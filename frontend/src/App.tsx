@@ -24,6 +24,11 @@ import Portal          from '@/pages/Portal'
 import Containers      from '@/pages/Containers'
 import ContainerDetail from '@/pages/Containers/detail'
 import Warehouses      from '@/pages/Warehouses'
+import Suppliers       from '@/pages/Suppliers'
+import Products        from '@/pages/Products'
+import ShopPage        from '@/pages/Shop'
+import ProductDetail   from '@/pages/Shop/product'
+import ShopProfile     from '@/pages/Shop/profile'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, lang } = useUIStore()
@@ -56,8 +61,11 @@ export default function App() {
     <RTLWrapper>
       <BrowserRouter>
         <Routes>
-          <Route path="/login"     element={<Login />} />
-          <Route path="/market/tv" element={<Portal />} />
+          <Route path="/login"           element={<Login />} />
+          <Route path="/market/tv"       element={<Portal />} />
+          <Route path="/shop"            element={<ShopPage />} />
+          <Route path="/shop/product/:id" element={<ProductDetail />} />
+          <Route path="/shop/profile"    element={<ShopProfile />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
@@ -74,6 +82,8 @@ export default function App() {
             <Route path="/users"               element={<AppLayout><Users /></AppLayout>} />
             <Route path="/company"             element={<AppLayout><Company /></AppLayout>} />
             <Route path="/warehouses"          element={<AppLayout><Warehouses /></AppLayout>} />
+            <Route path="/suppliers"           element={<AppLayout><Suppliers /></AppLayout>} />
+            <Route path="/products"            element={<AppLayout><Products /></AppLayout>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

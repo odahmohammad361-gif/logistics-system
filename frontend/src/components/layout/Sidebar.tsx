@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FileText, Ship,
   Anchor, TrendingUp, UserCog, ChevronLeft, ChevronRight,
-  LogOut, Building2, Container, Warehouse,
+  LogOut, Building2, Container, Warehouse, Store, Package,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
@@ -21,6 +21,8 @@ const NAV = [
   { to: '/users',            icon: UserCog,         key: 'users' },
   { to: '/company',          icon: Building2,       key: 'company' },
   { to: '/warehouses',       icon: Warehouse,       key: 'warehouses' },
+  { to: '/suppliers',        icon: Store,            key: 'suppliers' },
+  { to: '/products',         icon: Package,          key: 'products' },
 ]
 
 export default function Sidebar() {

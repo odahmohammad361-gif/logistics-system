@@ -11,6 +11,9 @@ from app.models.market_rate import MarketRate
 from app.models.company_settings import CompanySettings
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.booking import Booking, BookingCargoLine, BookingCargoImage
+from app.models.supplier import Supplier
+from app.models.product import Product, ProductPhoto
+from app.models.customer import Customer
 
 __all__ = [
     "Base", "Branch", "User", "Client",
@@ -19,4 +22,5 @@ __all__ = [
     "InvoiceItem", "MarketRate",
     "CompanySettings", "CompanyWarehouse",
     "Booking", "BookingCargoLine", "BookingCargoImage",
+    "Supplier", "Product", "ProductPhoto", "Customer",
 ]
