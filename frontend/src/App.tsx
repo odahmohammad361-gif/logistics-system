@@ -19,7 +19,8 @@ import Clients         from '@/pages/Clients'
 import ClientProfile   from '@/pages/Clients/profile'
 import Invoices        from '@/pages/Invoices'
 import InvoiceEdit     from '@/pages/Invoices/edit'
-import ShippingAgents  from '@/pages/ShippingAgents'
+import ShippingAgents       from '@/pages/ShippingAgents'
+import ShippingAgentProfile from '@/pages/ShippingAgents/profile'
 import ClearanceAgents from '@/pages/ClearanceAgents'
 import Market          from '@/pages/Market'
 import Users           from '@/pages/Users'
@@ -98,7 +99,8 @@ export default function App() {
             <Route path="/clients/:id"         element={<AppLayout><ClientProfile /></AppLayout>} />
             <Route path="/invoices"            element={<AppLayout><Invoices /></AppLayout>} />
             <Route path="/invoices/:id/edit"   element={<AppLayout><InvoiceEdit /></AppLayout>} />
-            <Route path="/shipping-agents"     element={<AppLayout><ShippingAgents /></AppLayout>} />
+            <Route path="/shipping-agents"          element={<AppLayout><ShippingAgents /></AppLayout>} />
+            <Route path="/shipping-agents/:id"     element={<AppLayout><ShippingAgentProfile /></AppLayout>} />
             <Route path="/clearance-agents"    element={<AppLayout><ClearanceAgents /></AppLayout>} />
             <Route path="/market"              element={<AppLayout><Market /></AppLayout>} />
             <Route path="/containers"          element={<AppLayout><Containers /></AppLayout>} />

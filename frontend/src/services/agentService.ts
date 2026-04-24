@@ -20,6 +20,25 @@ export const deleteAgent = (id: number) =>
 export const compareAgents = (params?: Record<string, unknown>) =>
   api.get('/shipping-agents/compare', { params }).then((r) => r.data)
 
+export const getAgentProfile = (id: number) =>
+  api.get(`/shipping-agents/${id}/profile`).then((r) => r.data)
+
+export const addPriceHistory = (id: number, data: unknown) =>
+  api.post(`/shipping-agents/${id}/price-history`, data).then((r) => r.data)
+
+export const uploadAgentContract = (id: number, form: FormData) =>
+  api.post(`/shipping-agents/${id}/contracts`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data)
+
+export const deleteAgentContract = (agentId: number, contractId: number) =>
+  api.delete(`/shipping-agents/${agentId}/contracts/${contractId}`)
+
+export const getAgentContractDownloadUrl = (agentId: number, contractId: number): string => {
+  const base = api.defaults.baseURL ?? ''
+  return `${base}/shipping-agents/${agentId}/contracts/${contractId}/download`
+}
+
 // ── Agent Quotes ───────────────────────────────────────────────────────────
 export const getAgentQuotes = (agentId: number) =>
   api.get(`/shipping-agents/${agentId}/quotes`).then((r) => r.data)

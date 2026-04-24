@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Pencil, Trash2, ChevronDown, ChevronUp, Ship, Wind } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Search, Pencil, Trash2, ChevronDown, ChevronUp, Ship, Wind, ExternalLink } from 'lucide-react'
 import {
   getAgents, createAgent, updateAgent, deleteAgent,
   getAgentQuotes, createQuote, deleteQuote,
@@ -71,6 +72,7 @@ export default function ShippingAgentsPage() {
   const { t } = useTranslation()
   const { isStaff, isAdmin } = useAuth()
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -235,7 +237,13 @@ export default function ShippingAgentsPage() {
                   {/* Name */}
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-sm text-white font-medium">{agent.name}</p>
+                      <button
+                        onClick={() => navigate(`/shipping-agents/${agent.id}`)}
+                        className="text-sm text-white font-medium hover:text-brand-primary-light transition-colors flex items-center gap-1 group"
+                      >
+                        {agent.name}
+                        <ExternalLink size={11} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                      </button>
                       {agent.serves_sea && (
                         <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300">
                           <Ship size={8} /> SEA

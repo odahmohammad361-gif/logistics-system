@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -26,13 +26,18 @@ class ShippingAgent(Base):
     bank_account = Column(String(100), nullable=True)
     bank_swift = Column(String(20), nullable=True)
 
-    # Quick reference prices (USD) — general ballpark; detailed quotes in shipping_quotes
-    price_20gp = Column(Numeric(10, 2), nullable=True)
-    price_40ft = Column(Numeric(10, 2), nullable=True)
-    price_40hq = Column(Numeric(10, 2), nullable=True)
-    price_air_kg = Column(Numeric(10, 2), nullable=True)
-    transit_sea_days = Column(Integer, nullable=True)
-    transit_air_days = Column(Integer, nullable=True)
+    # Buy prices (what agent charges us)
+    price_20gp    = Column(Numeric(10, 2), nullable=True)
+    price_40ft    = Column(Numeric(10, 2), nullable=True)
+    price_40hq    = Column(Numeric(10, 2), nullable=True)
+    price_air_kg  = Column(Numeric(10, 2), nullable=True)
+    # Sell prices (what we charge clients)
+    sell_price_20gp    = Column(Numeric(10, 2), nullable=True)
+    sell_price_40ft    = Column(Numeric(10, 2), nullable=True)
+    sell_price_40hq    = Column(Numeric(10, 2), nullable=True)
+    sell_price_air_kg  = Column(Numeric(10, 2), nullable=True)
+    transit_sea_days   = Column(Integer, nullable=True)
+    transit_air_days   = Column(Integer, nullable=True)
 
     # Service modes offered by this agent
     serves_sea = Column(Boolean, default=True, nullable=False)
@@ -44,4 +49,63 @@ class ShippingAgent(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
-    quotes = relationship("ShippingQuote", back_populates="agent")
+    quotes        = relationship("ShippingQuote",     back_populates="agent")
+    price_history = relationship("AgentPriceHistory", back_populates="agent", order_by="AgentPriceHistory.effective_date.desc()", cascade="all, delete-orphan")
+    contracts     = relationship("AgentContract",     back_populates="agent", order_by="AgentContract.created_at.desc()", cascade="all, delete-orphan")
+    edit_log      = relationship("AgentEditLog",      back_populates="agent", order_by="AgentEditLog.changed_at.desc()", cascade="all, delete-orphan")
+
+
+class AgentPriceHistory(Base):
+    __tablename__ = "agent_price_history"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    agent_id       = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    effective_date = Column(Date, nullable=False)
+    buy_20gp       = Column(Numeric(10, 2), nullable=True)
+    sell_20gp      = Column(Numeric(10, 2), nullable=True)
+    buy_40ft       = Column(Numeric(10, 2), nullable=True)
+    sell_40ft      = Column(Numeric(10, 2), nullable=True)
+    buy_40hq       = Column(Numeric(10, 2), nullable=True)
+    sell_40hq      = Column(Numeric(10, 2), nullable=True)
+    buy_air_kg     = Column(Numeric(10, 2), nullable=True)
+    sell_air_kg    = Column(Numeric(10, 2), nullable=True)
+    transit_sea_days = Column(Integer, nullable=True)
+    transit_air_days = Column(Integer, nullable=True)
+    notes          = Column(Text, nullable=True)
+    created_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    agent      = relationship("ShippingAgent", back_populates="price_history")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class AgentContract(Base):
+    __tablename__ = "agent_contracts"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    agent_id          = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    title             = Column(String(300), nullable=False)
+    file_path         = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=True)
+    valid_from        = Column(Date, nullable=True)
+    valid_to          = Column(Date, nullable=True)
+    notes             = Column(Text, nullable=True)
+    uploaded_by_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at        = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    agent       = relationship("ShippingAgent", back_populates="contracts")
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])
+
+
+class AgentEditLog(Base):
+    __tablename__ = "agent_edit_log"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    agent_id       = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    action         = Column(String(60), nullable=False)   # update | price_update | contract_upload | contract_delete
+    summary        = Column(Text, nullable=True)
+    changed_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at     = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    agent      = relationship("ShippingAgent", back_populates="edit_log")
+    changed_by = relationship("User", foreign_keys=[changed_by_id])

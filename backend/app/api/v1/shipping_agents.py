@@ -1,14 +1,18 @@
 import os
 import shutil
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone, date as date_type
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.shipping_agent import ShippingAgent
+from app.models.shipping_agent import ShippingAgent, AgentPriceHistory, AgentContract, AgentEditLog
 from app.models.shipping_quote import ShippingQuote, QuoteServiceMode, QuoteStatus
 from app.models.client import Client
 from app.schemas.agent import (
@@ -180,8 +184,23 @@ def update_agent(
     ).first()
     if not agent:
         raise HTTPException(404, "Shipping agent not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    changes = []
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        old = getattr(agent, field, None)
+        if str(old) != str(value):
+            changes.append(f"{field}: {old} → {value}")
         setattr(agent, field, value)
+
+    if changes:
+        db.add(AgentEditLog(
+            agent_id=agent_id,
+            action="update",
+            summary="; ".join(changes),
+            changed_by_id=current_user.id,
+        ))
+
     db.commit()
     db.refresh(agent)
     return agent
@@ -199,6 +218,259 @@ def delete_agent(
     if not agent:
         raise HTTPException(404, "Shipping agent not found")
     agent.is_active = False
+    db.commit()
+
+
+# ── Helper: serialize agent fully ────────────────────────────────────────────
+
+def _serialize_agent(a: ShippingAgent) -> dict:
+    def f(v): return float(v) if v is not None else None
+    return {
+        "id": a.id, "name": a.name, "name_ar": a.name_ar,
+        "country": a.country, "contact_person": a.contact_person,
+        "phone": a.phone, "whatsapp": a.whatsapp, "wechat_id": a.wechat_id, "email": a.email,
+        "warehouse_address": a.warehouse_address, "warehouse_city": a.warehouse_city,
+        "bank_name": a.bank_name, "bank_account": a.bank_account, "bank_swift": a.bank_swift,
+        "price_20gp": f(a.price_20gp), "price_40ft": f(a.price_40ft),
+        "price_40hq": f(a.price_40hq), "price_air_kg": f(a.price_air_kg),
+        "sell_price_20gp": f(a.sell_price_20gp), "sell_price_40ft": f(a.sell_price_40ft),
+        "sell_price_40hq": f(a.sell_price_40hq), "sell_price_air_kg": f(a.sell_price_air_kg),
+        "transit_sea_days": a.transit_sea_days, "transit_air_days": a.transit_air_days,
+        "serves_sea": a.serves_sea, "serves_air": a.serves_air,
+        "notes": a.notes, "is_active": a.is_active,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        "price_history": [_serialize_ph(p) for p in a.price_history],
+        "contracts":     [_serialize_contract(c) for c in a.contracts],
+        "edit_log":      [_serialize_log(l) for l in a.edit_log],
+    }
+
+def _serialize_ph(p: AgentPriceHistory) -> dict:
+    def f(v): return float(v) if v is not None else None
+    return {
+        "id": p.id, "effective_date": str(p.effective_date),
+        "buy_20gp": f(p.buy_20gp), "sell_20gp": f(p.sell_20gp),
+        "buy_40ft": f(p.buy_40ft), "sell_40ft": f(p.sell_40ft),
+        "buy_40hq": f(p.buy_40hq), "sell_40hq": f(p.sell_40hq),
+        "buy_air_kg": f(p.buy_air_kg), "sell_air_kg": f(p.sell_air_kg),
+        "transit_sea_days": p.transit_sea_days, "transit_air_days": p.transit_air_days,
+        "notes": p.notes,
+        "created_by": p.created_by.full_name if p.created_by else None,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
+
+def _serialize_contract(c: AgentContract) -> dict:
+    return {
+        "id": c.id, "title": c.title, "file_path": c.file_path,
+        "original_filename": c.original_filename,
+        "valid_from": str(c.valid_from) if c.valid_from else None,
+        "valid_to":   str(c.valid_to)   if c.valid_to   else None,
+        "notes": c.notes,
+        "uploaded_by": c.uploaded_by.full_name if c.uploaded_by else None,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+def _serialize_log(l: AgentEditLog) -> dict:
+    return {
+        "id": l.id, "action": l.action, "summary": l.summary,
+        "changed_by": l.changed_by.full_name if l.changed_by else None,
+        "changed_at": l.changed_at.isoformat() if l.changed_at else None,
+    }
+
+
+# ── Agent profile (full data) ─────────────────────────────────────────────────
+
+@router.get("/{agent_id}/profile")
+def get_agent_profile(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    a = db.query(ShippingAgent).filter(ShippingAgent.id == agent_id).first()
+    if not a:
+        raise HTTPException(404, "Agent not found")
+    return _serialize_agent(a)
+
+
+# ── Price history ─────────────────────────────────────────────────────────────
+
+class PriceHistoryCreate(BaseModel):
+    effective_date:   str
+    buy_20gp:         Optional[float] = None
+    sell_20gp:        Optional[float] = None
+    buy_40ft:         Optional[float] = None
+    sell_40ft:        Optional[float] = None
+    buy_40hq:         Optional[float] = None
+    sell_40hq:        Optional[float] = None
+    buy_air_kg:       Optional[float] = None
+    sell_air_kg:      Optional[float] = None
+    transit_sea_days: Optional[int]   = None
+    transit_air_days: Optional[int]   = None
+    notes:            Optional[str]   = None
+    update_current:   bool            = True  # also update agent's current prices
+
+
+@router.post("/{agent_id}/price-history")
+def add_price_history(
+    agent_id: int,
+    payload:  PriceHistoryCreate,
+    db:       Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    a = db.query(ShippingAgent).filter(ShippingAgent.id == agent_id).first()
+    if not a:
+        raise HTTPException(404, "Agent not found")
+
+    ph = AgentPriceHistory(
+        agent_id=agent_id,
+        effective_date=payload.effective_date,
+        buy_20gp=payload.buy_20gp,   sell_20gp=payload.sell_20gp,
+        buy_40ft=payload.buy_40ft,   sell_40ft=payload.sell_40ft,
+        buy_40hq=payload.buy_40hq,   sell_40hq=payload.sell_40hq,
+        buy_air_kg=payload.buy_air_kg, sell_air_kg=payload.sell_air_kg,
+        transit_sea_days=payload.transit_sea_days,
+        transit_air_days=payload.transit_air_days,
+        notes=payload.notes,
+        created_by_id=current_user.id,
+    )
+    db.add(ph)
+
+    # Optionally sync to agent's current prices
+    if payload.update_current:
+        if payload.buy_20gp    is not None: a.price_20gp    = payload.buy_20gp
+        if payload.buy_40ft    is not None: a.price_40ft    = payload.buy_40ft
+        if payload.buy_40hq    is not None: a.price_40hq    = payload.buy_40hq
+        if payload.buy_air_kg  is not None: a.price_air_kg  = payload.buy_air_kg
+        if payload.sell_20gp   is not None: a.sell_price_20gp    = payload.sell_20gp
+        if payload.sell_40ft   is not None: a.sell_price_40ft    = payload.sell_40ft
+        if payload.sell_40hq   is not None: a.sell_price_40hq    = payload.sell_40hq
+        if payload.sell_air_kg is not None: a.sell_price_air_kg  = payload.sell_air_kg
+        if payload.transit_sea_days is not None: a.transit_sea_days = payload.transit_sea_days
+        if payload.transit_air_days is not None: a.transit_air_days = payload.transit_air_days
+
+    db.add(AgentEditLog(
+        agent_id=agent_id,
+        action="price_update",
+        summary=f"Price update for {payload.effective_date} — sea buy:{payload.buy_20gp}/{payload.buy_40ft}/{payload.buy_40hq} sell:{payload.sell_20gp}/{payload.sell_40ft}/{payload.sell_40hq} | air buy:{payload.buy_air_kg} sell:{payload.sell_air_kg}",
+        changed_by_id=current_user.id,
+    ))
+    db.commit()
+    db.refresh(ph)
+    return _serialize_ph(ph)
+
+
+# ── Contracts ─────────────────────────────────────────────────────────────────
+
+CONTRACT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    "uploads", "agent_contracts",
+)
+os.makedirs(CONTRACT_DIR, exist_ok=True)
+
+
+@router.post("/{agent_id}/contracts")
+async def upload_contract(
+    agent_id:          int,
+    file:              UploadFile = File(...),
+    title:             str        = Form(...),
+    valid_from:        str        = Form(""),
+    valid_to:          str        = Form(""),
+    notes:             str        = Form(""),
+    db:                Session    = Depends(get_db),
+    current_user:      User       = Depends(require_role(UserRole.STAFF)),
+):
+    a = db.query(ShippingAgent).filter(ShippingAgent.id == agent_id).first()
+    if not a:
+        raise HTTPException(404, "Agent not found")
+
+    allowed = ("application/pdf", "image/jpeg", "image/png")
+    if file.content_type not in allowed:
+        raise HTTPException(400, "Only PDF, JPEG or PNG files allowed")
+
+    agent_dir = os.path.join(CONTRACT_DIR, str(agent_id))
+    os.makedirs(agent_dir, exist_ok=True)
+
+    ext   = os.path.splitext(file.filename or "contract.pdf")[1].lower() or ".pdf"
+    fname = f"{uuid.uuid4().hex}{ext}"
+    fpath = os.path.join(agent_dir, fname)
+    content = await file.read()
+    with open(fpath, "wb") as fp:
+        fp.write(content)
+
+    contract = AgentContract(
+        agent_id=agent_id,
+        title=title,
+        file_path=f"agent_contracts/{agent_id}/{fname}",
+        original_filename=file.filename,
+        valid_from=valid_from or None,
+        valid_to=valid_to or None,
+        notes=notes or None,
+        uploaded_by_id=current_user.id,
+    )
+    db.add(contract)
+    db.add(AgentEditLog(
+        agent_id=agent_id,
+        action="contract_upload",
+        summary=f"Contract uploaded: {title} ({file.filename})",
+        changed_by_id=current_user.id,
+    ))
+    db.commit()
+    db.refresh(contract)
+    return _serialize_contract(contract)
+
+
+@router.get("/{agent_id}/contracts/{contract_id}/download")
+def download_contract(
+    agent_id:    int,
+    contract_id: int,
+    db:          Session = Depends(get_db),
+    _:           User    = Depends(get_current_user),
+):
+    c = db.query(AgentContract).filter(
+        AgentContract.id == contract_id,
+        AgentContract.agent_id == agent_id,
+    ).first()
+    if not c:
+        raise HTTPException(404, "Contract not found")
+
+    uploads_root = os.path.dirname(CONTRACT_DIR)
+    full_path    = os.path.join(uploads_root, c.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(404, "File not found on disk")
+
+    return FileResponse(
+        full_path,
+        filename=c.original_filename or "contract.pdf",
+        media_type="application/octet-stream",
+    )
+
+
+@router.delete("/{agent_id}/contracts/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_contract(
+    agent_id:    int,
+    contract_id: int,
+    db:          Session = Depends(get_db),
+    current_user: User   = Depends(require_role(UserRole.STAFF)),
+):
+    c = db.query(AgentContract).filter(
+        AgentContract.id == contract_id,
+        AgentContract.agent_id == agent_id,
+    ).first()
+    if not c:
+        raise HTTPException(404, "Contract not found")
+
+    uploads_root = os.path.dirname(CONTRACT_DIR)
+    full_path    = os.path.join(uploads_root, c.file_path)
+    if os.path.isfile(full_path):
+        os.remove(full_path)
+
+    db.add(AgentEditLog(
+        agent_id=agent_id,
+        action="contract_delete",
+        summary=f"Contract deleted: {c.title} ({c.original_filename})",
+        changed_by_id=current_user.id,
+    ))
+    db.delete(c)
     db.commit()
 
 

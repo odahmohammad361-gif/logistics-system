@@ -146,6 +146,40 @@ export interface InvoiceListResponse {
 }
 
 // ── Shipping Agent ────────────────────────────────────────────────────────────
+export interface AgentPriceHistory {
+  id: number
+  effective_date: string
+  buy_20gp: number | null;  sell_20gp: number | null
+  buy_40ft: number | null;  sell_40ft: number | null
+  buy_40hq: number | null;  sell_40hq: number | null
+  buy_air_kg: number | null; sell_air_kg: number | null
+  transit_sea_days: number | null
+  transit_air_days: number | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface AgentContract {
+  id: number
+  title: string
+  file_path: string
+  original_filename: string | null
+  valid_from: string | null
+  valid_to: string | null
+  notes: string | null
+  uploaded_by: string | null
+  created_at: string
+}
+
+export interface AgentEditLog {
+  id: number
+  action: string
+  summary: string | null
+  changed_by: string | null
+  changed_at: string
+}
+
 export interface ShippingAgent {
   id: number
   name: string
@@ -153,20 +187,31 @@ export interface ShippingAgent {
   country: string | null
   contact_person: string | null
   phone: string | null
+  whatsapp: string | null
   email: string | null
   wechat_id: string | null
   warehouse_address: string | null
   warehouse_city: string | null
+  bank_name: string | null
+  bank_account: string | null
+  bank_swift: string | null
   price_20gp: number | null
   price_40ft: number | null
   price_40hq: number | null
   price_air_kg: number | null
+  sell_price_20gp: number | null
+  sell_price_40ft: number | null
+  sell_price_40hq: number | null
+  sell_price_air_kg: number | null
   transit_sea_days: number | null
   transit_air_days: number | null
   serves_sea: boolean
   serves_air: boolean
   notes: string | null
   is_active: boolean
+  price_history?: AgentPriceHistory[]
+  contracts?: AgentContract[]
+  edit_log?: AgentEditLog[]
 }
 
 export interface AgentListResponse {
