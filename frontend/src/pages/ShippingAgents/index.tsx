@@ -78,9 +78,10 @@ interface AgentForm {
   sell_price_40hq:   number | ''
   sell_price_air_kg: number | ''
   sell_lcl_cbm:      number | ''
-  // Markup % — used only for auto-calculation in the form, not sent to server
+  // Calculator helpers — not sent to server
   markup_sea: number | ''
   markup_air: number | ''
+  cbm_rate_buy: number | ''
   transit_sea_days: number | ''
   transit_air_days: number | ''
   notes: string
@@ -169,17 +170,27 @@ export default function ShippingAgentsPage() {
     })),
   ]
 
+  const CBM_CAP = { '20gp': 28, '40ft': 67, '40hq': 76 }
+
   // Watch buy prices and markup to auto-fill sell prices
-  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir] = agentForm.watch([
-    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air',
+  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir, cbmRateBuy] = agentForm.watch([
+    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air', 'cbm_rate_buy',
   ])
+
+  function calcBuyFromCbmRate() {
+    const rate = parseFloat(String(cbmRateBuy))
+    if (!rate) return
+    agentForm.setValue('price_20gp', Number((rate * CBM_CAP['20gp']).toFixed(2)))
+    agentForm.setValue('price_40ft', Number((rate * CBM_CAP['40ft']).toFixed(2)))
+    agentForm.setValue('price_40hq', Number((rate * CBM_CAP['40hq']).toFixed(2)))
+  }
   function applyMarkupSea() {
     const pct = parseFloat(String(markupSea))
     if (!pct) return
-    if (buy20)   agentForm.setValue('sell_price_20gp',   Number((Number(buy20)   * (1 + pct / 100)).toFixed(2)))
-    if (buy40ft) agentForm.setValue('sell_price_40ft',   Number((Number(buy40ft) * (1 + pct / 100)).toFixed(2)))
-    if (buy40hq) agentForm.setValue('sell_price_40hq',   Number((Number(buy40hq) * (1 + pct / 100)).toFixed(2)))
-    if (buyLcl)  agentForm.setValue('sell_lcl_cbm',      Number((Number(buyLcl)  * (1 + pct / 100)).toFixed(2)))
+    if (buy20)   agentForm.setValue('sell_price_20gp', Number((Number(buy20)   * (1 + pct / 100)).toFixed(2)))
+    if (buy40ft) agentForm.setValue('sell_price_40ft', Number((Number(buy40ft) * (1 + pct / 100)).toFixed(2)))
+    if (buy40hq) agentForm.setValue('sell_price_40hq', Number((Number(buy40hq) * (1 + pct / 100)).toFixed(2)))
+    if (buyLcl)  agentForm.setValue('sell_lcl_cbm',    Number((Number(buyLcl)  * (1 + pct / 100)).toFixed(2)))
   }
   function applyMarkupAir() {
     const pct = parseFloat(String(markupAir))
@@ -270,7 +281,7 @@ export default function ShippingAgentsPage() {
       offer_valid_from: '', offer_valid_to: '',
       price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '', buy_lcl_cbm: '',
       sell_price_20gp: '', sell_price_40ft: '', sell_price_40hq: '', sell_price_air_kg: '', sell_lcl_cbm: '',
-      markup_sea: '', markup_air: '',
+      markup_sea: '', markup_air: '', cbm_rate_buy: '',
       transit_sea_days: '', transit_air_days: '', notes: '',
     })
     setAgentModal(true)
@@ -578,6 +589,26 @@ export default function ShippingAgentsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Per-CBM calculator */}
+              <div className="flex items-end gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/15">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                    {isAr ? 'سعر الشراء لكل م³ (USD)' : 'Buy rate per CBM (USD)'}
+                  </label>
+                  <input type="number" step="0.01" min="0" placeholder={isAr ? 'مثال: 38' : 'e.g. 38'}
+                    className="input-base w-full text-sm"
+                    {...agentForm.register('cbm_rate_buy')}
+                  />
+                </div>
+                <button type="button" onClick={calcBuyFromCbmRate}
+                  className="px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-[11px] font-semibold hover:bg-blue-500/25 transition-colors whitespace-nowrap mb-0.5">
+                  {isAr ? 'احسب أسعار الشراء' : 'Calc Buy Prices'}
+                </button>
+              </div>
+              <p className="text-[10px] text-brand-text-muted -mt-1 px-1">
+                20GP×{CBM_CAP['20gp']}m³ &nbsp;|&nbsp; 40GP×{CBM_CAP['40ft']}m³ &nbsp;|&nbsp; 40HQ×{CBM_CAP['40hq']}m³
+              </p>
 
               <div className="grid grid-cols-3 gap-2 text-[10px] text-brand-text-muted font-semibold uppercase tracking-wider px-1">
                 <span>{isAr ? 'الحجم' : 'Size'}</span>

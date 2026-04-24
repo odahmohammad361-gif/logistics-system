@@ -325,6 +325,9 @@ function LiveMargin({ buy, sell }: { buy: string; sell: string }) {
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
+// Standard container CBM capacities
+const CBM_CAPACITY = { '20gp': 28, '40ft': 67, '40hq': 76 }
+
 interface PriceForm {
   effective_date: string
   expiry_date: string
@@ -336,6 +339,9 @@ interface PriceForm {
   transit_sea_days: string; transit_air_days: string
   notes: string
   update_current: boolean
+  // Calculator helpers (not sent to server)
+  cbm_rate_buy: string
+  markup_pct: string
 }
 
 export default function AgentProfilePage() {
@@ -364,10 +370,32 @@ export default function AgentProfilePage() {
     enabled:  !isNaN(agentId),
   })
 
-  const { register, handleSubmit, reset, watch } = useForm<PriceForm>({
+  const { register, handleSubmit, reset, watch, setValue } = useForm<PriceForm>({
     defaultValues: { effective_date: new Date().toISOString().slice(0, 10), expiry_date: '', update_current: true },
   })
   const fw = watch()
+
+  function calcBuyFromCbmRate() {
+    const rate = parseFloat(fw.cbm_rate_buy)
+    if (!rate) return
+    setValue('buy_20gp', (rate * CBM_CAPACITY['20gp']).toFixed(2))
+    setValue('buy_40ft', (rate * CBM_CAPACITY['40ft']).toFixed(2))
+    setValue('buy_40hq', (rate * CBM_CAPACITY['40hq']).toFixed(2))
+  }
+
+  function applyMarkupToSell() {
+    const pct = parseFloat(fw.markup_pct)
+    if (!pct) return
+    const apply = (buyStr: string, field: keyof PriceForm) => {
+      const b = parseFloat(buyStr)
+      if (b) setValue(field, (b * (1 + pct / 100)).toFixed(2))
+    }
+    apply(fw.buy_20gp, 'sell_20gp')
+    apply(fw.buy_40ft, 'sell_40ft')
+    apply(fw.buy_40hq, 'sell_40hq')
+    apply(fw.buy_lcl_cbm, 'sell_lcl_cbm')
+    apply(fw.buy_air_kg, 'sell_air_kg')
+  }
 
   const priceMut = useMutation({
     mutationFn: (v: PriceForm) => addPriceHistory(agentId, {
@@ -731,6 +759,51 @@ export default function AgentProfilePage() {
               {isAr ? 'تحديث الأسعار الحالية للوكيل أيضاً' : "Also update agent's current prices"}
             </label>
           </FormSection>
+
+          {/* Quick calculators */}
+          {agent.serves_sea && (
+            <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-4 space-y-3">
+              <p className="text-[10px] font-semibold text-brand-primary-light uppercase tracking-wider">
+                {isAr ? 'حاسبة سريعة' : 'Quick Calculator'}
+              </p>
+              {/* Per CBM → auto-fill buy prices */}
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                    {isAr ? 'سعر الشراء لكل م³ (USD)' : 'Buy Rate per CBM (USD)'}
+                  </label>
+                  <input type="number" step="0.01" min="0" placeholder="e.g. 38"
+                    className="input-base w-full text-sm"
+                    {...register('cbm_rate_buy')}
+                  />
+                </div>
+                <button type="button" onClick={calcBuyFromCbmRate}
+                  className="px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-semibold hover:bg-blue-500/25 transition-colors whitespace-nowrap mb-0.5">
+                  {isAr ? 'احسب أسعار الشراء' : 'Calc Buy Prices'}
+                </button>
+              </div>
+              <p className="text-[10px] text-brand-text-muted">
+                20GP × {CBM_CAPACITY['20gp']}m³ &nbsp;|&nbsp; 40GP × {CBM_CAPACITY['40ft']}m³ &nbsp;|&nbsp; 40HQ × {CBM_CAPACITY['40hq']}m³
+              </p>
+
+              {/* Markup % → auto-fill sell prices */}
+              <div className="flex items-end gap-2 pt-1 border-t border-brand-border/30">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                    {isAr ? 'نسبة هامش الربح %' : 'Markup % on Buy Prices'}
+                  </label>
+                  <input type="number" step="0.1" min="0" placeholder="e.g. 15"
+                    className="input-base w-full text-sm"
+                    {...register('markup_pct')}
+                  />
+                </div>
+                <button type="button" onClick={applyMarkupToSell}
+                  className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition-colors whitespace-nowrap mb-0.5">
+                  {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Sea prices */}
           {agent.serves_sea && (
