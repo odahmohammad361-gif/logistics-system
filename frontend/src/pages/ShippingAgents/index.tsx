@@ -7,6 +7,7 @@ import {
   getAgents, createAgent, updateAgent, deleteAgent,
   getAgentQuotes, createQuote, deleteQuote,
 } from '@/services/agentService'
+import { getWarehouses } from '@/services/warehouseService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -15,6 +16,43 @@ import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
 import type { ShippingAgent } from '@/types'
 import clsx from 'clsx'
+
+// ── Static location data ───────────────────────────────────────────────────────
+const AGENT_COUNTRIES = [
+  { value: 'China',        label: '🇨🇳 China' },
+  { value: 'Jordan',       label: '🇯🇴 Jordan' },
+  { value: 'Iraq',         label: '🇮🇶 Iraq' },
+  { value: 'UAE',          label: '🇦🇪 UAE' },
+  { value: 'Turkey',       label: '🇹🇷 Turkey' },
+  { value: 'Saudi Arabia', label: '🇸🇦 Saudi Arabia' },
+  { value: 'Kuwait',       label: '🇰🇼 Kuwait' },
+  { value: 'Qatar',        label: '🇶🇦 Qatar' },
+  { value: 'Bahrain',      label: '🇧🇭 Bahrain' },
+  { value: 'Oman',         label: '🇴🇲 Oman' },
+  { value: 'Egypt',        label: '🇪🇬 Egypt' },
+  { value: 'Germany',      label: '🇩🇪 Germany' },
+  { value: 'Netherlands',  label: '🇳🇱 Netherlands' },
+  { value: 'USA',          label: '🇺🇸 USA' },
+  { value: 'Other',        label: '🌍 Other' },
+]
+
+const CITIES_BY_COUNTRY: Record<string, string[]> = {
+  China:        ['Guangzhou', 'Shenzhen', 'Shanghai', 'Foshan', 'Dongguan', 'Yiwu', 'Ningbo', 'Hangzhou', 'Qingdao', 'Tianjin', 'Chengdu', 'Wuhan'],
+  Jordan:       ['Amman', 'Aqaba', 'Zarqa', 'Irbid', 'Jerash'],
+  Iraq:         ['Baghdad', 'Basra', 'Erbil', 'Mosul', 'Najaf', 'Umm Qasr'],
+  UAE:          ['Dubai', 'Abu Dhabi', 'Sharjah', 'Jebel Ali'],
+  Turkey:       ['Istanbul', 'Mersin', 'Ankara', 'Izmir'],
+  'Saudi Arabia': ['Riyadh', 'Jeddah', 'Dammam', 'Jubail'],
+  Kuwait:       ['Kuwait City', 'Shuwaikh'],
+  Qatar:        ['Doha', 'Hamad Port'],
+  Bahrain:      ['Manama', 'Khalifa Bin Salman Port'],
+  Oman:         ['Muscat', 'Sohar', 'Salalah'],
+  Egypt:        ['Cairo', 'Alexandria', 'Port Said'],
+  Germany:      ['Hamburg', 'Bremen', 'Frankfurt', 'Berlin'],
+  Netherlands:  ['Rotterdam', 'Amsterdam'],
+  USA:          ['Los Angeles', 'New York', 'Chicago', 'Houston'],
+  Other:        [],
+}
 
 interface AgentForm {
   name: string
@@ -83,6 +121,13 @@ export default function ShippingAgentsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
 
+  // Company loading warehouses for address dropdown
+  const { data: warehousesData } = useQuery({
+    queryKey: ['warehouses-loading-agents'],
+    queryFn: () => getWarehouses({ warehouse_type: 'loading', page_size: 100 }),
+    staleTime: Infinity,
+  })
+
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [agentModal, setAgentModal] = useState(false)
@@ -101,6 +146,24 @@ export default function ShippingAgentsPage() {
 
   const watchServiceMode = quoteForm.watch('service_mode')
   const isAir = watchServiceMode === 'AIR'
+
+  // Watch country to update city options
+  const watchCountry = agentForm.watch('country')
+  const cityOptions = [
+    { value: '', label: isAr ? '— اختر مدينة —' : '— Select city —' },
+    ...(CITIES_BY_COUNTRY[watchCountry] ?? []).map(c => ({ value: c, label: c })),
+  ]
+  const countryOptions = [
+    { value: '', label: isAr ? '— اختر دولة —' : '— Select country —' },
+    ...AGENT_COUNTRIES.map(c => ({ value: c.value, label: c.label })),
+  ]
+  const warehouseOptions = [
+    { value: '', label: isAr ? '— اختر مستودعاً —' : '— Select warehouse —' },
+    ...(warehousesData?.results ?? []).map(w => ({
+      value: `${w.city ?? ''}||${w.address ?? ''}`,
+      label: `${w.name}${w.city ? ` · ${w.city}` : ''}`,
+    })),
+  ]
 
   // Watch buy prices and markup to auto-fill sell prices
   const [buy20, buy40ft, buy40hq, buyAir, markupSea, markupAir] = agentForm.watch([
@@ -429,10 +492,46 @@ export default function ShippingAgentsPage() {
 
           <FormSection title={t('common.location')}>
             <FormRow>
-              <Input label={t('common.city')} {...agentForm.register('warehouse_city')} />
-              <Input label={t('common.country')} {...agentForm.register('country')} />
+              <Select
+                label={t('common.country')}
+                options={countryOptions}
+                {...agentForm.register('country', {
+                  onChange: () => agentForm.setValue('warehouse_city', ''),
+                })}
+              />
+              <Select
+                label={t('common.city')}
+                options={cityOptions}
+                disabled={!watchCountry || cityOptions.length <= 1}
+                {...agentForm.register('warehouse_city')}
+              />
             </FormRow>
-            <Input label={t('agents.warehouse_address')} {...agentForm.register('warehouse_address')} />
+
+            {/* Warehouse address: pick from company warehouses OR type manually */}
+            <div className="space-y-1.5">
+              <label className="label-base">
+                {isAr ? 'عنوان المستودع' : 'Warehouse Address'}
+              </label>
+              {(warehousesData?.results ?? []).length > 0 && (
+                <select
+                  className="input-base w-full mb-1.5"
+                  onChange={e => {
+                    const [city, address] = e.target.value.split('||')
+                    if (city)    agentForm.setValue('warehouse_city',    city)
+                    if (address) agentForm.setValue('warehouse_address', address)
+                  }}
+                  defaultValue=""
+                >
+                  {warehouseOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              )}
+              <Input
+                placeholder={isAr ? 'أو اكتب العنوان يدوياً...' : 'Or type address manually...'}
+                {...agentForm.register('warehouse_address')}
+              />
+            </div>
           </FormSection>
 
           {/* Buy / Sell prices */}
