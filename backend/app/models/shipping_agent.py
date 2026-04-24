@@ -45,6 +45,11 @@ class ShippingAgent(Base):
 
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+
+    # Current offer validity window
+    offer_valid_from = Column(Date, nullable=True)
+    offer_valid_to   = Column(Date, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

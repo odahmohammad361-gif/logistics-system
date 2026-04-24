@@ -64,6 +64,8 @@ interface AgentForm {
   warehouse_address: string
   serves_sea: boolean
   serves_air: boolean
+  offer_valid_from: string
+  offer_valid_to: string
   // Buy prices (from agent)
   price_20gp:   number | ''
   price_40ft:   number | ''
@@ -189,6 +191,8 @@ export default function ShippingAgentsPage() {
         name: v.name, phone: v.phone, email: v.email, wechat_id: v.wechat_id,
         country: v.country, warehouse_city: v.warehouse_city, warehouse_address: v.warehouse_address,
         serves_sea: v.serves_sea, serves_air: v.serves_air,
+        offer_valid_from: v.offer_valid_from || null,
+        offer_valid_to:   v.offer_valid_to   || null,
         price_20gp: n(v.price_20gp),   price_40ft: n(v.price_40ft),
         price_40hq: n(v.price_40hq),   price_air_kg: n(v.price_air_kg),
         sell_price_20gp: n(v.sell_price_20gp),   sell_price_40ft: n(v.sell_price_40ft),
@@ -258,6 +262,7 @@ export default function ShippingAgentsPage() {
       name: '', phone: '', email: '', wechat_id: '', country: '',
       warehouse_city: '', warehouse_address: '',
       serves_sea: true, serves_air: false,
+      offer_valid_from: '', offer_valid_to: '',
       price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '',
       sell_price_20gp: '', sell_price_40ft: '', sell_price_40hq: '', sell_price_air_kg: '',
       markup_sea: '', markup_air: '',
@@ -286,6 +291,8 @@ export default function ShippingAgentsPage() {
       sell_price_40ft:   n(agent.sell_price_40ft),
       sell_price_40hq:   n(agent.sell_price_40hq),
       sell_price_air_kg: n(agent.sell_price_air_kg),
+      offer_valid_from: agent.offer_valid_from ?? '',
+      offer_valid_to:   agent.offer_valid_to   ?? '',
       markup_sea: '', markup_air: '',
       transit_sea_days: agent.transit_sea_days ?? '',
       transit_air_days: agent.transit_air_days ?? '',
@@ -488,6 +495,16 @@ export default function ShippingAgentsPage() {
                 </label>
               ))}
             </div>
+          </FormSection>
+
+          {/* Offer validity */}
+          <FormSection title={isAr ? 'صلاحية العرض' : 'Offer Validity'}>
+            <FormRow>
+              <Input type="date" label={isAr ? 'تاريخ بداية العرض' : 'Offer Start Date'}
+                {...agentForm.register('offer_valid_from')} />
+              <Input type="date" label={isAr ? 'تاريخ انتهاء العرض' : 'Offer Expiry Date'}
+                {...agentForm.register('offer_valid_to')} />
+            </FormRow>
           </FormSection>
 
           <FormSection title={t('common.location')}>

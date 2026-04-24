@@ -180,6 +180,43 @@ export interface AgentEditLog {
   changed_at: string
 }
 
+export interface AgentQuoteSummary {
+  id: number
+  quote_number: string
+  service_mode: string | null
+  container_type: string | null
+  incoterm: string | null
+  incoterm_point: string | null
+  carrier: string | null
+  port_of_loading: string | null
+  port_of_discharge: string | null
+  status: string | null
+  validity_from: string | null
+  validity_to: string | null
+  ocean_freight: number | null
+  air_freight_per_kg: number | null
+  baf: number | null
+  eca_surcharge: number | null
+  war_risk_surcharge: number | null
+  thc_origin: number | null
+  thc_destination: number | null
+  customs_destination: number | null
+  trucking_destination: number | null
+  trucking_origin: number | null
+  bl_fee: number | null
+  doc_fee: number | null
+  stuffing_fee: number | null
+  total_origin: number | null
+  total_destination: number | null
+  total_surcharges: number | null
+  total_all: number | null
+  transit_days: number | null
+  free_days_origin: number | null
+  free_days_destination: number | null
+  cut_off_days: number | null
+  notes: string | null
+}
+
 export interface ShippingAgent {
   id: number
   name: string
@@ -207,8 +244,11 @@ export interface ShippingAgent {
   transit_air_days: number | null
   serves_sea: boolean
   serves_air: boolean
+  offer_valid_from: string | null
+  offer_valid_to: string | null
   notes: string | null
   is_active: boolean
+  quotes?: AgentQuoteSummary[]
   price_history?: AgentPriceHistory[]
   contracts?: AgentContract[]
   edit_log?: AgentEditLog[]

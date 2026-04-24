@@ -223,8 +223,55 @@ def delete_agent(
 
 # ── Helper: serialize agent fully ────────────────────────────────────────────
 
+def _serialize_quote_summary(sq: ShippingQuote) -> dict:
+    def f(v): return float(v) if v is not None else None
+    return {
+        "id": sq.id,
+        "quote_number": sq.quote_number,
+        "service_mode": sq.service_mode.value if sq.service_mode else None,
+        "container_type": sq.container_type,
+        "incoterm": sq.incoterm.value if sq.incoterm else None,
+        "incoterm_point": sq.incoterm_point,
+        "carrier": sq.carrier,
+        "port_of_loading":   sq.port_of_loading,
+        "port_of_discharge": sq.port_of_discharge,
+        "status": sq.status.value if sq.status else None,
+        "validity_from": sq.validity_from.isoformat() if sq.validity_from else None,
+        "validity_to":   sq.validity_to.isoformat()   if sq.validity_to   else None,
+        "ocean_freight":      f(sq.ocean_freight),
+        "air_freight_per_kg": f(sq.air_freight_per_kg),
+        "baf":                f(sq.baf),
+        "eca_surcharge":      f(sq.eca_surcharge),
+        "war_risk_surcharge": f(sq.war_risk_surcharge),
+        "thc_origin":         f(sq.thc_origin),
+        "thc_destination":    f(sq.thc_destination),
+        "customs_destination":    f(sq.customs_destination),
+        "trucking_destination":   f(sq.trucking_destination),
+        "trucking_origin":        f(sq.trucking_origin),
+        "bl_fee":             f(sq.bl_fee),
+        "doc_fee":            f(sq.doc_fee),
+        "stuffing_fee":       f(sq.stuffing_fee),
+        "total_origin":       f(sq.total_origin),
+        "total_destination":  f(sq.total_destination),
+        "total_surcharges":   f(sq.total_surcharges),
+        "total_all":          f(sq.total_all),
+        "transit_days":       sq.transit_days,
+        "free_days_origin":   sq.free_days_origin,
+        "free_days_destination": sq.free_days_destination,
+        "cut_off_days":       sq.cut_off_days,
+        "notes":              sq.notes,
+    }
+
+
 def _serialize_agent(a: ShippingAgent) -> dict:
     def f(v): return float(v) if v is not None else None
+    # Sort quotes: active first, then by validity_to desc
+    all_quotes = sorted(
+        a.quotes,
+        key=lambda q: (0 if q.status and q.status.value == "active" else 1,
+                       q.validity_to or datetime.min.replace(tzinfo=None)),
+        reverse=False,
+    )
     return {
         "id": a.id, "name": a.name, "name_ar": a.name_ar,
         "country": a.country, "contact_person": a.contact_person,
@@ -237,9 +284,12 @@ def _serialize_agent(a: ShippingAgent) -> dict:
         "sell_price_40hq": f(a.sell_price_40hq), "sell_price_air_kg": f(a.sell_price_air_kg),
         "transit_sea_days": a.transit_sea_days, "transit_air_days": a.transit_air_days,
         "serves_sea": a.serves_sea, "serves_air": a.serves_air,
+        "offer_valid_from": str(a.offer_valid_from) if a.offer_valid_from else None,
+        "offer_valid_to":   str(a.offer_valid_to)   if a.offer_valid_to   else None,
         "notes": a.notes, "is_active": a.is_active,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        "quotes":        [_serialize_quote_summary(q) for q in all_quotes],
         "price_history": [_serialize_ph(p) for p in a.price_history],
         "contracts":     [_serialize_contract(c) for c in a.contracts],
         "edit_log":      [_serialize_log(l) for l in a.edit_log],
