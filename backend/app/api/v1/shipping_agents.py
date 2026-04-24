@@ -280,8 +280,10 @@ def _serialize_agent(a: ShippingAgent) -> dict:
         "bank_name": a.bank_name, "bank_account": a.bank_account, "bank_swift": a.bank_swift,
         "price_20gp": f(a.price_20gp), "price_40ft": f(a.price_40ft),
         "price_40hq": f(a.price_40hq), "price_air_kg": f(a.price_air_kg),
+        "buy_lcl_cbm": f(a.buy_lcl_cbm),
         "sell_price_20gp": f(a.sell_price_20gp), "sell_price_40ft": f(a.sell_price_40ft),
         "sell_price_40hq": f(a.sell_price_40hq), "sell_price_air_kg": f(a.sell_price_air_kg),
+        "sell_lcl_cbm": f(a.sell_lcl_cbm),
         "transit_sea_days": a.transit_sea_days, "transit_air_days": a.transit_air_days,
         "serves_sea": a.serves_sea, "serves_air": a.serves_air,
         "offer_valid_from": str(a.offer_valid_from) if a.offer_valid_from else None,
@@ -299,10 +301,12 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
     def f(v): return float(v) if v is not None else None
     return {
         "id": p.id, "effective_date": str(p.effective_date),
+        "expiry_date": str(p.expiry_date) if p.expiry_date else None,
         "buy_20gp": f(p.buy_20gp), "sell_20gp": f(p.sell_20gp),
         "buy_40ft": f(p.buy_40ft), "sell_40ft": f(p.sell_40ft),
         "buy_40hq": f(p.buy_40hq), "sell_40hq": f(p.sell_40hq),
         "buy_air_kg": f(p.buy_air_kg), "sell_air_kg": f(p.sell_air_kg),
+        "buy_lcl_cbm": f(p.buy_lcl_cbm), "sell_lcl_cbm": f(p.sell_lcl_cbm),
         "transit_sea_days": p.transit_sea_days, "transit_air_days": p.transit_air_days,
         "notes": p.notes,
         "created_by": p.created_by.full_name if p.created_by else None,
@@ -346,6 +350,7 @@ def get_agent_profile(
 
 class PriceHistoryCreate(BaseModel):
     effective_date:   str
+    expiry_date:      Optional[str]   = None
     buy_20gp:         Optional[float] = None
     sell_20gp:        Optional[float] = None
     buy_40ft:         Optional[float] = None
@@ -354,6 +359,8 @@ class PriceHistoryCreate(BaseModel):
     sell_40hq:        Optional[float] = None
     buy_air_kg:       Optional[float] = None
     sell_air_kg:      Optional[float] = None
+    buy_lcl_cbm:      Optional[float] = None
+    sell_lcl_cbm:     Optional[float] = None
     transit_sea_days: Optional[int]   = None
     transit_air_days: Optional[int]   = None
     notes:            Optional[str]   = None
@@ -374,10 +381,12 @@ def add_price_history(
     ph = AgentPriceHistory(
         agent_id=agent_id,
         effective_date=payload.effective_date,
+        expiry_date=payload.expiry_date or None,
         buy_20gp=payload.buy_20gp,   sell_20gp=payload.sell_20gp,
         buy_40ft=payload.buy_40ft,   sell_40ft=payload.sell_40ft,
         buy_40hq=payload.buy_40hq,   sell_40hq=payload.sell_40hq,
         buy_air_kg=payload.buy_air_kg, sell_air_kg=payload.sell_air_kg,
+        buy_lcl_cbm=payload.buy_lcl_cbm, sell_lcl_cbm=payload.sell_lcl_cbm,
         transit_sea_days=payload.transit_sea_days,
         transit_air_days=payload.transit_air_days,
         notes=payload.notes,
@@ -391,17 +400,21 @@ def add_price_history(
         if payload.buy_40ft    is not None: a.price_40ft    = payload.buy_40ft
         if payload.buy_40hq    is not None: a.price_40hq    = payload.buy_40hq
         if payload.buy_air_kg  is not None: a.price_air_kg  = payload.buy_air_kg
+        if payload.buy_lcl_cbm is not None: a.buy_lcl_cbm   = payload.buy_lcl_cbm
         if payload.sell_20gp   is not None: a.sell_price_20gp    = payload.sell_20gp
         if payload.sell_40ft   is not None: a.sell_price_40ft    = payload.sell_40ft
         if payload.sell_40hq   is not None: a.sell_price_40hq    = payload.sell_40hq
         if payload.sell_air_kg is not None: a.sell_price_air_kg  = payload.sell_air_kg
+        if payload.sell_lcl_cbm is not None: a.sell_lcl_cbm      = payload.sell_lcl_cbm
         if payload.transit_sea_days is not None: a.transit_sea_days = payload.transit_sea_days
         if payload.transit_air_days is not None: a.transit_air_days = payload.transit_air_days
+        if payload.expiry_date: a.offer_valid_to = payload.expiry_date
+        if payload.effective_date: a.offer_valid_from = payload.effective_date
 
     db.add(AgentEditLog(
         agent_id=agent_id,
         action="price_update",
-        summary=f"Price update for {payload.effective_date} — sea buy:{payload.buy_20gp}/{payload.buy_40ft}/{payload.buy_40hq} sell:{payload.sell_20gp}/{payload.sell_40ft}/{payload.sell_40hq} | air buy:{payload.buy_air_kg} sell:{payload.sell_air_kg}",
+        summary=f"Price update for {payload.effective_date} — sea buy:{payload.buy_20gp}/{payload.buy_40ft}/{payload.buy_40hq} sell:{payload.sell_20gp}/{payload.sell_40ft}/{payload.sell_40hq} | air buy:{payload.buy_air_kg} sell:{payload.sell_air_kg} | LCL buy:{payload.buy_lcl_cbm} sell:{payload.sell_lcl_cbm}",
         changed_by_id=current_user.id,
     ))
     db.commit()

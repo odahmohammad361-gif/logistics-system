@@ -63,36 +63,79 @@ function PriceRow({ label, buy, sell }: { label: string; buy: number | null; sel
 function OfferBanner({ validFrom, validTo, isAr }: { validFrom: string | null; validTo: string | null; isAr: boolean }) {
   if (!validFrom && !validTo) return null
   const today = new Date(); today.setHours(0,0,0,0)
-  const expiry = validTo ? new Date(validTo) : null
+  const start  = validFrom ? new Date(validFrom) : null
+  const expiry = validTo   ? new Date(validTo)   : null
   const days   = expiry ? Math.round((expiry.getTime() - today.getTime()) / 86400000) : null
-  const isExpired = days !== null && days < 0
+  const isExpired      = days !== null && days < 0
   const isExpiringSoon = days !== null && days >= 0 && days <= 14
+  const isActive       = days !== null && days > 14
 
-  const color = isExpired
-    ? 'bg-red-500/8 border-red-500/25 text-red-400'
-    : isExpiringSoon
-      ? 'bg-amber-500/8 border-amber-500/25 text-amber-400'
-      : 'bg-emerald-500/8 border-emerald-500/25 text-emerald-400'
+  // Total span for progress bar
+  const totalDays = (start && expiry)
+    ? Math.round((expiry.getTime() - start.getTime()) / 86400000)
+    : null
+  const elapsed = (start && totalDays)
+    ? Math.round((today.getTime() - start.getTime()) / 86400000)
+    : null
+  const progressPct = (totalDays && elapsed !== null)
+    ? Math.min(100, Math.max(0, (elapsed / totalDays) * 100))
+    : null
 
-  const icon = isExpired ? <AlertTriangle size={15} /> : isExpiringSoon ? <Timer size={15} /> : <CheckCircle2 size={15} />
+  const outerBg  = isExpired ? 'bg-red-500/8 border-red-500/30'   : isExpiringSoon ? 'bg-amber-500/8 border-amber-500/30' : 'bg-emerald-500/8 border-emerald-500/30'
+  const accentCl = isExpired ? 'text-red-400'                      : isExpiringSoon ? 'text-amber-400'                    : 'text-emerald-400'
+  const barColor = isExpired ? 'bg-red-500'                        : isExpiringSoon ? 'bg-amber-500'                      : 'bg-emerald-500'
+  const IconEl   = isExpired ? AlertTriangle : isExpiringSoon ? Timer : CheckCircle2
+
+  const label = isExpired
+    ? (isAr ? 'انتهى العرض' : 'Offer Expired')
+    : (isAr ? 'العرض ساري' : 'Offer Active')
+
+  const sublabel = isExpired
+    ? (isAr ? `منذ ${Math.abs(days!)} يوم` : `${Math.abs(days!)} days ago`)
+    : days === 0
+      ? (isAr ? 'ينتهي اليوم!' : 'Expires today!')
+      : (isAr ? `${days} يوم متبقٍ` : `${days} days remaining`)
 
   return (
-    <div className={clsx('flex items-center gap-3 px-4 py-3 rounded-xl border', color)}>
-      {icon}
-      <div className="flex-1">
-        <p className="text-sm font-semibold">
-          {isExpired
-            ? (isAr ? 'انتهى العرض' : 'Offer Expired')
-            : (isAr ? 'العرض ساري' : 'Offer Active')}
-        </p>
-        <p className="text-xs opacity-70 mt-0.5">
-          {validFrom && `${isAr ? 'من' : 'From'} ${validFrom}`}
-          {validFrom && validTo && ' — '}
-          {validTo && `${isAr ? 'حتى' : 'until'} ${validTo}`}
-          {days !== null && !isExpired && ` · ${days} ${isAr ? 'يوم متبقي' : 'days remaining'}`}
-          {days !== null && isExpired && ` · ${Math.abs(days)} ${isAr ? 'يوم منذ الانتهاء' : 'days ago'}`}
-        </p>
+    <div className={clsx('rounded-2xl border p-5', outerBg)}>
+      <div className="flex items-start gap-4">
+        {/* Big countdown number */}
+        <div className={clsx('flex-shrink-0 w-20 h-20 rounded-2xl flex flex-col items-center justify-center border',
+          isExpired ? 'bg-red-500/15 border-red-500/30' : isExpiringSoon ? 'bg-amber-500/15 border-amber-500/30' : 'bg-emerald-500/15 border-emerald-500/30')}>
+          <IconEl size={18} className={clsx(accentCl, 'mb-1')} />
+          {days !== null && (
+            <span className={clsx('text-2xl font-black leading-none', accentCl)}>
+              {Math.abs(days)}
+            </span>
+          )}
+          <span className={clsx('text-[9px] uppercase tracking-widest mt-0.5', accentCl, 'opacity-70')}>
+            {isAr ? 'يوم' : 'days'}
+          </span>
+        </div>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <p className={clsx('text-base font-bold', accentCl)}>{label}</p>
+          <p className={clsx('text-sm font-semibold mt-0.5', accentCl, 'opacity-80')}>{sublabel}</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-2 text-xs text-brand-text-muted">
+            {validFrom && <span>{isAr ? 'من:' : 'From:'} <span className="text-brand-text font-medium">{validFrom}</span></span>}
+            {validTo   && <span>{isAr ? 'حتى:' : 'Until:'} <span className="text-brand-text font-medium">{validTo}</span></span>}
+          </div>
+        </div>
       </div>
+
+      {/* Progress bar */}
+      {progressPct !== null && (
+        <div className="mt-4">
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className={clsx('h-full rounded-full transition-all', barColor)} style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="flex justify-between mt-1 text-[10px] text-brand-text-muted">
+            <span>{validFrom}</span>
+            <span>{validTo}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -272,13 +315,24 @@ function LogItem({ entry, isAr }: { entry: AgentEditLog; isAr: boolean }) {
   )
 }
 
+// ── Live margin badge for form ────────────────────────────────────────────────
+function LiveMargin({ buy, sell }: { buy: string; sell: string }) {
+  const b = parseFloat(buy), s = parseFloat(sell)
+  if (!b || !s || b === 0) return <span className="text-xs text-brand-text-dim">—%</span>
+  const pct = (((s - b) / b) * 100)
+  const color = pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-red-400' : 'text-gray-400'
+  return <span className={clsx('text-xs font-bold tabular-nums', color)}>{pct > 0 ? '+' : ''}{pct.toFixed(1)}%</span>
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 interface PriceForm {
   effective_date: string
+  expiry_date: string
   buy_20gp: string; sell_20gp: string
   buy_40ft: string; sell_40ft: string
   buy_40hq: string; sell_40hq: string
   buy_air_kg: string; sell_air_kg: string
+  buy_lcl_cbm: string; sell_lcl_cbm: string
   transit_sea_days: string; transit_air_days: string
   notes: string
   update_current: boolean
@@ -310,21 +364,25 @@ export default function AgentProfilePage() {
     enabled:  !isNaN(agentId),
   })
 
-  const { register, handleSubmit, reset } = useForm<PriceForm>({
-    defaultValues: { effective_date: new Date().toISOString().slice(0, 10), update_current: true },
+  const { register, handleSubmit, reset, watch } = useForm<PriceForm>({
+    defaultValues: { effective_date: new Date().toISOString().slice(0, 10), expiry_date: '', update_current: true },
   })
+  const fw = watch()
 
   const priceMut = useMutation({
     mutationFn: (v: PriceForm) => addPriceHistory(agentId, {
       effective_date:   v.effective_date,
-      buy_20gp:   v.buy_20gp   ? parseFloat(v.buy_20gp)   : null,
-      sell_20gp:  v.sell_20gp  ? parseFloat(v.sell_20gp)  : null,
-      buy_40ft:   v.buy_40ft   ? parseFloat(v.buy_40ft)   : null,
-      sell_40ft:  v.sell_40ft  ? parseFloat(v.sell_40ft)  : null,
-      buy_40hq:   v.buy_40hq   ? parseFloat(v.buy_40hq)   : null,
-      sell_40hq:  v.sell_40hq  ? parseFloat(v.sell_40hq)  : null,
-      buy_air_kg: v.buy_air_kg ? parseFloat(v.buy_air_kg) : null,
-      sell_air_kg:v.sell_air_kg? parseFloat(v.sell_air_kg): null,
+      expiry_date:      v.expiry_date || null,
+      buy_20gp:    v.buy_20gp    ? parseFloat(v.buy_20gp)    : null,
+      sell_20gp:   v.sell_20gp   ? parseFloat(v.sell_20gp)   : null,
+      buy_40ft:    v.buy_40ft    ? parseFloat(v.buy_40ft)    : null,
+      sell_40ft:   v.sell_40ft   ? parseFloat(v.sell_40ft)   : null,
+      buy_40hq:    v.buy_40hq    ? parseFloat(v.buy_40hq)    : null,
+      sell_40hq:   v.sell_40hq   ? parseFloat(v.sell_40hq)   : null,
+      buy_air_kg:  v.buy_air_kg  ? parseFloat(v.buy_air_kg)  : null,
+      sell_air_kg: v.sell_air_kg ? parseFloat(v.sell_air_kg) : null,
+      buy_lcl_cbm:  v.buy_lcl_cbm  ? parseFloat(v.buy_lcl_cbm)  : null,
+      sell_lcl_cbm: v.sell_lcl_cbm ? parseFloat(v.sell_lcl_cbm) : null,
       transit_sea_days: v.transit_sea_days ? parseInt(v.transit_sea_days) : null,
       transit_air_days: v.transit_air_days ? parseInt(v.transit_air_days) : null,
       notes: v.notes || null, update_current: v.update_current,
@@ -517,6 +575,9 @@ export default function AgentProfilePage() {
                 <PriceRow label="20GP" buy={agent.price_20gp} sell={agent.sell_price_20gp} />
                 <PriceRow label="40GP" buy={agent.price_40ft} sell={agent.sell_price_40ft} />
                 <PriceRow label="40HQ" buy={agent.price_40hq} sell={agent.sell_price_40hq} />
+                {(agent.buy_lcl_cbm != null || agent.sell_lcl_cbm != null) && (
+                  <PriceRow label={isAr ? 'LCL/م³' : 'LCL/CBM'} buy={agent.buy_lcl_cbm} sell={agent.sell_lcl_cbm} />
+                )}
               </div>
             )}
             {agent.serves_air && (
@@ -570,15 +631,23 @@ export default function AgentProfilePage() {
               : <div className="space-y-3">
                   {history.map(ph => (
                     <div key={ph.id} className="rounded-xl border border-brand-border/50 bg-brand-surface overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2 bg-white/[0.02] border-b border-brand-border/40">
-                        <span className="text-sm font-semibold text-brand-text font-mono">{ph.effective_date}</span>
+                      <div className="flex items-center justify-between px-4 py-2 bg-white/[0.02] border-b border-brand-border/40 flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-brand-text font-mono">{ph.effective_date}</span>
+                          {ph.expiry_date && (
+                            <span className="text-[11px] text-amber-400 flex items-center gap-1">
+                              <Timer size={10} /> {isAr ? 'ينتهي:' : 'Exp:'} {ph.expiry_date}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-brand-text-muted">{ph.created_by} · {ph.created_at?.slice(0, 10)}</span>
                       </div>
                       <div className="px-4 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                        {ph.buy_20gp  != null && <span className="text-brand-text-muted">20GP: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_20gp)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_20gp)}</b> <MarginBadge buy={ph.buy_20gp} sell={ph.sell_20gp} /></span>}
-                        {ph.buy_40ft  != null && <span className="text-brand-text-muted">40GP: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40ft)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40ft)}</b> <MarginBadge buy={ph.buy_40ft} sell={ph.sell_40ft} /></span>}
-                        {ph.buy_40hq  != null && <span className="text-brand-text-muted">40HQ: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40hq)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40hq)}</b> <MarginBadge buy={ph.buy_40hq} sell={ph.sell_40hq} /></span>}
-                        {ph.buy_air_kg!= null && <span className="text-brand-text-muted">Air: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_air_kg)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_air_kg)}</b> <MarginBadge buy={ph.buy_air_kg} sell={ph.sell_air_kg} /></span>}
+                        {ph.buy_20gp    != null && <span className="text-brand-text-muted">20GP: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_20gp)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_20gp)}</b> <MarginBadge buy={ph.buy_20gp} sell={ph.sell_20gp} /></span>}
+                        {ph.buy_40ft    != null && <span className="text-brand-text-muted">40GP: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40ft)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40ft)}</b> <MarginBadge buy={ph.buy_40ft} sell={ph.sell_40ft} /></span>}
+                        {ph.buy_40hq    != null && <span className="text-brand-text-muted">40HQ: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40hq)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40hq)}</b> <MarginBadge buy={ph.buy_40hq} sell={ph.sell_40hq} /></span>}
+                        {ph.buy_air_kg  != null && <span className="text-brand-text-muted">Air/kg: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_air_kg)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_air_kg)}</b> <MarginBadge buy={ph.buy_air_kg} sell={ph.sell_air_kg} /></span>}
+                        {ph.buy_lcl_cbm != null && <span className="text-brand-text-muted">LCL/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_cbm)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_cbm)}</b> <MarginBadge buy={ph.buy_lcl_cbm} sell={ph.sell_lcl_cbm} /></span>}
                       </div>
                       {ph.notes && <p className="px-4 pb-2 text-[11px] text-brand-text-muted">{ph.notes}</p>}
                     </div>
@@ -651,34 +720,70 @@ export default function AgentProfilePage() {
         title={isAr ? 'تحديث الأسعار الأسبوعية' : 'Weekly Price Update'} size="lg"
         footer={<><Button variant="secondary" onClick={() => setPriceModal(false)}>{isAr ? 'إلغاء' : 'Cancel'}</Button><Button loading={priceMut.isPending} onClick={handleSubmit(v => priceMut.mutate(v))}>{isAr ? 'حفظ' : 'Save'}</Button></>}>
         <div className="space-y-5">
-          <FormSection title={isAr ? 'التاريخ' : 'Date'}>
-            <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} {...register('effective_date', { required: true })} />
+          {/* Dates */}
+          <FormSection title={isAr ? 'فترة السريان' : 'Validity Period'}>
+            <FormRow>
+              <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} {...register('effective_date', { required: true })} />
+              <Input type="date" label={isAr ? 'تاريخ الانتهاء' : 'Expiry Date'} {...register('expiry_date')} />
+            </FormRow>
             <label className="flex items-center gap-2 text-sm text-brand-text cursor-pointer">
               <input type="checkbox" {...register('update_current')} />
               {isAr ? 'تحديث الأسعار الحالية للوكيل أيضاً' : "Also update agent's current prices"}
             </label>
           </FormSection>
+
+          {/* Sea prices */}
           {agent.serves_sea && (
-            <FormSection title={isAr ? 'أسعار بحرية (USD)' : 'Sea Prices (USD)'}>
-              {[{k:'20gp',l:'20GP'},{k:'40ft',l:'40GP'},{k:'40hq',l:'40HQ'}].map(({k,l})=>(
-                <div key={k} className="grid grid-cols-3 gap-3 items-end">
-                  <Input label={`${l} — ${isAr?'شراء':'Buy'}`} type="number" step="0.01" min="0" {...register(`buy_${k}` as any)} />
-                  <Input label={`${l} — ${isAr?'بيع':'Sell'}`} type="number" step="0.01" min="0" {...register(`sell_${k}` as any)} />
-                  <div />
+            <FormSection title={isAr ? 'أسعار بحرية FCL (USD)' : 'Sea FCL Prices (USD)'}>
+              {/* Header row */}
+              <div className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 mb-1">
+                <span />
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء' : 'Buy'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع' : 'Sell'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center">{isAr ? 'هامش' : 'Margin'}</span>
+              </div>
+              {([{k:'20gp',l:'20GP'},{k:'40ft',l:'40GP'},{k:'40hq',l:'40HQ'}] as const).map(({k,l})=>(
+                <div key={k} className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 items-end">
+                  <span className="text-xs font-mono text-brand-text-muted pb-2 w-10">{l}</span>
+                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`buy_${k}` as any)} />
+                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`sell_${k}` as any)} />
+                  <div className="pb-2 text-center">
+                    <LiveMargin buy={(fw as any)[`buy_${k}`] ?? ''} sell={(fw as any)[`sell_${k}`] ?? ''} />
+                  </div>
                 </div>
               ))}
+
+              {/* LCL CBM */}
+              <div className="pt-2 border-t border-brand-border/30">
+                <p className="text-[10px] text-brand-text-muted uppercase tracking-wider mb-2">{isAr ? 'أسعار LCL (لكل م³)' : 'LCL per CBM'}</p>
+                <div className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 items-end">
+                  <span className="text-xs font-mono text-brand-text-muted pb-2 w-10">CBM</span>
+                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('buy_lcl_cbm')} />
+                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('sell_lcl_cbm')} />
+                  <div className="pb-2 text-center">
+                    <LiveMargin buy={fw.buy_lcl_cbm ?? ''} sell={fw.sell_lcl_cbm ?? ''} />
+                  </div>
+                </div>
+              </div>
+
               <Input label={isAr ? 'أيام العبور البحري' : 'Sea Transit Days'} type="number" {...register('transit_sea_days')} />
             </FormSection>
           )}
+
+          {/* Air prices */}
           {agent.serves_air && (
             <FormSection title={isAr ? 'أسعار جوية (USD/كغ)' : 'Air Prices (USD/kg)'}>
-              <FormRow>
-                <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" {...register('buy_air_kg')} />
-                <Input label={isAr ? 'بيع/كغ'  : 'Sell/kg'} type="number" step="0.01" min="0" {...register('sell_air_kg')} />
-              </FormRow>
+              <div className="grid grid-cols-[1fr_1fr_60px] gap-3 items-end">
+                <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" placeholder="0.00" {...register('buy_air_kg')} />
+                <Input label={isAr ? 'بيع/كغ'  : 'Sell/kg'} type="number" step="0.01" min="0" placeholder="0.00" {...register('sell_air_kg')} />
+                <div className="pb-2 text-center">
+                  <LiveMargin buy={fw.buy_air_kg ?? ''} sell={fw.sell_air_kg ?? ''} />
+                </div>
+              </div>
               <Input label={isAr ? 'أيام العبور الجوي' : 'Air Transit Days'} type="number" {...register('transit_air_days')} />
             </FormSection>
           )}
+
           <Input label={isAr ? 'ملاحظات' : 'Notes'} {...register('notes')} />
         </div>
       </Modal>

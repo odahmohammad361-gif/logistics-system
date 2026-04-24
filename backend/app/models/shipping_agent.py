@@ -31,11 +31,13 @@ class ShippingAgent(Base):
     price_40ft    = Column(Numeric(10, 2), nullable=True)
     price_40hq    = Column(Numeric(10, 2), nullable=True)
     price_air_kg  = Column(Numeric(10, 2), nullable=True)
+    buy_lcl_cbm   = Column(Numeric(10, 2), nullable=True)   # LCL buy per CBM
     # Sell prices (what we charge clients)
     sell_price_20gp    = Column(Numeric(10, 2), nullable=True)
     sell_price_40ft    = Column(Numeric(10, 2), nullable=True)
     sell_price_40hq    = Column(Numeric(10, 2), nullable=True)
     sell_price_air_kg  = Column(Numeric(10, 2), nullable=True)
+    sell_lcl_cbm       = Column(Numeric(10, 2), nullable=True)   # LCL sell per CBM
     transit_sea_days   = Column(Integer, nullable=True)
     transit_air_days   = Column(Integer, nullable=True)
 
@@ -74,6 +76,9 @@ class AgentPriceHistory(Base):
     sell_40hq      = Column(Numeric(10, 2), nullable=True)
     buy_air_kg     = Column(Numeric(10, 2), nullable=True)
     sell_air_kg    = Column(Numeric(10, 2), nullable=True)
+    buy_lcl_cbm    = Column(Numeric(10, 2), nullable=True)
+    sell_lcl_cbm   = Column(Numeric(10, 2), nullable=True)
+    expiry_date    = Column(Date, nullable=True)
     transit_sea_days = Column(Integer, nullable=True)
     transit_air_days = Column(Integer, nullable=True)
     notes          = Column(Text, nullable=True)

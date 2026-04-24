@@ -71,11 +71,13 @@ interface AgentForm {
   price_40ft:   number | ''
   price_40hq:   number | ''
   price_air_kg: number | ''
+  buy_lcl_cbm:  number | ''
   // Sell prices (to clients)
   sell_price_20gp:   number | ''
   sell_price_40ft:   number | ''
   sell_price_40hq:   number | ''
   sell_price_air_kg: number | ''
+  sell_lcl_cbm:      number | ''
   // Markup % — used only for auto-calculation in the form, not sent to server
   markup_sea: number | ''
   markup_air: number | ''
@@ -168,8 +170,8 @@ export default function ShippingAgentsPage() {
   ]
 
   // Watch buy prices and markup to auto-fill sell prices
-  const [buy20, buy40ft, buy40hq, buyAir, markupSea, markupAir] = agentForm.watch([
-    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'markup_sea', 'markup_air',
+  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir] = agentForm.watch([
+    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air',
   ])
   function applyMarkupSea() {
     const pct = parseFloat(String(markupSea))
@@ -177,6 +179,7 @@ export default function ShippingAgentsPage() {
     if (buy20)   agentForm.setValue('sell_price_20gp',   Number((Number(buy20)   * (1 + pct / 100)).toFixed(2)))
     if (buy40ft) agentForm.setValue('sell_price_40ft',   Number((Number(buy40ft) * (1 + pct / 100)).toFixed(2)))
     if (buy40hq) agentForm.setValue('sell_price_40hq',   Number((Number(buy40hq) * (1 + pct / 100)).toFixed(2)))
+    if (buyLcl)  agentForm.setValue('sell_lcl_cbm',      Number((Number(buyLcl)  * (1 + pct / 100)).toFixed(2)))
   }
   function applyMarkupAir() {
     const pct = parseFloat(String(markupAir))
@@ -195,8 +198,10 @@ export default function ShippingAgentsPage() {
         offer_valid_to:   v.offer_valid_to   || null,
         price_20gp: n(v.price_20gp),   price_40ft: n(v.price_40ft),
         price_40hq: n(v.price_40hq),   price_air_kg: n(v.price_air_kg),
+        buy_lcl_cbm: n(v.buy_lcl_cbm),
         sell_price_20gp: n(v.sell_price_20gp),   sell_price_40ft: n(v.sell_price_40ft),
         sell_price_40hq: n(v.sell_price_40hq),   sell_price_air_kg: n(v.sell_price_air_kg),
+        sell_lcl_cbm: n(v.sell_lcl_cbm),
         transit_sea_days: n(v.transit_sea_days),  transit_air_days: n(v.transit_air_days),
         notes: v.notes,
       }
@@ -263,8 +268,8 @@ export default function ShippingAgentsPage() {
       warehouse_city: '', warehouse_address: '',
       serves_sea: true, serves_air: false,
       offer_valid_from: '', offer_valid_to: '',
-      price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '',
-      sell_price_20gp: '', sell_price_40ft: '', sell_price_40hq: '', sell_price_air_kg: '',
+      price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '', buy_lcl_cbm: '',
+      sell_price_20gp: '', sell_price_40ft: '', sell_price_40hq: '', sell_price_air_kg: '', sell_lcl_cbm: '',
       markup_sea: '', markup_air: '',
       transit_sea_days: '', transit_air_days: '', notes: '',
     })
@@ -287,10 +292,12 @@ export default function ShippingAgentsPage() {
       price_40ft:   n(agent.price_40ft),
       price_40hq:   n(agent.price_40hq),
       price_air_kg: n(agent.price_air_kg),
+      buy_lcl_cbm:       n(agent.buy_lcl_cbm),
       sell_price_20gp:   n(agent.sell_price_20gp),
       sell_price_40ft:   n(agent.sell_price_40ft),
       sell_price_40hq:   n(agent.sell_price_40hq),
       sell_price_air_kg: n(agent.sell_price_air_kg),
+      sell_lcl_cbm:      n(agent.sell_lcl_cbm),
       offer_valid_from: agent.offer_valid_from ?? '',
       offer_valid_to:   agent.offer_valid_to   ?? '',
       markup_sea: '', markup_air: '',
@@ -590,6 +597,16 @@ export default function ShippingAgentsPage() {
                     {...agentForm.register(sellKey)} />
                 </div>
               ))}
+              {/* LCL per CBM */}
+              <div className="grid grid-cols-3 gap-2 items-end pt-1 border-t border-brand-border/30">
+                <div className="text-sm font-mono text-brand-text-muted pb-2.5">LCL/m³</div>
+                <Input type="number" step="0.01" min="0" placeholder="0.00"
+                  label={isAr ? 'شراء/م³' : 'Buy/CBM'}
+                  {...agentForm.register('buy_lcl_cbm')} />
+                <Input type="number" step="0.01" min="0" placeholder="0.00"
+                  label={isAr ? 'بيع/م³' : 'Sell/CBM'}
+                  {...agentForm.register('sell_lcl_cbm')} />
+              </div>
               <Input type="number" min="0"
                 label={isAr ? 'مدة العبور البحري (أيام)' : 'Sea Transit (days)'}
                 {...agentForm.register('transit_sea_days')} />
