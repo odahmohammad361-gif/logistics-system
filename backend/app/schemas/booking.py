@@ -192,6 +192,7 @@ class BookingResponse(BaseModel):
     cargo_lines: List[BookingCargoLineResponse] = []
     max_cbm: Optional[Decimal] = None
     markup_pct: Optional[Decimal] = None
+    destination: Optional[str] = None
     # Computed capacity fields
     total_cbm_used: Optional[Decimal] = None
     container_cbm_capacity: Optional[float] = None
@@ -231,6 +232,7 @@ class BookingListItem(BaseModel):
     container_no: Optional[str] = None
     bl_number: Optional[str] = None
     vessel_name: Optional[str] = None
+    destination: Optional[str] = None
     created_at: datetime
 
     class Config:

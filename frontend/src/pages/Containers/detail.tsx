@@ -267,9 +267,20 @@ export default function BookingDetailPage() {
               <p className="text-[10px] text-brand-text-muted mb-0.5 flex items-center gap-1">
                 <MapPin size={10} /> {t('bookings.routing')}
               </p>
-              <p className="text-sm text-brand-text font-medium">
-                {booking.port_of_loading ?? '—'} → {booking.port_of_discharge ?? '—'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-brand-text font-medium">
+                  {booking.port_of_loading ?? '—'} → {booking.port_of_discharge ?? '—'}
+                </p>
+                {booking.destination && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${
+                    booking.destination === 'jordan'
+                      ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  }`}>
+                    {booking.destination === 'jordan' ? '🇯🇴 Jordan' : '🇮🇶 Iraq'}
+                  </span>
+                )}
+              </div>
             </div>
           )}
           {booking.etd && (
@@ -596,6 +607,7 @@ export default function BookingDetailPage() {
         onClose={() => { setShowCargoForm(false); setEditingLine(null) }}
         onSubmit={handleSaveCargo}
         mode={booking.mode}
+        bookingId={bookingId}
         initial={editingLine}
         saving={savingCargo}
       />

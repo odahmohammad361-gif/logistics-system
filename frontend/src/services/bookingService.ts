@@ -49,6 +49,23 @@ export const getCargoImageUrl = (bookingId: number, lineId: number, imgId: numbe
   return `${base}${BASE}/${bookingId}/cargo-lines/${lineId}/images/${imgId}`
 }
 
+// ── Eligible clients ──────────────────────────────────────────────────────────
+
+export interface EligibleClient {
+  id: number
+  name: string
+  name_ar: string | null
+  client_code: string
+  country: string | null
+  phone: string | null
+  destination: 'jordan' | 'iraq' | null
+}
+
+export const getEligibleClients = (bookingId: number) =>
+  api.get<{ booking_destination: string | null; total: number; results: EligibleClient[] }>(
+    `${BASE}/${bookingId}/eligible-clients`,
+  ).then((r) => r.data)
+
 // ── Loading Info ──────────────────────────────────────────────────────────────
 
 export const updateLoadingInfo = (bookingId: number, data: {

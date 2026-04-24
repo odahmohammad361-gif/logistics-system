@@ -48,6 +48,9 @@ class Booking(Base):
     currency     = Column(String(10),      default="USD")
     notes        = Column(Text,            nullable=True)
 
+    # Destination — auto-derived from port_of_discharge; 'jordan' | 'iraq' | None (= unrestricted)
+    destination = Column(String(10), nullable=True)
+
     # Capacity & pricing markup
     max_cbm    = Column(Numeric(10, 2), nullable=True)   # editable CBM capacity for this container
     markup_pct = Column(Numeric(6, 2),  nullable=True, default=0)  # selling markup % over agent price

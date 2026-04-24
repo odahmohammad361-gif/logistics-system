@@ -147,13 +147,15 @@ function ContainerCard({ b, isAr, onEdit, onView }: {
       <div className="px-4 py-3 flex flex-col gap-2.5 flex-1">
         <CountdownBadge etd={b.etd} eta={b.eta} status={b.status as BookingStatus} isAr={isAr} />
 
-        {/* Route */}
+        {/* Route + destination */}
         {(b.port_of_loading || b.port_of_discharge) && (
           <div className="flex items-center gap-1 text-[11px] text-gray-400 flex-wrap">
             <MapPin size={11} className="text-brand-primary-light flex-shrink-0" />
             <span>{b.port_of_loading ?? '—'}</span>
             <ArrowRight size={10} />
             <span>{b.port_of_discharge ?? '—'}</span>
+            {(b as any).destination === 'jordan' && <span className="text-base leading-none">🇯🇴</span>}
+            {(b as any).destination === 'iraq'   && <span className="text-base leading-none">🇮🇶</span>}
           </div>
         )}
 
@@ -231,21 +233,23 @@ export default function ContainersPage() {
   const qc             = useQueryClient()
   const { isAdmin }    = useAuth()
 
-  const [search, setSearch]             = useState('')
-  const [filterMode, setFilterMode]     = useState<BookingMode | ''>('')
-  const [filterStatus, setFilterStatus] = useState<BookingStatus | ''>('')
-  const [showForm, setShowForm]         = useState(false)
-  const [editItem, setEditItem]         = useState<BookingListItem | null>(null)
-  const [saving, setSaving]             = useState(false)
+  const [search, setSearch]               = useState('')
+  const [filterMode, setFilterMode]       = useState<BookingMode | ''>('')
+  const [filterStatus, setFilterStatus]   = useState<BookingStatus | ''>('')
+  const [filterDest, setFilterDest]       = useState<'jordan' | 'iraq' | ''>('')
+  const [showForm, setShowForm]           = useState(false)
+  const [editItem, setEditItem]           = useState<BookingListItem | null>(null)
+  const [saving, setSaving]               = useState(false)
 
   void isAdmin // available for future role checks
 
   const { data, isLoading } = useQuery({
-    queryKey: ['bookings', { search, filterMode, filterStatus }],
+    queryKey: ['bookings', { search, filterMode, filterStatus, filterDest }],
     queryFn: () => getBookings({
-      search:    search || undefined,
-      mode:      filterMode || undefined,
-      status:    filterStatus || undefined,
+      search:      search || undefined,
+      mode:        filterMode || undefined,
+      status:      filterStatus || undefined,
+      destination: filterDest || undefined,
       page_size: 60,
     }),
   })
@@ -322,6 +326,22 @@ export default function ContainersPage() {
             <option key={s || 'all'} value={s}>{STATUS_LABEL[s]}</option>
           ))}
         </select>
+
+        {/* Destination filter */}
+        <div className="flex gap-1 bg-white/5 rounded-lg p-1">
+          {([
+            { v: '',       label: isAr ? 'الكل' : 'All' },
+            { v: 'jordan', label: '🇯🇴 ' + (isAr ? 'الأردن' : 'Jordan') },
+            { v: 'iraq',   label: '🇮🇶 ' + (isAr ? 'العراق' : 'Iraq') },
+          ] as const).map(({ v, label }) => (
+            <button key={v || 'all'}
+              onClick={() => setFilterDest(v)}
+              className={clsx('px-3 py-1 rounded-md text-xs font-semibold transition-all',
+                filterDest === v ? 'bg-brand-primary text-white' : 'text-gray-400 hover:text-white')}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Grid */}

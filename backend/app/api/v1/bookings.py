@@ -32,6 +32,56 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 _AIR_DIVISOR = Decimal("6000")
 
 
+# ── Destination helpers ───────────────────────────────────────────────────────
+
+JORDAN_KEYWORDS = ['jordan', 'aqaba', 'amman', 'zarqa', 'irbid']
+IRAQ_KEYWORDS   = ['iraq', 'basra', 'umm qasr', 'baghdad', 'erbil', 'mosul', 'basrah', 'umm_qasr']
+
+
+def _port_to_destination(port: str | None) -> str | None:
+    """Detect destination from port name. Returns 'jordan', 'iraq', or None."""
+    if not port:
+        return None
+    p = port.lower()
+    if any(kw in p for kw in JORDAN_KEYWORDS):
+        return 'jordan'
+    if any(kw in p for kw in IRAQ_KEYWORDS):
+        return 'iraq'
+    return None
+
+
+def _client_destination(client: Client) -> str | None:
+    """
+    Derive a client's effective destination from:
+    1. country field
+    2. client_code prefix (JO- = Jordan, IQ- = Iraq)
+    3. phone country code (+962 = Jordan, +964 = Iraq)
+    Returns None if unknown → allowed in any booking.
+    """
+    if client.country:
+        c = client.country.lower()
+        if 'jordan' in c or c in ('jo',):
+            return 'jordan'
+        if 'iraq' in c or c in ('iq',):
+            return 'iraq'
+
+    if client.client_code:
+        code = client.client_code.upper()
+        if code.startswith('JO-'):
+            return 'jordan'
+        if code.startswith('IQ-'):
+            return 'iraq'
+
+    if client.phone:
+        p = client.phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+        if p.startswith('+962') or p.startswith('00962'):
+            return 'jordan'
+        if p.startswith('+964') or p.startswith('00964'):
+            return 'iraq'
+
+    return None   # unknown → unrestricted
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _generate_booking_number(db: Session, mode: str) -> str:
@@ -152,6 +202,7 @@ def _serialize_booking(b: Booking) -> BookingResponse:
         total_cbm_used=used,
         container_cbm_capacity=capacity,
         fill_percent=pct,
+        destination=b.destination,
         # Loading info
         loading_warehouse_id=b.loading_warehouse_id,
         loading_warehouse_name=b.loading_warehouse.name if b.loading_warehouse else None,
@@ -195,21 +246,24 @@ def get_ports(
 
 @router.get("", response_model=BookingListResponse)
 def list_bookings(
-    mode: str | None       = Query(None),
-    status: str | None     = Query(None),
-    agent_id: int | None   = Query(None),
-    client_id: int | None  = Query(None),
-    search: str | None     = Query(None),
-    page: int              = Query(1, ge=1),
-    page_size: int         = Query(20, ge=1, le=100),
-    db: Session            = Depends(get_db),
-    _: User                = Depends(get_current_user),
+    mode:        str | None = Query(None),
+    status:      str | None = Query(None),
+    destination: str | None = Query(None),
+    agent_id:    int | None = Query(None),
+    client_id:   int | None = Query(None),
+    search:      str | None = Query(None),
+    page:        int        = Query(1, ge=1),
+    page_size:   int        = Query(20, ge=1, le=100),
+    db:          Session    = Depends(get_db),
+    _:           User       = Depends(get_current_user),
 ):
     q = db.query(Booking)
     if mode:
         q = q.filter(Booking.mode == mode.upper())
     if status:
         q = q.filter(Booking.status == status)
+    if destination:
+        q = q.filter(Booking.destination == destination.lower())
     if agent_id:
         q = q.filter(Booking.shipping_agent_id == agent_id)
     if client_id:
@@ -254,6 +308,7 @@ def list_bookings(
             container_no=b.container_no,
             bl_number=b.bl_number,
             vessel_name=b.vessel_name,
+            destination=b.destination,
             created_at=b.created_at,
         ))
 
@@ -298,6 +353,7 @@ def create_booking(
         carrier_name=payload.carrier_name or None,
         max_cbm=payload.max_cbm,
         markup_pct=payload.markup_pct,
+        destination=_port_to_destination(payload.port_of_discharge),
     )
     db.add(booking)
     db.flush()
@@ -366,6 +422,11 @@ def update_booking(
         data["is_direct_booking"] = "1" if data["is_direct_booking"] else "0"
     for field, value in data.items():
         setattr(b, field, value)
+    # Auto-update destination when port_of_discharge changes
+    if "port_of_discharge" in data:
+        new_dest = _port_to_destination(data["port_of_discharge"])
+        if new_dest:   # only override if we can detect — don't clear existing
+            b.destination = new_dest
 
     db.commit()
     db.refresh(b)
@@ -391,6 +452,54 @@ def delete_booking(
     db.commit()
 
 
+# ── Eligible clients for a booking ───────────────────────────────────────────
+
+@router.get("/{booking_id}/eligible-clients")
+def get_eligible_clients(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    _: User     = Depends(get_current_user),
+):
+    """
+    Returns clients eligible to be added to this booking.
+    Filtered by the booking's destination (jordan / iraq).
+    Clients with no determinable destination are always included.
+    """
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(404, "Booking not found")
+
+    all_clients = db.query(Client).filter(Client.is_active == True).all()
+    destination = b.destination  # 'jordan' | 'iraq' | None
+
+    results = []
+    for c in all_clients:
+        client_dest = _client_destination(c)
+        # Include if: no booking destination, unknown client destination, or destinations match
+        if not destination or client_dest is None or client_dest == destination:
+            results.append({
+                "id":          c.id,
+                "name":        c.name,
+                "name_ar":     c.name_ar,
+                "client_code": c.client_code,
+                "country":     c.country,
+                "phone":       c.phone,
+                "destination": client_dest,
+            })
+
+    # Sort: matching destination first, then unknowns
+    if destination:
+        results.sort(key=lambda x: (0 if x["destination"] == destination else 1, x["name"]))
+    else:
+        results.sort(key=lambda x: x["name"])
+
+    return {
+        "booking_destination": destination,
+        "total": len(results),
+        "results": results,
+    }
+
+
 # ── Cargo Lines ───────────────────────────────────────────────────────────────
 
 @router.post("/{booking_id}/cargo-lines", response_model=BookingCargoLineResponse, status_code=status.HTTP_201_CREATED)
@@ -407,6 +516,18 @@ def add_cargo_line(
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(404, "Client not found")
+
+    # Destination validation
+    if b.destination:
+        client_dest = _client_destination(client)
+        if client_dest is not None and client_dest != b.destination:
+            dest_label = {'jordan': 'Jordan 🇯🇴', 'iraq': 'Iraq 🇮🇶'}.get(b.destination, b.destination)
+            raise HTTPException(
+                status_code=400,
+                detail=f"This container is going to {dest_label}. "
+                       f"Client '{client.name}' ({client.client_code}) appears to be from {client_dest.title()}. "
+                       f"Only {dest_label} clients can be added to this container.",
+            )
 
     line = BookingCargoLine(
         booking_id=booking_id,

@@ -83,12 +83,24 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     defaultValues: { mode: 'FCL', status: 'draft', currency: 'USD', is_direct_booking: false, markup_pct: '0' },
   })
 
-  const mode         = watch('mode')
-  const isDirect     = watch('is_direct_booking')
+  const mode          = watch('mode')
+  const isDirect      = watch('is_direct_booking')
   const containerSize = watch('container_size')
-  const freightCost  = watch('freight_cost')
-  const maxCbm       = watch('max_cbm')
-  const markupPct    = watch('markup_pct')
+  const freightCost   = watch('freight_cost')
+  const maxCbm        = watch('max_cbm')
+  const markupPct     = watch('markup_pct')
+  const portDischarge = watch('port_of_discharge')
+
+  // Detect destination from port of discharge
+  const JORDAN_KW = ['jordan', 'aqaba', 'amman', 'zarqa', 'irbid']
+  const IRAQ_KW   = ['iraq', 'basra', 'umm qasr', 'baghdad', 'erbil', 'mosul']
+  const detectedDest = (() => {
+    if (!portDischarge) return null
+    const p = portDischarge.toLowerCase()
+    if (JORDAN_KW.some(kw => p.includes(kw))) return 'jordan'
+    if (IRAQ_KW.some(kw => p.includes(kw)))   return 'iraq'
+    return null
+  })()
 
   // Auto-fill max_cbm when container size changes
   useEffect(() => {
@@ -283,6 +295,21 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
 
         {/* Routing */}
         <FormSection title={t('bookings.routing')}>
+          {/* Destination auto-detection badge */}
+          {detectedDest && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
+              detectedDest === 'jordan'
+                ? 'bg-blue-500/8 border-blue-500/20 text-blue-400'
+                : 'bg-emerald-500/8 border-emerald-500/20 text-emerald-400'
+            }`}>
+              <span className="text-base">{detectedDest === 'jordan' ? '🇯🇴' : '🇮🇶'}</span>
+              <span>
+                {isAr
+                  ? `تم تحديد الوجهة تلقائياً: ${detectedDest === 'jordan' ? 'الأردن' : 'العراق'} — سيتم تصفية العملاء عند إضافة البضائع`
+                  : `Destination detected: ${detectedDest === 'jordan' ? 'Jordan' : 'Iraq'} — clients will be filtered when adding cargo`}
+              </span>
+            </div>
+          )}
           <FormRow>
             <Select
               label={t('bookings.port_loading')}

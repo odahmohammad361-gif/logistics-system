@@ -447,6 +447,7 @@ export interface Booking {
   total_cbm_used: number | null
   container_cbm_capacity: number | null
   fill_percent: number | null
+  destination: 'jordan' | 'iraq' | null
   // Loading info
   loading_warehouse_id: number | null
   loading_warehouse_name: string | null
@@ -479,6 +480,7 @@ export interface BookingListItem {
   freight_cost: number | null
   max_cbm: number | null
   markup_pct: number | null
+  destination: 'jordan' | 'iraq' | null
   created_at: string
 }
 

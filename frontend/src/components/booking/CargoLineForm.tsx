@@ -2,11 +2,14 @@ import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
-import { getClients } from '@/services/clientService'
+import { getEligibleClients } from '@/services/bookingService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { BookingCargoLine, BookingMode } from '@/types'
+
+const DEST_LABEL: Record<string, string> = { jordan: '🇯🇴 Jordan', iraq: '🇮🇶 Iraq' }
+const DEST_LABEL_AR: Record<string, string> = { jordan: '🇯🇴 الأردن', iraq: '🇮🇶 العراق' }
 
 interface FormValues {
   client_id:          string
@@ -26,27 +29,34 @@ interface FormValues {
 }
 
 interface Props {
-  open:      boolean
-  onClose:   () => void
-  onSubmit:  (data: Record<string, unknown>) => Promise<void>
-  mode:      BookingMode
-  initial?:  BookingCargoLine | null
-  saving?:   boolean
+  open:        boolean
+  onClose:     () => void
+  onSubmit:    (data: Record<string, unknown>) => Promise<void>
+  mode:        BookingMode
+  bookingId:   number
+  initial?:    BookingCargoLine | null
+  saving?:     boolean
 }
 
-export default function CargoLineForm({ open, onClose, onSubmit, mode, initial, saving }: Props) {
-  const { t } = useTranslation()
+export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId, initial, saving }: Props) {
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
 
-  const { data: clientsData } = useQuery({
-    queryKey: ['clients-all'],
-    queryFn:  () => getClients({ page_size: 500 }),
-    enabled:  open,
+  const { data: eligibleData } = useQuery({
+    queryKey: ['eligible-clients', bookingId],
+    queryFn:  () => getEligibleClients(bookingId),
+    enabled:  open && !!bookingId,
   })
 
-  const clientOptions = useMemo(() =>
-    (clientsData?.results ?? []).map(c => ({ value: String(c.id), label: `${c.client_code} — ${c.name}` })),
-    [clientsData],
-  )
+  const bookingDest = eligibleData?.booking_destination ?? null
+
+  const clientOptions = useMemo(() => {
+    const clients = eligibleData?.results ?? []
+    return clients.map(c => ({
+      value: String(c.id),
+      label: `${c.client_code} — ${isAr && c.name_ar ? c.name_ar : c.name}${c.destination ? ` (${isAr ? DEST_LABEL_AR[c.destination] : DEST_LABEL[c.destination]})` : ''}`,
+    }))
+  }, [eligibleData, isAr])
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
 
@@ -137,12 +147,30 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, initial, 
       }
     >
       <div className="space-y-5">
+        {/* Destination badge */}
+        {bookingDest && (
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
+            bookingDest === 'jordan'
+              ? 'bg-blue-500/8 border-blue-500/20 text-blue-400'
+              : 'bg-emerald-500/8 border-emerald-500/20 text-emerald-400'
+          }`}>
+            <span className="text-base">{bookingDest === 'jordan' ? '🇯🇴' : '🇮🇶'}</span>
+            <span>
+              {isAr
+                ? `هذه الحاوية متجهة إلى ${bookingDest === 'jordan' ? 'الأردن' : 'العراق'} — يظهر فقط العملاء المطابقون`
+                : `Container destined for ${bookingDest === 'jordan' ? 'Jordan' : 'Iraq'} — only matching clients shown`}
+            </span>
+          </div>
+        )}
+
         {/* Client */}
         <FormSection title={t('bookings.cargo_lines')}>
           <Select
             label={t('invoices.client')}
             options={clientOptions}
-            placeholder={t('clients.select')}
+            placeholder={clientOptions.length === 0
+              ? (isAr ? 'لا يوجد عملاء مطابقون' : 'No matching clients')
+              : t('clients.select')}
             error={errors.client_id?.message}
             disabled={!!initial}
             {...register('client_id', { required: t('common.required') })}
