@@ -173,17 +173,9 @@ export default function ShippingAgentsPage() {
   const CBM_CAP = { '20gp': 28, '40ft': 67, '40hq': 76 }
 
   // Watch buy prices and markup to auto-fill sell prices
-  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir, cbmRateBuy] = agentForm.watch([
-    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air', 'cbm_rate_buy',
+  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir] = agentForm.watch([
+    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air',
   ])
-
-  function calcBuyFromCbmRate() {
-    const rate = parseFloat(String(cbmRateBuy))
-    if (!rate) return
-    agentForm.setValue('price_20gp', Number((rate * CBM_CAP['20gp']).toFixed(2)))
-    agentForm.setValue('price_40ft', Number((rate * CBM_CAP['40ft']).toFixed(2)))
-    agentForm.setValue('price_40hq', Number((rate * CBM_CAP['40hq']).toFixed(2)))
-  }
   function applyMarkupSea() {
     const pct = parseFloat(String(markupSea))
     if (!pct) return
@@ -590,38 +582,30 @@ export default function ShippingAgentsPage() {
                 </div>
               </div>
 
-              {/* Per-CBM calculator */}
-              <div className="flex items-end gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/15">
-                <div className="flex-1">
-                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
-                    {isAr ? 'سعر الشراء لكل م³ (USD)' : 'Buy rate per CBM (USD)'}
-                  </label>
-                  <input type="number" step="0.01" min="0" placeholder={isAr ? 'مثال: 38' : 'e.g. 38'}
-                    className="input-base w-full text-sm"
-                    {...agentForm.register('cbm_rate_buy')}
-                  />
-                </div>
-                <button type="button" onClick={calcBuyFromCbmRate}
-                  className="px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-[11px] font-semibold hover:bg-blue-500/25 transition-colors whitespace-nowrap mb-0.5">
-                  {isAr ? 'احسب أسعار الشراء' : 'Calc Buy Prices'}
-                </button>
-              </div>
-              <p className="text-[10px] text-brand-text-muted -mt-1 px-1">
-                20GP×{CBM_CAP['20gp']}m³ &nbsp;|&nbsp; 40GP×{CBM_CAP['40ft']}m³ &nbsp;|&nbsp; 40HQ×{CBM_CAP['40hq']}m³
-              </p>
-
-              <div className="grid grid-cols-3 gap-2 text-[10px] text-brand-text-muted font-semibold uppercase tracking-wider px-1">
-                <span>{isAr ? 'الحجم' : 'Size'}</span>
-                <span>{isAr ? 'سعر الشراء' : 'Buy Price'}</span>
-                <span>{isAr ? 'سعر البيع' : 'Sell Price'}</span>
+              {/* Column headers */}
+              <div className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 px-1 mb-1">
+                <span />
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'لكل م³' : 'Per m³'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء (إجمالي)' : 'Buy (total)'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع (إجمالي)' : 'Sell (total)'}</span>
               </div>
               {[
-                { key: '20gp' as const, label: '20GP', buyKey: 'price_20gp' as const, sellKey: 'sell_price_20gp' as const },
-                { key: '40ft' as const, label: '40GP', buyKey: 'price_40ft' as const, sellKey: 'sell_price_40ft' as const },
-                { key: '40hq' as const, label: '40HQ', buyKey: 'price_40hq' as const, sellKey: 'sell_price_40hq' as const },
-              ].map(({ label, buyKey, sellKey }) => (
-                <div key={label} className="grid grid-cols-3 gap-2 items-end">
+                { label: '20GP', cap: CBM_CAP['20gp'], buyKey: 'price_20gp' as const, sellKey: 'sell_price_20gp' as const, rateKey: 'cbm_rate_buy' as const },
+                { label: '40GP', cap: CBM_CAP['40ft'], buyKey: 'price_40ft' as const, sellKey: 'sell_price_40ft' as const, rateKey: 'cbm_rate_buy' as const },
+                { label: '40HQ', cap: CBM_CAP['40hq'], buyKey: 'price_40hq' as const, sellKey: 'sell_price_40hq' as const, rateKey: 'cbm_rate_buy' as const },
+              ].map(({ label, cap, buyKey, sellKey }) => (
+                <div key={label} className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 items-end">
                   <div className="text-sm font-mono text-brand-text-muted pb-2.5">{label}</div>
+                  {/* Per m³ → auto-fills buy total */}
+                  <input type="number" step="0.01" min="0" placeholder="0.00"
+                    className="input-base text-sm text-blue-300"
+                    title={`×${cap} m³`}
+                    onChange={(e) => {
+                      const rate = parseFloat(e.target.value)
+                      if (rate > 0) agentForm.setValue(buyKey, Number((rate * cap).toFixed(2)))
+                      else if (e.target.value === '') agentForm.setValue(buyKey, '')
+                    }}
+                  />
                   <Input type="number" step="0.01" min="0" placeholder="0.00"
                     {...agentForm.register(buyKey)} />
                   <Input type="number" step="0.01" min="0" placeholder="0.00"
@@ -629,13 +613,14 @@ export default function ShippingAgentsPage() {
                 </div>
               ))}
               {/* LCL per CBM */}
-              <div className="grid grid-cols-3 gap-2 items-end pt-1 border-t border-brand-border/30">
-                <div className="text-sm font-mono text-brand-text-muted pb-2.5">LCL/m³</div>
+              <div className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 items-end pt-1 border-t border-brand-border/30">
+                <div className="text-sm font-mono text-brand-text-muted pb-2.5">LCL</div>
+                <span /> {/* LCL is already per m³ */}
                 <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'شراء/م³' : 'Buy/CBM'}
+                  label={isAr ? 'شراء/م³' : 'Buy/m³'}
                   {...agentForm.register('buy_lcl_cbm')} />
                 <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'بيع/م³' : 'Sell/CBM'}
+                  label={isAr ? 'بيع/م³' : 'Sell/m³'}
                   {...agentForm.register('sell_lcl_cbm')} />
               </div>
               <Input type="number" min="0"

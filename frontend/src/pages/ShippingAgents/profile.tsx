@@ -340,7 +340,9 @@ interface PriceForm {
   notes: string
   update_current: boolean
   // Calculator helpers (not sent to server)
-  cbm_rate_buy: string
+  cbm_rate_20gp: string
+  cbm_rate_40ft: string
+  cbm_rate_40hq: string
   markup_pct: string
 }
 
@@ -374,14 +376,6 @@ export default function AgentProfilePage() {
     defaultValues: { effective_date: new Date().toISOString().slice(0, 10), expiry_date: '', update_current: true },
   })
   const fw = watch()
-
-  function calcBuyFromCbmRate() {
-    const rate = parseFloat(fw.cbm_rate_buy)
-    if (!rate) return
-    setValue('buy_20gp', (rate * CBM_CAPACITY['20gp']).toFixed(2))
-    setValue('buy_40ft', (rate * CBM_CAPACITY['40ft']).toFixed(2))
-    setValue('buy_40hq', (rate * CBM_CAPACITY['40hq']).toFixed(2))
-  }
 
   function applyMarkupToSell() {
     const pct = parseFloat(fw.markup_pct)
@@ -760,64 +754,49 @@ export default function AgentProfilePage() {
             </label>
           </FormSection>
 
-          {/* Quick calculators */}
-          {agent.serves_sea && (
-            <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-4 space-y-3">
-              <p className="text-[10px] font-semibold text-brand-primary-light uppercase tracking-wider">
-                {isAr ? 'حاسبة سريعة' : 'Quick Calculator'}
-              </p>
-              {/* Per CBM → auto-fill buy prices */}
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
-                    {isAr ? 'سعر الشراء لكل م³ (USD)' : 'Buy Rate per CBM (USD)'}
-                  </label>
-                  <input type="number" step="0.01" min="0" placeholder="e.g. 38"
-                    className="input-base w-full text-sm"
-                    {...register('cbm_rate_buy')}
-                  />
-                </div>
-                <button type="button" onClick={calcBuyFromCbmRate}
-                  className="px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-semibold hover:bg-blue-500/25 transition-colors whitespace-nowrap mb-0.5">
-                  {isAr ? 'احسب أسعار الشراء' : 'Calc Buy Prices'}
-                </button>
-              </div>
-              <p className="text-[10px] text-brand-text-muted">
-                20GP × {CBM_CAPACITY['20gp']}m³ &nbsp;|&nbsp; 40GP × {CBM_CAPACITY['40ft']}m³ &nbsp;|&nbsp; 40HQ × {CBM_CAPACITY['40hq']}m³
-              </p>
-
-              {/* Markup % → auto-fill sell prices */}
-              <div className="flex items-end gap-2 pt-1 border-t border-brand-border/30">
-                <div className="flex-1">
-                  <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
-                    {isAr ? 'نسبة هامش الربح %' : 'Markup % on Buy Prices'}
-                  </label>
-                  <input type="number" step="0.1" min="0" placeholder="e.g. 15"
-                    className="input-base w-full text-sm"
-                    {...register('markup_pct')}
-                  />
-                </div>
-                <button type="button" onClick={applyMarkupToSell}
-                  className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition-colors whitespace-nowrap mb-0.5">
-                  {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Sea prices */}
           {agent.serves_sea && (
             <FormSection title={isAr ? 'أسعار بحرية FCL (USD)' : 'Sea FCL Prices (USD)'}>
-              {/* Header row */}
-              <div className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 mb-1">
+              {/* Apply markup % button row */}
+              <div className="flex items-center gap-2 pb-1">
+                <input type="number" step="0.1" min="0" placeholder={isAr ? 'هامش %' : 'Markup %'}
+                  className="input-base w-28 text-sm"
+                  {...register('markup_pct')}
+                />
+                <button type="button" onClick={applyMarkupToSell}
+                  className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition-colors">
+                  {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
+                </button>
+              </div>
+
+              {/* Column headers: Size | Per m³ | Buy (total) | Sell (total) | Margin */}
+              <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 px-1 mb-1">
                 <span />
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء' : 'Buy'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع' : 'Sell'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'لكل م³' : 'Per m³'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء (إجمالي)' : 'Buy (total)'}</span>
+                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع (إجمالي)' : 'Sell (total)'}</span>
                 <span className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center">{isAr ? 'هامش' : 'Margin'}</span>
               </div>
-              {([{k:'20gp',l:'20GP'},{k:'40ft',l:'40GP'},{k:'40hq',l:'40HQ'}] as const).map(({k,l})=>(
-                <div key={k} className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 items-end">
-                  <span className="text-xs font-mono text-brand-text-muted pb-2 w-10">{l}</span>
+
+              {([
+                { k: '20gp' as const, l: '20GP', cap: CBM_CAPACITY['20gp'] },
+                { k: '40ft' as const, l: '40GP', cap: CBM_CAPACITY['40ft'] },
+                { k: '40hq' as const, l: '40HQ', cap: CBM_CAPACITY['40hq'] },
+              ]).map(({ k, l, cap }) => (
+                <div key={k} className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-end">
+                  <span className="text-xs font-mono text-brand-text-muted pb-2">{l}</span>
+                  {/* Per m³ → auto-fills buy total */}
+                  <input type="number" step="0.01" min="0" placeholder="0.00"
+                    className="input-base text-sm text-blue-300"
+                    title={`×${cap} m³ = total`}
+                    {...register(`cbm_rate_${k}` as any, {
+                      onChange: (e) => {
+                        const rate = parseFloat(e.target.value)
+                        if (rate > 0) setValue(`buy_${k}` as any, (rate * cap).toFixed(2))
+                        else if (e.target.value === '') setValue(`buy_${k}` as any, '')
+                      },
+                    })}
+                  />
                   <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`buy_${k}` as any)} />
                   <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`sell_${k}` as any)} />
                   <div className="pb-2 text-center">
@@ -826,11 +805,14 @@ export default function AgentProfilePage() {
                 </div>
               ))}
 
-              {/* LCL CBM */}
+              {/* LCL per CBM */}
               <div className="pt-2 border-t border-brand-border/30">
-                <p className="text-[10px] text-brand-text-muted uppercase tracking-wider mb-2">{isAr ? 'أسعار LCL (لكل م³)' : 'LCL per CBM'}</p>
-                <div className="grid grid-cols-[auto_1fr_1fr_60px] gap-3 items-end">
-                  <span className="text-xs font-mono text-brand-text-muted pb-2 w-10">CBM</span>
+                <p className="text-[10px] text-brand-text-muted uppercase tracking-wider mb-1.5">
+                  {isAr ? 'LCL — لكل م³' : 'LCL — per CBM'}
+                </p>
+                <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-end">
+                  <span className="text-xs font-mono text-brand-text-muted pb-2">LCL</span>
+                  <span /> {/* no per-m³ calc for LCL (it's already per m³) */}
                   <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('buy_lcl_cbm')} />
                   <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('sell_lcl_cbm')} />
                   <div className="pb-2 text-center">
