@@ -1,11 +1,15 @@
 import io
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
+from app.core.security import hash_password
 from app.models.user import User, UserRole
 from app.models.client import Client
 from app.models.branch import Branch
@@ -178,6 +182,34 @@ def update_client(
     db.commit()
     db.refresh(client)
     return client
+
+
+# ── Set portal password ────────────────────────────────────────────────────────
+
+class SetPortalPasswordRequest(BaseModel):
+    password: Optional[str] = None
+    generate: bool = False
+
+
+@router.post("/{client_id}/set-portal-password")
+def set_portal_password(
+    client_id: int,
+    payload: SetPortalPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    if payload.generate or not payload.password:
+        password = secrets.token_urlsafe(8)
+    else:
+        password = payload.password
+
+    client.portal_password_hash = hash_password(password)
+    db.commit()
+    return {"password": password, "client_code": client.client_code, "name": client.name}
 
 
 # ── Delete (soft) ──────────────────────────────────────────────────────────────

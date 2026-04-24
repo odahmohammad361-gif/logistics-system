@@ -3,14 +3,17 @@ import uuid
 import shutil
 from decimal import Decimal
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, CONTAINER_CBM
+from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingLoadingPhoto, CONTAINER_CBM
+from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
 from app.schemas.booking import (
     BookingCreate, BookingUpdate, BookingResponse, BookingListResponse, BookingListItem,
@@ -53,6 +56,17 @@ def _compute_air_weights(line: BookingCargoLine) -> None:
     else:
         line.volumetric_weight_kg = None
         line.chargeable_weight_kg = None
+
+
+LOCKED_STATUSES = {"confirmed", "in_transit", "arrived", "delivered", "cancelled"}
+
+def _assert_cargo_editable(b: Booking) -> None:
+    """Raise 423 if the booking is sealed and cargo lines cannot be changed."""
+    if b.status in LOCKED_STATUSES:
+        raise HTTPException(
+            status_code=423,
+            detail=f"Container is {b.status} — cargo lines are locked and cannot be modified.",
+        )
 
 
 def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
@@ -133,12 +147,48 @@ def _serialize_booking(b: Booking) -> BookingResponse:
             code=b.branch.code,
         ) if b.branch else None,
         cargo_lines=[_serialize_line(ln) for ln in b.cargo_lines],
+        max_cbm=b.max_cbm,
+        markup_pct=b.markup_pct,
         total_cbm_used=used,
         container_cbm_capacity=capacity,
         fill_percent=pct,
+        # Loading info
+        loading_warehouse_id=b.loading_warehouse_id,
+        loading_warehouse_name=b.loading_warehouse.name if b.loading_warehouse else None,
+        loading_warehouse_city=b.loading_warehouse.city if b.loading_warehouse else None,
+        loading_date=b.loading_date,
+        loading_notes=b.loading_notes,
+        loading_photos=[
+            {"id": p.id, "file_path": p.file_path, "original_filename": p.original_filename,
+             "caption": p.caption, "uploaded_at": p.uploaded_at}
+            for p in b.loading_photos
+        ],
+        is_locked=(b.status in LOCKED_STATUSES),
         created_at=b.created_at,
         updated_at=b.updated_at,
     )
+
+
+# ── Ports lookup ─────────────────────────────────────────────────────────────
+
+@router.get("/ports")
+def get_ports(
+    db: Session = Depends(get_db),
+    _: User     = Depends(get_current_user),
+):
+    """Return distinct ports from shipping quotes + existing bookings for dropdown."""
+    from app.models.shipping_quote import ShippingQuote
+    from sqlalchemy import union, select, literal_column
+
+    sq_load = db.query(ShippingQuote.port_of_loading).filter(ShippingQuote.port_of_loading.isnot(None))
+    bk_load = db.query(Booking.port_of_loading).filter(Booking.port_of_loading.isnot(None))
+    loading = sorted({r[0] for r in sq_load.union(bk_load).all() if r[0]})
+
+    sq_disch = db.query(ShippingQuote.port_of_discharge).filter(ShippingQuote.port_of_discharge.isnot(None))
+    bk_disch = db.query(Booking.port_of_discharge).filter(Booking.port_of_discharge.isnot(None))
+    discharge = sorted({r[0] for r in sq_disch.union(bk_disch).all() if r[0]})
+
+    return {"loading": loading, "discharge": discharge}
 
 
 # ── List ──────────────────────────────────────────────────────────────────────
@@ -198,6 +248,12 @@ def list_bookings(
             total_cbm_used=used,
             fill_percent=pct,
             agent_name=b.agent.name if b.agent else None,
+            freight_cost=b.freight_cost,
+            max_cbm=b.max_cbm,
+            markup_pct=b.markup_pct,
+            container_no=b.container_no,
+            bl_number=b.bl_number,
+            vessel_name=b.vessel_name,
             created_at=b.created_at,
         ))
 
@@ -240,6 +296,8 @@ def create_booking(
         notes=payload.notes or None,
         is_direct_booking="1" if payload.is_direct_booking else "0",
         carrier_name=payload.carrier_name or None,
+        max_cbm=payload.max_cbm,
+        markup_pct=payload.markup_pct,
     )
     db.add(booking)
     db.flush()
@@ -345,6 +403,7 @@ def add_cargo_line(
     b = db.query(Booking).filter(Booking.id == booking_id).first()
     if not b:
         raise HTTPException(404, "Booking not found")
+    _assert_cargo_editable(b)
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(404, "Client not found")
@@ -390,11 +449,14 @@ def update_cargo_line(
     if not line:
         raise HTTPException(404, "Cargo line not found")
 
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if b:
+        _assert_cargo_editable(b)
+
     data = payload.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(line, field, value)
 
-    b = db.query(Booking).filter(Booking.id == booking_id).first()
     if b and b.mode == "AIR":
         _compute_air_weights(line)
 
@@ -416,6 +478,9 @@ def delete_cargo_line(
     ).first()
     if not line:
         raise HTTPException(404, "Cargo line not found")
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if b:
+        _assert_cargo_editable(b)
     db.delete(line)
     db.commit()
 
@@ -514,6 +579,123 @@ def delete_cargo_image(
         os.remove(full_path)
 
     db.delete(img)
+    db.commit()
+
+
+# ── Loading Info ─────────────────────────────────────────────────────────────
+
+class LoadingInfoUpdate(BaseModel):
+    loading_warehouse_id: Optional[int] = None
+    loading_date:         Optional[datetime] = None
+    loading_notes:        Optional[str] = None
+
+
+@router.patch("/{booking_id}/loading-info")
+def update_loading_info(
+    booking_id: int,
+    payload: LoadingInfoUpdate,
+    db: Session = Depends(get_db),
+    _: User     = Depends(require_role(UserRole.STAFF)),
+):
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    if payload.loading_warehouse_id is not None:
+        wh = db.query(CompanyWarehouse).filter(CompanyWarehouse.id == payload.loading_warehouse_id).first()
+        if not wh:
+            raise HTTPException(404, "Warehouse not found")
+        b.loading_warehouse_id = payload.loading_warehouse_id
+    if payload.loading_date is not None:
+        b.loading_date = payload.loading_date
+    if payload.loading_notes is not None:
+        b.loading_notes = payload.loading_notes or None
+    db.commit()
+    db.refresh(b)
+    return _serialize_booking(b)
+
+
+# ── Loading Photos ────────────────────────────────────────────────────────────
+
+@router.post("/{booking_id}/loading-photos")
+async def upload_loading_photos(
+    booking_id: int,
+    files:   list[UploadFile] = File(...),
+    caption: str | None       = None,
+    db:      Session          = Depends(get_db),
+    _:       User             = Depends(require_role(UserRole.STAFF)),
+):
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(404, "Booking not found")
+
+    photo_dir = os.path.join(UPLOAD_DIR, str(booking_id), "loading")
+    os.makedirs(photo_dir, exist_ok=True)
+
+    created = []
+    for f in files:
+        ext   = os.path.splitext(f.filename or "photo.jpg")[1].lower() or ".jpg"
+        fname = f"{uuid.uuid4().hex}{ext}"
+        fpath = os.path.join(photo_dir, fname)
+        with open(fpath, "wb") as fp:
+            fp.write(await f.read())
+        photo = BookingLoadingPhoto(
+            booking_id=booking_id,
+            file_path=f"bookings/{booking_id}/loading/{fname}",
+            original_filename=f.filename,
+            caption=caption or None,
+        )
+        db.add(photo)
+        created.append(photo)
+
+    db.commit()
+    for p in created:
+        db.refresh(p)
+
+    return [
+        {"id": p.id, "file_path": p.file_path, "original_filename": p.original_filename,
+         "caption": p.caption, "uploaded_at": p.uploaded_at}
+        for p in created
+    ]
+
+
+@router.get("/{booking_id}/loading-photos/{photo_id}")
+def serve_loading_photo(
+    booking_id: int,
+    photo_id:   int,
+    db: Session = Depends(get_db),
+    _: User     = Depends(get_current_user),
+):
+    photo = db.query(BookingLoadingPhoto).filter(
+        BookingLoadingPhoto.id == photo_id,
+        BookingLoadingPhoto.booking_id == booking_id,
+    ).first()
+    if not photo:
+        raise HTTPException(404, "Photo not found")
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    full_path    = os.path.join(uploads_root, photo.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(404, "Photo file not found on disk")
+    return FileResponse(full_path)
+
+
+@router.delete("/{booking_id}/loading-photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_loading_photo(
+    booking_id: int,
+    photo_id:   int,
+    db: Session = Depends(get_db),
+    _: User     = Depends(require_role(UserRole.STAFF)),
+):
+    photo = db.query(BookingLoadingPhoto).filter(
+        BookingLoadingPhoto.id == photo_id,
+        BookingLoadingPhoto.booking_id == booking_id,
+    ).first()
+    if not photo:
+        raise HTTPException(404, "Photo not found")
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    full_path    = os.path.join(uploads_root, photo.file_path)
+    if os.path.isfile(full_path):
+        os.remove(full_path)
+    db.delete(photo)
     db.commit()
 
 

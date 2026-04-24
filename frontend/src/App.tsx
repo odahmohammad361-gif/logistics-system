@@ -1,8 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useUIStore } from '@/store/uiStore'
+import { useThemeStore, applyStoredTheme } from '@/store/themeStore'
 import i18n from '@/i18n'
 import clsx from 'clsx'
+
+// Apply stored theme before first render
+applyStoredTheme()
 
 import RTLWrapper      from '@/components/layout/RTLWrapper'
 import ProtectedRoute  from '@/components/layout/ProtectedRoute'
@@ -26,6 +30,7 @@ import ContainerDetail from '@/pages/Containers/detail'
 import Warehouses      from '@/pages/Warehouses'
 import Suppliers       from '@/pages/Suppliers'
 import Products        from '@/pages/Products'
+import BulkImport      from '@/pages/Products/BulkImport'
 import ShopHome        from '@/pages/Shop'
 import ShopProducts    from '@/pages/Shop/products'
 import ProductDetail   from '@/pages/Shop/product'
@@ -34,6 +39,8 @@ import ShopAbout       from '@/pages/Shop/about'
 import ShopContact     from '@/pages/Shop/contact'
 import ShopHowItWorks  from '@/pages/Shop/how-it-works'
 import ShopCalculator  from '@/pages/Shop/calculator'
+import ClientLogin     from '@/pages/Shop/client-login'
+import ClientPortal    from '@/pages/Shop/client-portal'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, lang } = useUIStore()
@@ -54,13 +61,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { lang } = useUIStore()
+  const { lang }   = useUIStore()
+  const { themeId } = useThemeStore()
 
   useEffect(() => {
     document.documentElement.lang = lang
     document.documentElement.dir  = lang === 'ar' ? 'rtl' : 'ltr'
     i18n.changeLanguage(lang)
   }, [lang])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeId)
+  }, [themeId])
 
   return (
     <RTLWrapper>
@@ -76,6 +88,8 @@ export default function App() {
           <Route path="/shop/contact"       element={<ShopContact />} />
           <Route path="/shop/how-it-works"  element={<ShopHowItWorks />} />
           <Route path="/shop/calculator"    element={<ShopCalculator />} />
+          <Route path="/shop/client-login"  element={<ClientLogin />} />
+          <Route path="/shop/client-portal" element={<ClientPortal />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
@@ -92,8 +106,9 @@ export default function App() {
             <Route path="/users"               element={<AppLayout><Users /></AppLayout>} />
             <Route path="/company"             element={<AppLayout><Company /></AppLayout>} />
             <Route path="/warehouses"          element={<AppLayout><Warehouses /></AppLayout>} />
-            <Route path="/suppliers"           element={<AppLayout><Suppliers /></AppLayout>} />
-            <Route path="/products"            element={<AppLayout><Products /></AppLayout>} />
+            <Route path="/suppliers"              element={<AppLayout><Suppliers /></AppLayout>} />
+            <Route path="/products"               element={<AppLayout><Products /></AppLayout>} />
+            <Route path="/products/bulk-import"   element={<AppLayout><BulkImport /></AppLayout>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

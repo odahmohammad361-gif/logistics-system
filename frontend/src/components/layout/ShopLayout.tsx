@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { UserCircle2, LogOut, ShoppingBag, Globe, Menu, X } from 'lucide-react'
+import { UserCircle2, LogOut, ShoppingBag, Menu, X, Barcode, Globe } from 'lucide-react'
 import { useShopStore } from '@/store/shopStore'
+import { useClientPortalStore } from '@/store/clientPortalStore'
 import { useUIStore } from '@/store/uiStore'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useForm } from 'react-hook-form'
 import { shopLogin, shopSignup } from '@/services/shopService'
+import { clientPortalLogin } from '@/services/clientPortalService'
+import CurrencySelector from '@/components/shop/CurrencySelector'
+import ThemePicker from '@/components/ui/ThemePicker'
 
-interface LoginForm { email: string; password: string }
+interface LoginForm      { email: string; password: string }
+interface ClientLoginForm { client_code: string; password: string }
 interface SignupForm {
   full_name: string; email: string; phone: string
   telegram: string; country: string; password: string
@@ -29,51 +34,64 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const isAr = i18n.language === 'ar'
 
   const { customer, setAuth, clearAuth } = useShopStore()
+  const { client: portalClient, clearAuth: clearPortalAuth, setAuth: setPortalAuth } = useClientPortalStore()
   const { lang, setLang } = useUIStore()
   const navigate = useNavigate()
 
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [authModal, setAuthModal] = useState<'login' | 'signup' | null>(null)
-  const [authError, setAuthError] = useState('')
+  const [mobileOpen, setMobileOpen]   = useState(false)
+  const [authModal, setAuthModal]     = useState<'login' | 'client' | 'signup' | null>(null)
+  const [authError, setAuthError]     = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
 
-  const loginForm = useForm<LoginForm>()
-  const signupForm = useForm<SignupForm>()
+  const loginForm       = useForm<LoginForm>()
+  const clientLoginForm = useForm<ClientLoginForm>()
+  const signupForm      = useForm<SignupForm>()
 
   async function handleLogin(v: LoginForm) {
-    setAuthError('')
+    setAuthError(''); setAuthLoading(true)
     try {
       const res = await shopLogin(v)
       setAuth(res.access_token, res.customer)
-      setAuthModal(null)
-      loginForm.reset()
+      setAuthModal(null); loginForm.reset()
     } catch {
       setAuthError(isAr ? 'بريد إلكتروني أو كلمة مرور خاطئة' : 'Invalid email or password')
-    }
+    } finally { setAuthLoading(false) }
+  }
+
+  async function handleClientLogin(v: ClientLoginForm) {
+    setAuthError(''); setAuthLoading(true)
+    try {
+      const res = await clientPortalLogin(v.client_code.trim().toUpperCase(), v.password)
+      setPortalAuth(res.access_token, res.client)
+      setAuthModal(null); clientLoginForm.reset()
+      navigate('/shop/client-portal')
+    } catch {
+      setAuthError(isAr ? 'رمز العميل أو كلمة المرور غير صحيحة' : 'Invalid client code or password')
+    } finally { setAuthLoading(false) }
   }
 
   async function handleSignup(v: SignupForm) {
-    setAuthError('')
+    setAuthError(''); setAuthLoading(true)
     try {
       const res = await shopSignup({
         full_name: v.full_name, email: v.email, phone: v.phone,
         telegram: v.telegram || undefined, country: v.country, password: v.password,
       })
       setAuth(res.access_token, res.customer)
-      setAuthModal(null)
-      signupForm.reset()
+      setAuthModal(null); signupForm.reset()
     } catch (err: any) {
       setAuthError(err?.response?.data?.detail ?? (isAr ? 'فشل التسجيل' : 'Sign up failed'))
-    }
+    } finally { setAuthLoading(false) }
   }
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `text-sm transition-colors ${isActive ? 'text-white font-medium' : 'text-gray-400 hover:text-white'}`
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0a0f1e' }}>
+    <div className="min-h-screen flex flex-col bg-brand-bg">
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur-md flex-shrink-0"
-        style={{ background: 'rgba(4,13,26,0.95)' }}>
+        style={{ background: 'color-mix(in srgb, var(--brand-bg) 95%, transparent)' }}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
 
           {/* Logo */}
@@ -103,6 +121,10 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
           {/* Right controls */}
           <div className="flex items-center gap-2">
+            <div className="hidden sm:block">
+              <CurrencySelector />
+            </div>
+            <ThemePicker />
             <button
               onClick={() => { setLang(lang === 'ar' ? 'en' : 'ar'); i18n.changeLanguage(lang === 'ar' ? 'en' : 'ar') }}
               className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors text-xs font-bold"
@@ -110,7 +132,25 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
               {lang === 'ar' ? 'EN' : 'عر'}
             </button>
 
-            {customer ? (
+            {/* Client portal badge (main clients) */}
+            {portalClient ? (
+              <div className="flex items-center gap-1.5">
+                <Link to="/shop/client-portal"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 text-sm hover:bg-amber-500/20 transition-colors border border-amber-500/20">
+                  <Barcode size={14} />
+                  <span className="hidden sm:inline max-w-[80px] truncate text-xs font-mono">
+                    {portalClient.client_code}
+                  </span>
+                </Link>
+                <button
+                  onClick={() => { clearPortalAuth(); navigate('/shop') }}
+                  className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  title={isAr ? 'تسجيل الخروج' : 'Sign out'}
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
+            ) : customer ? (
               <div className="flex items-center gap-1.5">
                 <Link to="/shop/profile"
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-primary/10 text-brand-primary-light text-sm hover:bg-brand-primary/20 transition-colors">
@@ -156,7 +196,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         {/* Mobile nav drawer */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-white/10 px-4 py-4 space-y-1"
-            style={{ background: 'rgba(4,13,26,0.98)' }}>
+            style={{ background: 'var(--brand-bg)' }}>
             {NAV_LINKS.map(({ to, en, ar }) => (
               <NavLink
                 key={to}
@@ -199,7 +239,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="border-t border-white/10 mt-12 flex-shrink-0"
-        style={{ background: 'rgba(4,13,26,0.8)' }}>
+        style={{ background: 'color-mix(in srgb, var(--brand-bg) 80%, transparent)' }}>
         <div className="max-w-6xl mx-auto px-4 py-10">
           <div className="grid sm:grid-cols-3 gap-8">
             {/* Brand */}
@@ -274,88 +314,136 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         </div>
       </footer>
 
-      {/* ── Login modal ─────────────────────────────────────────── */}
-      <Modal open={authModal === 'login'} onClose={() => setAuthModal(null)}
-        title={isAr ? 'تسجيل الدخول' : 'Login'} size="sm">
-        <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
-          {authError && (
-            <div className="px-3 py-2 rounded-lg bg-brand-red/10 border border-brand-red/30 text-xs text-brand-red">
-              {authError}
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <label className="label-base">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
-            <input type="email" className="input-base w-full"
-              {...loginForm.register('email', { required: true })} />
+      {/* ── Unified Auth Modal ──────────────────────────────────── */}
+      <Modal
+        open={authModal === 'login' || authModal === 'client' || authModal === 'signup'}
+        onClose={() => { setAuthModal(null); setAuthError('') }}
+        title={
+          authModal === 'signup'
+            ? (isAr ? 'إنشاء حساب' : 'Create Account')
+            : (isAr ? 'تسجيل الدخول' : 'Sign In')
+        }
+        size="sm"
+      >
+        {/* Tab switcher — only on login views */}
+        {authModal !== 'signup' && (
+          <div className="flex gap-1 p-1 rounded-xl mb-5" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            {([
+              { id: 'login',  en: 'Customer',         ar: 'عميل موقع' },
+              { id: 'client', en: 'Wholesale Client',  ar: 'عميل جملة' },
+            ] as const).map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => { setAuthModal(tab.id); setAuthError('') }}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                  authModal === tab.id
+                    ? 'bg-brand-primary text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {isAr ? tab.ar : tab.en}
+              </button>
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>
-            <input type="password" className="input-base w-full"
-              {...loginForm.register('password', { required: true })} />
-          </div>
-          <div className="flex justify-between items-center pt-1">
-            <button type="button" onClick={() => setAuthModal('signup')}
-              className="text-xs text-brand-primary-light hover:underline">
-              {isAr ? 'ليس لديك حساب؟' : "Don't have an account?"}
-            </button>
-            <Button type="submit" loading={loginForm.formState.isSubmitting}>
-              {isAr ? 'دخول' : 'Login'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        )}
 
-      {/* ── Signup modal ────────────────────────────────────────── */}
-      <Modal open={authModal === 'signup'} onClose={() => setAuthModal(null)}
-        title={isAr ? 'إنشاء حساب' : 'Create Account'} size="md">
-        <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
-          {authError && (
-            <div className="px-3 py-2 rounded-lg bg-brand-red/10 border border-brand-red/30 text-xs text-brand-red">
-              {authError}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 space-y-1.5">
-              <label className="label-base">{isAr ? 'الاسم الكامل' : 'Full Name'}</label>
-              <input className="input-base w-full"
-                {...signupForm.register('full_name', { required: true })} />
-            </div>
+        {authError && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/25 text-xs text-red-400">
+            {authError}
+          </div>
+        )}
+
+        {/* ── Customer Login ── */}
+        {authModal === 'login' && (
+          <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
             <div className="space-y-1.5">
               <label className="label-base">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
-              <input type="email" className="input-base w-full"
-                {...signupForm.register('email', { required: true })} />
+              <input type="email" className="input-base w-full" autoComplete="email"
+                {...loginForm.register('email', { required: true })} />
             </div>
             <div className="space-y-1.5">
-              <label className="label-base">{isAr ? 'رقم الهاتف' : 'Phone'}</label>
-              <input className="input-base w-full"
-                {...signupForm.register('phone', { required: true })} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="label-base">{isAr ? 'تيليجرام (اختياري)' : 'Telegram (optional)'}</label>
-              <input className="input-base w-full" placeholder="@username"
-                {...signupForm.register('telegram')} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="label-base">{isAr ? 'الدولة' : 'Country'}</label>
-              <input className="input-base w-full"
-                {...signupForm.register('country', { required: true })} />
-            </div>
-            <div className="col-span-2 space-y-1.5">
               <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>
-              <input type="password" className="input-base w-full"
-                {...signupForm.register('password', { required: true })} />
+              <input type="password" className="input-base w-full" autoComplete="current-password"
+                {...loginForm.register('password', { required: true })} />
             </div>
-          </div>
-          <div className="flex justify-between items-center pt-1">
-            <button type="button" onClick={() => setAuthModal('login')}
-              className="text-xs text-brand-primary-light hover:underline">
-              {isAr ? 'لديك حساب بالفعل؟' : 'Already have an account?'}
-            </button>
-            <Button type="submit" loading={signupForm.formState.isSubmitting}>
-              {isAr ? 'إنشاء حساب' : 'Sign Up'}
-            </Button>
-          </div>
-        </form>
+            <div className="flex justify-between items-center pt-1">
+              <button type="button" onClick={() => { setAuthModal('signup'); setAuthError('') }}
+                className="text-xs text-brand-primary-light hover:underline">
+                {isAr ? 'ليس لديك حساب؟' : "Don't have an account?"}
+              </button>
+              <Button type="submit" loading={authLoading}>{isAr ? 'دخول' : 'Sign In'}</Button>
+            </div>
+          </form>
+        )}
+
+        {/* ── Wholesale Client Login ── */}
+        {authModal === 'client' && (
+          <form onSubmit={clientLoginForm.handleSubmit(handleClientLogin)} className="space-y-4">
+            <div className="px-3 py-2.5 rounded-lg text-xs text-amber-400/80 bg-amber-500/8 border border-amber-500/20">
+              {isAr
+                ? 'للعملاء المسجلين في النظام — استخدم رمز العميل وكلمة المرور التي أعطاها لك المسؤول.'
+                : 'For registered wholesale clients — use the client code and password provided by the administrator.'}
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-base">{isAr ? 'رمز العميل' : 'Client Code'}</label>
+              <input
+                className="input-base w-full font-mono uppercase"
+                placeholder="JO-0001"
+                autoComplete="username"
+                style={{ textTransform: 'uppercase' }}
+                {...clientLoginForm.register('client_code', { required: true })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>
+              <input type="password" className="input-base w-full" autoComplete="current-password"
+                {...clientLoginForm.register('password', { required: true })} />
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button type="submit" loading={authLoading}>{isAr ? 'دخول' : 'Sign In'}</Button>
+            </div>
+          </form>
+        )}
+
+        {/* ── Signup ── */}
+        {authModal === 'signup' && (
+          <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <label className="label-base">{isAr ? 'الاسم الكامل' : 'Full Name'}</label>
+                <input className="input-base w-full" {...signupForm.register('full_name', { required: true })} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
+                <input type="email" className="input-base w-full" {...signupForm.register('email', { required: true })} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{isAr ? 'الهاتف' : 'Phone'}</label>
+                <input className="input-base w-full" {...signupForm.register('phone', { required: true })} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{isAr ? 'تيليجرام (اختياري)' : 'Telegram (optional)'}</label>
+                <input className="input-base w-full" placeholder="@username" {...signupForm.register('telegram')} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{isAr ? 'الدولة' : 'Country'}</label>
+                <input className="input-base w-full" {...signupForm.register('country', { required: true })} />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>
+                <input type="password" className="input-base w-full" {...signupForm.register('password', { required: true })} />
+              </div>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <button type="button" onClick={() => { setAuthModal('login'); setAuthError('') }}
+                className="text-xs text-brand-primary-light hover:underline">
+                {isAr ? 'لديك حساب بالفعل؟' : 'Already have an account?'}
+              </button>
+              <Button type="submit" loading={authLoading}>{isAr ? 'إنشاء حساب' : 'Sign Up'}</Button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   )

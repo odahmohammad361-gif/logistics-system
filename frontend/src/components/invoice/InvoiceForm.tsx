@@ -32,13 +32,9 @@ const AIR_PORT_OPTIONS  = getFlatPortOptions('air')
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type TabId = 'info' | 'shipping' | 'items' | 'bank' | 'notes'
 
-const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'info',     label: 'معلومات الفاتورة', icon: FileText   },
-  { id: 'shipping', label: 'الشحن والتجارة',   icon: Ship       },
-  { id: 'items',    label: 'البضائع',           icon: Package    },
-  { id: 'bank',     label: 'بيانات البنك',      icon: Banknote   },
-  { id: 'notes',    label: 'ملاحظات',           icon: StickyNote },
-]
+const TAB_ICONS: Record<TabId, React.ElementType> = {
+  info: FileText, shipping: Ship, items: Package, bank: Banknote, notes: StickyNote,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ItemFormValues {
@@ -150,6 +146,14 @@ export default function InvoiceForm({
 }: Props) {
   const { t, i18n } = useTranslation()
   const isRTL = i18n.language === 'ar'
+
+  const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
+    { id: 'info',     label: t('invoices.tab_info'),     icon: TAB_ICONS.info     },
+    { id: 'shipping', label: t('invoices.tab_shipping'), icon: TAB_ICONS.shipping },
+    { id: 'items',    label: t('invoices.tab_items'),    icon: TAB_ICONS.items    },
+    { id: 'bank',     label: t('invoices.tab_bank'),     icon: TAB_ICONS.bank     },
+    { id: 'notes',    label: t('invoices.tab_notes'),    icon: TAB_ICONS.notes    },
+  ]
 
   const INVOICE_TYPES = [
     { value: 'PI',          abbr: 'PI', label: t('invoices.types.PI') },
@@ -308,7 +312,7 @@ export default function InvoiceForm({
           const s = sanitize(data)
           // Must have either a real client or a buyer name
           if (!lockedClient && !s.client_id && !s.buyer_name) {
-            setClientError('يجب اختيار عميل من النظام أو إدخال اسم العميل')
+            setClientError(t('invoices.client_required'))
             setActiveTab('info')
             return
           }
@@ -350,7 +354,7 @@ export default function InvoiceForm({
           <div className="space-y-6">
 
             {/* Invoice Type selector */}
-            <Section title="نوع الفاتورة" accent="indigo">
+            <Section title={t('invoices.section_type')} accent="indigo">
               <div className="flex flex-wrap gap-2">
                 {INVOICE_TYPES.map((typ) => (
                   <button
@@ -379,12 +383,11 @@ export default function InvoiceForm({
             </Section>
 
             {/* Client + Status + Currency */}
-            <Section title="بيانات الفاتورة" accent="indigo">
+            <Section title={t('invoices.section_invoice_data')} accent="indigo">
               <FormRow>
                 {lockedClient ? (
-                  /* Read-only client badge — from client profile */
                   <div className="space-y-1.5">
-                    <label className="label-base">العميل</label>
+                    <label className="label-base">{t('invoices.client_label')}</label>
                     <div className="input-base flex items-center gap-3 bg-brand-primary/5 border-brand-primary/25 cursor-default select-none">
                       <div className="w-7 h-7 rounded-lg bg-brand-primary/15 flex items-center justify-center shrink-0 text-xs font-bold text-brand-primary">
                         {lockedClient.name.charAt(0)}
@@ -398,9 +401,9 @@ export default function InvoiceForm({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="label-base">اسم العميل</label>
+                    <label className="label-base">{t('invoices.buyer_name_label')}</label>
                     <Input
-                      placeholder="اسم العميل (غير مسجل في النظام)"
+                      placeholder={t('invoices.buyer_name_placeholder')}
                       {...register('buyer_name', {
                         onChange: (e) => { if (e.target.value) setClientError(null) },
                       })}
@@ -414,7 +417,7 @@ export default function InvoiceForm({
                 )}
                 {!hideStatus && (
                   <div className="space-y-1.5">
-                    <label className="label-base">الحالة</label>
+                    <label className="label-base">{t('invoices.status_label')}</label>
                     <div className="flex flex-wrap gap-2">
                       {STATUSES.map((s) => (
                         <button
@@ -441,17 +444,17 @@ export default function InvoiceForm({
               <FormRow cols={3}>
                 <Input
                   type="date"
-                  label="تاريخ الإصدار"
+                  label={t('invoices.issue_date')}
                   {...register('issue_date', { required: true })}
-                  error={errors.issue_date ? 'مطلوب' : undefined}
+                  error={errors.issue_date ? t('invoices.item_required') : undefined}
                 />
                 <Input
                   type="date"
-                  label="تاريخ الاستحقاق"
+                  label={t('invoices.due_date')}
                   {...register('due_date')}
                 />
                 <div className="space-y-1.5">
-                  <label className="label-base">العملة</label>
+                  <label className="label-base">{t('invoices.currency_label')}</label>
                   <div className="flex flex-wrap gap-1.5">
                     {CURRENCIES.map((cur) => (
                       <button
@@ -480,23 +483,23 @@ export default function InvoiceForm({
         {activeTab === 'shipping' && (
           <div className="space-y-6">
 
-            <Section title="معلومات الشحن" accent="blue">
+            <Section title={t('invoices.section_shipping_info')} accent="blue">
               <FormRow>
                 <Input
-                  label="بلد المنشأ"
-                  placeholder="مثال: الصين، الإمارات..."
+                  label={t('invoices.origin')}
+                  placeholder={t('invoices.origin_placeholder')}
                   {...register('origin')}
                 />
                 <Select
                   label={t('invoices.shipping_term')}
-                  options={[{ value: '', label: '— اختر —' }, ...SHIPPING_TERMS.map((v) => ({ value: v, label: v }))]}
+                  options={[{ value: '', label: t('invoices.select_placeholder') }, ...SHIPPING_TERMS.map((v) => ({ value: v, label: v }))]}
                   {...register('shipping_term')}
                 />
               </FormRow>
               <FormRow>
                 <Select
                   label={t('invoices.payment_terms')}
-                  options={[{ value: '', label: '— اختر —' }, ...PAYMENT_TERMS.map((v) => ({ value: v, label: v }))]}
+                  options={[{ value: '', label: t('invoices.select_placeholder') }, ...PAYMENT_TERMS.map((v) => ({ value: v, label: v }))]}
                   {...register('payment_terms')}
                 />
                 <Input
@@ -540,16 +543,16 @@ export default function InvoiceForm({
             {/* Toolbar */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-brand-text-muted">{fields.length} صنف</span>
+                <span className="text-xs text-brand-text-muted">{t('invoices.items_count', { count: fields.length })}</span>
                 {errors.items && (
                   <span className="text-xs text-brand-red flex items-center gap-1">
-                    <AlertCircle size={11} /> تحقق من الأصناف
+                    <AlertCircle size={11} /> {t('invoices.items_error')}
                   </span>
                 )}
               </div>
               <Button type="button" variant="secondary" size="sm" onClick={() => setExcelImport(true)}>
                 <FileSpreadsheet size={13} />
-                استيراد من Excel
+                {t('invoices.import_excel')}
               </Button>
             </div>
 
@@ -572,7 +575,7 @@ export default function InvoiceForm({
                         {i + 1}
                       </div>
                       <span className="text-xs text-brand-text-dim flex-1 truncate">
-                        {item.description || 'صنف جديد'}
+                        {item.description || t('invoices.new_item_placeholder')}
                       </span>
                       <span className="text-xs font-semibold text-emerald-400 font-mono shrink-0">
                         {lineTotal > 0 ? lineTotal.toFixed(2) + ' ' + watchCurrency : ''}
@@ -581,7 +584,7 @@ export default function InvoiceForm({
                         type="button"
                         onClick={() => setExpanded((p) => ({ ...p, [i]: !p[i] }))}
                         className="btn-icon p-1 text-brand-text-muted"
-                        title="تفاصيل إضافية"
+                        title={t('invoices.item_details_toggle')}
                       >
                         {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
@@ -602,14 +605,14 @@ export default function InvoiceForm({
                       {/* Description */}
                       <FormRow>
                         <Input
-                          label="اسم البضاعة"
-                          placeholder="مثال: قمصان قطنية رجالية"
+                          label={t('invoices.item_name')}
+                          placeholder={t('invoices.item_name_placeholder')}
                           {...register(`items.${i}.description`, { required: true })}
-                          error={errors.items?.[i]?.description ? 'مطلوب' : undefined}
+                          error={errors.items?.[i]?.description ? t('invoices.item_required') : undefined}
                         />
                         <Input
-                          label="تفاصيل البضاعة"
-                          placeholder="المادة، الأحجام، الألوان، طريقة التعبئة..."
+                          label={t('invoices.item_details_label')}
+                          placeholder={t('invoices.item_details_placeholder')}
                           {...register(`items.${i}.details`)}
                         />
                       </FormRow>
@@ -618,14 +621,14 @@ export default function InvoiceForm({
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <Input
                           type="number"
-                          label="الكمية"
+                          label={t('invoices.item_qty')}
                           min={0.01}
                           step="any"
                           {...register(`items.${i}.quantity`, { required: true, min: 0.01, valueAsNumber: true })}
-                          error={errors.items?.[i]?.quantity ? 'مطلوب' : undefined}
+                          error={errors.items?.[i]?.quantity ? t('invoices.item_required') : undefined}
                         />
                         <div className="space-y-1.5">
-                          <label className="label-base">وحدة القياس</label>
+                          <label className="label-base">{t('invoices.item_unit')}</label>
                           <select
                             className="input-base"
                             {...register(`items.${i}.unit`)}
@@ -637,14 +640,14 @@ export default function InvoiceForm({
                         </div>
                         <Input
                           type="number"
-                          label={`سعر الوحدة (${watchCurrency})`}
+                          label={t('invoices.item_unit_price', { currency: watchCurrency })}
                           min={0}
                           step="0.0001"
                           {...register(`items.${i}.unit_price`, { required: true, min: 0, valueAsNumber: true })}
-                          error={errors.items?.[i]?.unit_price ? 'مطلوب' : undefined}
+                          error={errors.items?.[i]?.unit_price ? t('invoices.item_required') : undefined}
                         />
                         <div className="space-y-1.5">
-                          <label className="label-base">الإجمالي</label>
+                          <label className="label-base">{t('invoices.item_total')}</label>
                           <div className="input-base flex items-center font-mono text-emerald-400 font-semibold bg-emerald-500/5 border-emerald-500/15">
                             {lineTotal.toFixed(2)} {watchCurrency}
                           </div>
@@ -659,7 +662,7 @@ export default function InvoiceForm({
 
                       {/* Packing / Weight */}
                       <div className="p-3 rounded-lg border border-brand-border/50 bg-white/[0.015] space-y-3">
-                        <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider">بيانات التعبئة والوزن</p>
+                        <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider">{t('invoices.packing_section')}</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <Input
                             type="number" label={t('invoices.cartons_count')} min={0}
@@ -684,20 +687,20 @@ export default function InvoiceForm({
                       {isAir && (
                         <div className="p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 space-y-3">
                           <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
-                            أبعاد الشحن الجوي — لكل كرتون
+                            {t('invoices.air_dims_section')}
                           </p>
                           <div className="grid grid-cols-3 gap-3">
-                            <Input type="number" label="الطول (سم)" step="0.01"
+                            <Input type="number" label={t('invoices.air_length')} step="0.01"
                               {...register(`items.${i}.carton_length_cm`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })} />
-                            <Input type="number" label="العرض (سم)" step="0.01"
+                            <Input type="number" label={t('invoices.air_width')} step="0.01"
                               {...register(`items.${i}.carton_width_cm`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })} />
-                            <Input type="number" label="الارتفاع (سم)" step="0.01"
+                            <Input type="number" label={t('invoices.air_height')} step="0.01"
                               {...register(`items.${i}.carton_height_cm`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })} />
                           </div>
                           {calc && (
                             <div className="flex gap-4 text-xs font-mono">
-                              <span className="text-blue-300">الوزن الحجمي: {calc.vol} كغ</span>
-                              <span className="text-emerald-400 font-bold">الوزن القابل للشحن: {calc.chargeable} كغ</span>
+                              <span className="text-blue-300">{t('invoices.air_volumetric', { val: calc.vol })}</span>
+                              <span className="text-emerald-400 font-bold">{t('invoices.air_chargeable', { val: calc.chargeable })}</span>
                             </div>
                           )}
                         </div>
@@ -706,10 +709,10 @@ export default function InvoiceForm({
                       {/* Expanded: Arabic names */}
                       {expanded && (
                         <div className="space-y-3 pt-3 border-t border-brand-border/40">
-                          <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider">البيانات باللغة الإنجليزية (للفاتورة)</p>
+                          <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider">{t('invoices.bilingual_section')}</p>
                           <FormRow>
-                            <Input label="اسم البضاعة بالإنجليزية" {...register(`items.${i}.description_ar`)} />
-                            <Input label="التفاصيل بالإنجليزية"    {...register(`items.${i}.details_ar`)} />
+                            <Input label={t('invoices.item_name_en')}    {...register(`items.${i}.description_ar`)} />
+                            <Input label={t('invoices.item_details_en')} {...register(`items.${i}.details_ar`)} />
                           </FormRow>
                         </div>
                       )}
@@ -720,18 +723,18 @@ export default function InvoiceForm({
 
               <Button type="button" variant="secondary" size="sm" onClick={() => append(defaultItem())}>
                 <Plus size={14} />
-                إضافة صنف
+                {t('invoices.add_item')}
               </Button>
             </div>
 
             {/* Totals Summary */}
             <div className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-2">
               <div className="flex justify-between text-sm text-brand-text-dim">
-                <span>المجموع الفرعي</span>
+                <span>{t('invoices.subtotal')}</span>
                 <span className="font-mono">{subtotal.toFixed(2)} {watchCurrency}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-brand-text-dim shrink-0">الخصم</span>
+                <span className="text-sm text-brand-text-dim shrink-0">{t('invoices.discount')}</span>
                 <input
                   type="number" min={0} step="0.01"
                   className="input-base text-xs font-mono w-36"
@@ -741,12 +744,12 @@ export default function InvoiceForm({
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-sm text-brand-red">
-                  <span>الخصم</span>
+                  <span>{t('invoices.discount')}</span>
                   <span className="font-mono">- {discount.toFixed(2)} {watchCurrency}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold border-t border-brand-border pt-2">
-                <span className="text-brand-text">الإجمالي الكلي</span>
+                <span className="text-brand-text">{t('invoices.grand_total')}</span>
                 <span className="font-mono text-emerald-400">{total.toFixed(2)} {watchCurrency}</span>
               </div>
             </div>
@@ -756,21 +759,20 @@ export default function InvoiceForm({
         {/* ══════════════════════ TAB: بيانات البنك ══════════════════════ */}
         {activeTab === 'bank' && (
           <div className="space-y-6">
-            <Section title="معلومات الحساب البنكي" accent="emerald">
+            <Section title={t('invoices.section_bank')} accent="emerald">
               <FormRow>
-                <Input label="اسم صاحب الحساب"   {...register('bank_account_name')} />
-                <Input label="رقم الحساب المصرفي" {...register('bank_account_no')} />
+                <Input label={t('invoices.bank_account_name')} {...register('bank_account_name')} />
+                <Input label={t('invoices.bank_account_no')}   {...register('bank_account_no')} />
               </FormRow>
               <FormRow>
                 <Input label={t('company.bank_swift')} {...register('bank_swift')} placeholder="ABCDJOD1" />
-                <Input label="اسم البنك"    {...register('bank_name')} />
+                <Input label={t('invoices.bank_name_label')}    {...register('bank_name')} />
               </FormRow>
-              <Input label="عنوان البنك"    {...register('bank_address')} />
+              <Input label={t('invoices.bank_address_label')}   {...register('bank_address')} />
             </Section>
 
-            {/* Document Assets — only when editing an existing invoice */}
             {invoiceId && (
-              <Section title="الختم والخلفية" accent="amber">
+              <Section title={t('invoices.section_stamp')} accent="amber">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <ImageUploadZone
                     label={isRTL ? 'الختم الإلكتروني' : 'Stamp'}
@@ -782,6 +784,7 @@ export default function InvoiceForm({
                     currentImageUrl={undefined}
                     onFile={async (file) => onBackgroundUpload?.(file)}
                   />
+                  {/* ImageUploadZone label is an internal visual label, not a translatable string — left as-is */}
                 </div>
                 <div className="mt-3">
                   <Controller
@@ -798,7 +801,7 @@ export default function InvoiceForm({
             {!invoiceId && (
               <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400">
                 <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                <span>رفع الختم والخلفية متاح بعد حفظ الفاتورة — احفظ أولاً ثم افتحها للتعديل.</span>
+                <span>{t('invoices.stamp_hint')}</span>
               </div>
             )}
           </div>
@@ -807,10 +810,10 @@ export default function InvoiceForm({
         {/* ══════════════════════ TAB: ملاحظات ══════════════════════ */}
         {activeTab === 'notes' && (
           <div className="space-y-6">
-            <Section title="الملاحظات" accent="indigo">
+            <Section title={t('invoices.section_notes')} accent="indigo">
               <FormRow>
-                <Textarea label="ملاحظات بالعربي"     rows={4} placeholder="أي ملاحظات خاصة بالفاتورة..." {...register('notes_ar')} />
-                <Textarea label="ملاحظات بالإنجليزية" rows={4} placeholder="Any additional notes..."       {...register('notes')} />
+                <Textarea label={t('invoices.notes_ar_label')} rows={4} placeholder={t('invoices.notes_ar_placeholder')} {...register('notes_ar')} />
+                <Textarea label={t('invoices.notes_en_label')} rows={4} placeholder="Any additional notes..."             {...register('notes')} />
               </FormRow>
             </Section>
           </div>
@@ -821,28 +824,26 @@ export default function InvoiceForm({
           {/* Mini totals bar */}
           <div className="hidden sm:flex items-center gap-4 text-xs text-brand-text-muted">
             <span>
-              الإجمالي:
+              {t('invoices.footer_total')}
               <span className="font-mono font-bold text-emerald-400 ms-1">{total.toFixed(2)} {watchCurrency}</span>
             </span>
             <span className="text-brand-border">|</span>
-            <span>{fields.length} صنف</span>
+            <span>{t('invoices.items_count', { count: fields.length })}</span>
             <span className="text-brand-border">|</span>
             <span>{watchType} · {STATUSES.find(s => s.value === watch('status'))?.label}</span>
           </div>
 
-          {/* Nav + Save */}
           <div className="flex items-center gap-2 ms-auto">
-            {/* Quick tab navigation */}
             {activeTab !== 'info' && (
               <button
                 type="button"
                 className="btn-secondary text-xs"
                 onClick={() => {
-                  const idx = TABS.findIndex(t => t.id === activeTab)
+                  const idx = TABS.findIndex(tab => tab.id === activeTab)
                   if (idx > 0) setActiveTab(TABS[idx - 1].id)
                 }}
               >
-                ← السابق
+                {isRTL ? 'التالي →' : '← ' + t('common.prev')}
               </button>
             )}
             {activeTab !== 'notes' && (
@@ -850,15 +851,15 @@ export default function InvoiceForm({
                 type="button"
                 className="btn-secondary text-xs"
                 onClick={() => {
-                  const idx = TABS.findIndex(t => t.id === activeTab)
+                  const idx = TABS.findIndex(tab => tab.id === activeTab)
                   if (idx < TABS.length - 1) setActiveTab(TABS[idx + 1].id)
                 }}
               >
-                التالي →
+                {isRTL ? '← السابق' : t('common.next') + ' →'}
               </button>
             )}
             <Button type="submit" loading={loading}>
-              {initial?.id ? 'حفظ التعديلات' : 'إنشاء الفاتورة'}
+              {initial?.id ? t('invoices.save_edit') : t('invoices.save_new')}
             </Button>
           </div>
         </div>
@@ -866,7 +867,7 @@ export default function InvoiceForm({
       </form>
 
       {/* Excel Import Modal */}
-      <Modal open={showExcelImport} onClose={() => setExcelImport(false)} title="استيراد الأصناف من Excel" size="lg">
+      <Modal open={showExcelImport} onClose={() => setExcelImport(false)} title={t('invoices.import_excel_title')} size="lg">
         <ExcelImportPanel onImport={handleExcelImport} onClose={() => setExcelImport(false)} />
       </Modal>
     </>

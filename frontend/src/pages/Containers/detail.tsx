@@ -1,16 +1,19 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Pencil, Trash2, Plus,
+  ArrowLeft, Pencil, Trash2, Plus, Lock,
   Download, Container, Plane, Package, MapPin, Calendar,
+  Warehouse, Clock, Camera, X, Upload, Loader2, AlertTriangle,
 } from 'lucide-react'
 import {
   getBooking, updateBooking, deleteBooking,
   addCargoLine, updateCargoLine, deleteCargoLine,
-  getPackingList,
+  getPackingList, updateLoadingInfo, uploadLoadingPhotos,
+  deleteLoadingPhoto, getLoadingPhotoUrl,
 } from '@/services/bookingService'
+import { getBranches } from '@/services/branchService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -18,7 +21,7 @@ import CapacityMeter from '@/components/booking/CapacityMeter'
 import CargoLineCard from '@/components/booking/CargoLineCard'
 import CargoLineForm from '@/components/booking/CargoLineForm'
 import BookingForm from '@/components/booking/BookingForm'
-import type { BookingCargoLine, BookingMode } from '@/types'
+import type { BookingCargoLine, BookingMode, BookingLoadingPhoto } from '@/types'
 import clsx from 'clsx'
 
 const MODE_ICONS: Record<BookingMode, React.ReactNode> = {
@@ -42,13 +45,33 @@ export default function BookingDetailPage() {
   const { isAdmin } = useAuth()
   const bookingId   = parseInt(id!)
 
-  const [showEditBooking, setShowEditBooking]   = useState(false)
-  const [showCargoForm, setShowCargoForm]       = useState(false)
-  const [editingLine, setEditingLine]           = useState<BookingCargoLine | null>(null)
-  const [savingHeader, setSavingHeader]         = useState(false)
-  const [savingCargo, setSavingCargo]           = useState(false)
-  const [confirmDelete, setConfirmDelete]       = useState(false)
+  const [showEditBooking, setShowEditBooking]     = useState(false)
+  const [showCargoForm, setShowCargoForm]         = useState(false)
+  const [editingLine, setEditingLine]             = useState<BookingCargoLine | null>(null)
+  const [savingHeader, setSavingHeader]           = useState(false)
+  const [savingCargo, setSavingCargo]             = useState(false)
+  const [confirmDelete, setConfirmDelete]         = useState(false)
   const [confirmDeleteLine, setConfirmDeleteLine] = useState<number | null>(null)
+
+  // Loading info state
+  const [loadingWh, setLoadingWh]       = useState<string>('')
+  const [loadingDate, setLoadingDate]   = useState<string>('')
+  const [loadingNotes, setLoadingNotes] = useState<string>('')
+  const [savingLoading, setSavingLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [deletingPhoto, setDeletingPhoto]   = useState<number | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch loading warehouses (loading type only)
+  const { data: warehousesData } = useQuery({
+    queryKey: ['warehouses-loading'],
+    queryFn: async () => {
+      const { getWarehouses } = await import('@/services/warehouseService')
+      const r = await getWarehouses({ warehouse_type: 'loading', page_size: 100 })
+      return r.results
+    },
+    staleTime: Infinity,
+  })
 
   const { data: booking, isLoading } = useQuery({
     queryKey: ['booking', bookingId],
@@ -104,6 +127,52 @@ export default function BookingDetailPage() {
     }
   }
 
+  // Sync loading info fields when booking loads
+  const prevBookingId = useRef<number | null>(null)
+  if (booking && booking.id !== prevBookingId.current) {
+    prevBookingId.current = booking.id
+    setLoadingWh(booking.loading_warehouse_id ? String(booking.loading_warehouse_id) : '')
+    setLoadingDate(booking.loading_date ? booking.loading_date.slice(0, 16) : '')
+    setLoadingNotes(booking.loading_notes ?? '')
+  }
+
+  async function handleSaveLoadingInfo() {
+    setSavingLoading(true)
+    try {
+      await updateLoadingInfo(bookingId, {
+        loading_warehouse_id: loadingWh ? parseInt(loadingWh) : null,
+        loading_date:         loadingDate || null,
+        loading_notes:        loadingNotes || null,
+      })
+      qc.invalidateQueries({ queryKey: ['booking', bookingId] })
+    } finally {
+      setSavingLoading(false)
+    }
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    setPhotoUploading(true)
+    try {
+      await uploadLoadingPhotos(bookingId, files)
+      qc.invalidateQueries({ queryKey: ['booking', bookingId] })
+    } finally {
+      setPhotoUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleDeletePhoto(photoId: number) {
+    setDeletingPhoto(photoId)
+    try {
+      await deleteLoadingPhoto(bookingId, photoId)
+      qc.invalidateQueries({ queryKey: ['booking', bookingId] })
+    } finally {
+      setDeletingPhoto(null)
+    }
+  }
+
   async function handleDownloadPackingList() {
     const pl = await getPackingList(bookingId)
     const blob = new Blob([JSON.stringify(pl, null, 2)], { type: 'application/json' })
@@ -128,12 +197,12 @@ export default function BookingDetailPage() {
     booking.mode === 'FCL' ? t('bookings.fcl_full') :
     t('bookings.air_full')
 
-  // Build capacity meter slices
+  // Build capacity meter slices — coerce Numeric strings to numbers
   const slices = booking.cargo_lines
     .filter(l => l.cbm != null)
     .map(l => ({
       clientName: isRTL ? (l.client.name_ar ?? l.client.name) : l.client.name,
-      cbm:        l.cbm!,
+      cbm:        Number(l.cbm),
       color:      '',
     }))
 
@@ -267,8 +336,8 @@ export default function BookingDetailPage() {
         {booking.mode !== 'AIR' && booking.container_cbm_capacity != null && (
           <div className="pt-2 border-t border-brand-border/60">
             <CapacityMeter
-              usedCbm={booking.total_cbm_used ?? 0}
-              totalCbm={booking.container_cbm_capacity}
+              usedCbm={Number(booking.total_cbm_used) || 0}
+              totalCbm={Number(booking.container_cbm_capacity)}
               slices={slices}
             />
           </div>
@@ -283,17 +352,173 @@ export default function BookingDetailPage() {
         )}
       </div>
 
-      {/* Cargo lines */}
+      {/* ── Loading Info Card ── */}
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <Warehouse size={14} className="text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-brand-text">
+              {isRTL ? 'معلومات التحميل' : 'Loading Information'}
+            </h2>
+            <p className="text-[11px] text-brand-text-muted">
+              {isRTL ? 'المستودع الذي تم تحميل الحاوية منه ووقت التحميل' : 'Origin warehouse and loading time'}
+            </p>
+          </div>
+          <div className="ms-auto">
+            <Button size="sm" loading={savingLoading} onClick={handleSaveLoadingInfo}>
+              {isRTL ? 'حفظ' : 'Save'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-4">
+          {/* Warehouse */}
+          <div className="space-y-1.5">
+            <label className="label-base flex items-center gap-1">
+              <Warehouse size={11} /> {isRTL ? 'مستودع التحميل' : 'Loading Warehouse'}
+            </label>
+            <select
+              className="input-base w-full"
+              value={loadingWh}
+              onChange={e => setLoadingWh(e.target.value)}
+            >
+              <option value="">— {isRTL ? 'اختر مستودعاً' : 'Select warehouse'} —</option>
+              {(warehousesData ?? []).map(wh => (
+                <option key={wh.id} value={String(wh.id)}>
+                  {wh.name} {wh.city ? `· ${wh.city}` : ''}
+                </option>
+              ))}
+            </select>
+            {booking.loading_warehouse_name && (
+              <p className="text-[11px] text-amber-400">
+                ✓ {booking.loading_warehouse_name}
+                {booking.loading_warehouse_city ? ` — ${booking.loading_warehouse_city}` : ''}
+              </p>
+            )}
+          </div>
+
+          {/* Date/time */}
+          <div className="space-y-1.5">
+            <label className="label-base flex items-center gap-1">
+              <Clock size={11} /> {isRTL ? 'تاريخ ووقت التحميل' : 'Loading Date & Time'}
+            </label>
+            <input
+              type="datetime-local"
+              className="input-base w-full"
+              value={loadingDate}
+              onChange={e => setLoadingDate(e.target.value)}
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <label className="label-base">{isRTL ? 'ملاحظات التحميل' : 'Loading Notes'}</label>
+            <input
+              className="input-base w-full"
+              placeholder={isRTL ? 'ملاحظات...' : 'Notes...'}
+              value={loadingNotes}
+              onChange={e => setLoadingNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Loading photos */}
+        <div className="space-y-3 pt-3 border-t border-brand-border/50">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex items-center gap-1.5">
+              <Camera size={12} />
+              {isRTL ? 'صور التحميل' : 'Loading Photos'}
+              {booking.loading_photos.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-400/10 text-amber-400 text-[10px] font-bold">
+                  {booking.loading_photos.length}
+                </span>
+              )}
+            </p>
+            <label className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all',
+              'border border-dashed border-brand-border text-brand-text-muted',
+              'hover:border-amber-400/50 hover:text-amber-400',
+              photoUploading && 'pointer-events-none opacity-50',
+            )}>
+              {photoUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+              {isRTL ? 'رفع صور' : 'Upload Photos'}
+              <input
+                ref={photoInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
+              />
+            </label>
+          </div>
+
+          {booking.loading_photos.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {booking.loading_photos.map(photo => (
+                <div key={photo.id} className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border">
+                  <img
+                    src={`/uploads/${photo.file_path}`}
+                    alt={photo.original_filename ?? ''}
+                    className="w-full h-full object-cover"
+                  />
+                  {photo.caption && (
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 py-0.5">
+                      <p className="text-[10px] text-white truncate">{photo.caption}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleDeletePhoto(photo.id)}
+                    disabled={deletingPhoto === photo.id}
+                    className="absolute top-1 end-1 p-1 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    {deletingPhoto === photo.id
+                      ? <Loader2 size={10} className="animate-spin" />
+                      : <X size={10} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-brand-border/50 py-6 text-center text-xs text-brand-text-muted">
+              {isRTL ? 'لا توجد صور تحميل بعد' : 'No loading photos yet'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Cargo lines ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-brand-text">{t('bookings.cargo_lines')}</h2>
-          {isAdmin && (
+          {isAdmin && !booking.is_locked && (
             <Button size="sm" onClick={() => { setEditingLine(null); setShowCargoForm(true) }}>
               <Plus size={13} />
               {t('bookings.add_client_cargo')}
             </Button>
           )}
         </div>
+
+        {/* Lock banner */}
+        {booking.is_locked && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <Lock size={14} className="text-brand-red flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-brand-red">
+                {isRTL ? 'الحاوية مغلقة — لا يمكن تعديل البضائع' : 'Container is sealed — cargo cannot be modified'}
+              </p>
+              <p className="text-xs text-brand-text-muted mt-0.5">
+                {isRTL
+                  ? `الحالة الحالية: "${booking.status}" — يجب أن تكون الحاوية في وضع "مسودة" لإضافة أو تعديل البضائع.`
+                  : `Status is "${booking.status}". Container must be in "draft" to add or edit cargo.`}
+              </p>
+            </div>
+          </div>
+        )}
 
         {booking.cargo_lines.length === 0 ? (
           <div className="rounded-xl border border-dashed border-brand-border py-12 text-center text-sm text-brand-text-muted">
@@ -308,9 +533,10 @@ export default function BookingDetailPage() {
                 index={idx}
                 mode={booking.mode}
                 bookingId={bookingId}
-                onEdit={() => { setEditingLine(line); setShowCargoForm(true) }}
-                onDelete={() => setConfirmDeleteLine(line.id)}
+                onEdit={booking.is_locked ? undefined : () => { setEditingLine(line); setShowCargoForm(true) }}
+                onDelete={booking.is_locked ? undefined : () => setConfirmDeleteLine(line.id)}
                 onRefresh={() => qc.invalidateQueries({ queryKey: ['booking', bookingId] })}
+                locked={booking.is_locked}
               />
             ))}
           </div>

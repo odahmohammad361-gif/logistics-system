@@ -2,11 +2,13 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Package } from 'lucide-react'
 import type { Product } from '@/types'
+import { useShopCurrency } from '@/hooks/useShopCurrency'
 
 export default function ProductCard({ product }: { product: Product }) {
   const { i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
   const mainPhoto = product.photos.find((p) => p.is_main) ?? product.photos[0]
+  const { formatPrice } = useShopCurrency()
 
   return (
     <Link
@@ -44,7 +46,7 @@ export default function ProductCard({ product }: { product: Product }) {
           <p className="text-[11px] text-gray-500 mt-0.5">{product.supplier.code}</p>
         )}
         <div className="mt-2 flex items-baseline gap-1">
-          <span className="text-base font-bold text-yellow-400">¥{Number(product.price_cny).toFixed(2)}</span>
+          <span className="text-base font-bold text-yellow-400">{formatPrice(Number(product.price_cny))}</span>
           <span className="text-xs text-gray-500">/ {product.pcs_per_carton} pcs</span>
         </div>
         <p className="text-[11px] text-gray-500 mt-0.5">

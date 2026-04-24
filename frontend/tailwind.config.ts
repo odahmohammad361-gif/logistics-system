@@ -6,15 +6,25 @@ export default {
     extend: {
       colors: {
         brand: {
-          bg:        '#0D0D0D',
-          surface:   '#141414',
-          card:      '#1C1C1C',
-          navy:      '#1A2744',
-          'navy-light': '#243460',
-          green:     '#84C818',
-          'green-dim': '#6AAF0A',
-          border:    '#2A2A2A',
-          'border-light': '#333333',
+          // Defined as CSS vars — the globals.css overrides ensure runtime theme switching works.
+          // Tailwind still generates opacity variants (e.g. bg-brand-primary/10) via its own mechanism.
+          bg:              'var(--brand-bg)',
+          surface:         'var(--brand-surface)',
+          card:            'var(--brand-card)',
+          primary:         'var(--brand-primary)',
+          'primary-dark':  'var(--brand-primary-dark)',
+          'primary-light': 'var(--brand-primary-light)',
+          text:            'var(--brand-text)',
+          'text-muted':    'var(--brand-text-muted)',
+          'text-dim':      'var(--brand-text-dim)',
+          red:             'var(--brand-red)',
+          green:           'var(--brand-green)',
+          'green-dim':     'var(--brand-green-dim)',
+          navy:            'var(--brand-navy)',
+          'navy-light':    'var(--brand-navy-light)',
+          border:          'var(--brand-border)',
+          'border-light':  'var(--brand-border-light)',
+          'border-focus':  'var(--brand-border-focus)',
         },
       },
       fontFamily: {
@@ -22,10 +32,10 @@ export default {
         sans:   ['Inter', 'Cairo', 'sans-serif'],
       },
       animation: {
-        'fade-in':   'fadeIn 0.2s ease-out',
-        'slide-in':  'slideIn 0.25s ease-out',
-        'slide-up':  'slideUp 0.3s ease-out',
-        'ticker':    'ticker 30s linear infinite',
+        'fade-in':  'fadeIn 0.2s ease-out',
+        'slide-in': 'slideIn 0.25s ease-out',
+        'slide-up': 'slideUp 0.3s ease-out',
+        'ticker':   'ticker 30s linear infinite',
       },
       keyframes: {
         fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },

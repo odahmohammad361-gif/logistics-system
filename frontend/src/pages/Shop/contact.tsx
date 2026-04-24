@@ -4,7 +4,7 @@ import ShopLayout from '@/components/layout/ShopLayout'
 
 // ── Fill in your actual contact details here ──────────────────
 const CONTACT = {
-  whatsapp:  '+962-XX-XXXXXX',   // replace with real number
+  whatsapp:  '+962-79-6334347',   // replace with real number
   telegram:  '@YourTelegram',     // replace with real handle
   wechat:    'YourWeChat',        // replace with real ID
   email:     'info@example.com',  // replace with real email

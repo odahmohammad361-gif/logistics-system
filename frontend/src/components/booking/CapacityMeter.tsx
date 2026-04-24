@@ -21,7 +21,10 @@ const SLICE_COLORS = [
 
 export default function CapacityMeter({ usedCbm, totalCbm, slices, compact }: Props) {
   const { t } = useTranslation()
-  const pct = totalCbm > 0 ? Math.min((usedCbm / totalCbm) * 100, 100) : 0
+  // Backend returns Numeric as strings — coerce everywhere
+  const used  = Number(usedCbm)  || 0
+  const total = Number(totalCbm) || 0
+  const pct   = total > 0 ? Math.min((used / total) * 100, 100) : 0
 
   const barColor =
     pct >= 90 ? 'bg-red-500' :
@@ -46,14 +49,15 @@ export default function CapacityMeter({ usedCbm, totalCbm, slices, compact }: Pr
         {slices && slices.length > 0 ? (
           /* Segmented bar — one color per client */
           slices.map((s, i) => {
-            const width = totalCbm > 0 ? (s.cbm / totalCbm) * 100 : 0
-            const left  = slices.slice(0, i).reduce((acc, prev) => acc + (prev.cbm / totalCbm) * 100, 0)
+            const cbm   = Number(s.cbm) || 0
+            const width = total > 0 ? (cbm / total) * 100 : 0
+            const left  = slices.slice(0, i).reduce((acc, prev) => acc + ((Number(prev.cbm) || 0) / total) * 100, 0)
             return (
               <div
                 key={i}
                 className={clsx('absolute top-0 h-full transition-all', SLICE_COLORS[i % SLICE_COLORS.length])}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                title={`${s.clientName}: ${s.cbm.toFixed(3)} م³`}
+                title={`${s.clientName}: ${cbm.toFixed(3)} م³`}
               />
             )
           })
@@ -67,8 +71,8 @@ export default function CapacityMeter({ usedCbm, totalCbm, slices, compact }: Pr
 
       {/* Numbers */}
       <div className="flex items-center justify-between text-xs text-brand-text-muted font-mono">
-        <span>{usedCbm.toFixed(3)} م³ {t('bookings.cbm_used')}</span>
-        <span>{totalCbm} م³ {t('bookings.cbm_capacity')}</span>
+        <span>{used.toFixed(3)} م³ {t('bookings.cbm_used')}</span>
+        <span>{total} م³ {t('bookings.cbm_capacity')}</span>
       </div>
 
       {/* Client legend (non-compact) */}
@@ -78,7 +82,7 @@ export default function CapacityMeter({ usedCbm, totalCbm, slices, compact }: Pr
             <div key={i} className="flex items-center gap-1.5 text-xs text-brand-text-muted">
               <div className={clsx('w-2.5 h-2.5 rounded-sm flex-shrink-0', SLICE_COLORS[i % SLICE_COLORS.length])} />
               <span className="truncate max-w-[100px]">{s.clientName}</span>
-              <span className="font-mono text-brand-text-dim">{s.cbm.toFixed(2)}</span>
+              <span className="font-mono text-brand-text-dim">{(Number(s.cbm) || 0).toFixed(2)}</span>
             </div>
           ))}
         </div>

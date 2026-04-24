@@ -49,7 +49,34 @@ export const getCargoImageUrl = (bookingId: number, lineId: number, imgId: numbe
   return `${base}${BASE}/${bookingId}/cargo-lines/${lineId}/images/${imgId}`
 }
 
+// ── Loading Info ──────────────────────────────────────────────────────────────
+
+export const updateLoadingInfo = (bookingId: number, data: {
+  loading_warehouse_id?: number | null
+  loading_date?: string | null
+  loading_notes?: string | null
+}) => api.patch(`${BASE}/${bookingId}/loading-info`, data).then((r) => r.data)
+
+export const uploadLoadingPhotos = (bookingId: number, files: File[], caption?: string) => {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  if (caption) form.append('caption', caption)
+  return api.post(`${BASE}/${bookingId}/loading-photos`, form,
+    { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data)
+}
+
+export const deleteLoadingPhoto = (bookingId: number, photoId: number) =>
+  api.delete(`${BASE}/${bookingId}/loading-photos/${photoId}`)
+
+export const getLoadingPhotoUrl = (bookingId: number, photoId: number): string => {
+  const base = api.defaults.baseURL ?? ''
+  return `${base}${BASE}/${bookingId}/loading-photos/${photoId}`
+}
+
 // ── Packing List ──────────────────────────────────────────────────────────────
 
 export const getPackingList = (bookingId: number) =>
   api.get<Record<string, unknown>>(`${BASE}/${bookingId}/packing-list`).then((r) => r.data)
+
+export const getPorts = () =>
+  api.get<{ loading: string[]; discharge: string[] }>(`${BASE}/ports`).then((r) => r.data)

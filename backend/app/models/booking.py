@@ -48,17 +48,33 @@ class Booking(Base):
     currency     = Column(String(10),      default="USD")
     notes        = Column(Text,            nullable=True)
 
+    # Capacity & pricing markup
+    max_cbm    = Column(Numeric(10, 2), nullable=True)   # editable CBM capacity for this container
+    markup_pct = Column(Numeric(6, 2),  nullable=True, default=0)  # selling markup % over agent price
+
     # Direct booking (no agent) — used for AIR self-booked
     is_direct_booking = Column(String(1), default="0", nullable=False)  # "1" = direct
     carrier_name      = Column(String(100), nullable=True)               # airline / shipping line
+
+    # Loading info (origin warehouse + when goods were stuffed)
+    loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)
+    loading_date         = Column(DateTime(timezone=True), nullable=True)
+    loading_notes        = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    agent       = relationship("ShippingAgent", foreign_keys=[shipping_agent_id])
-    branch      = relationship("Branch",        foreign_keys=[branch_id])
-    cargo_lines = relationship(
+    agent              = relationship("ShippingAgent",   foreign_keys=[shipping_agent_id])
+    branch             = relationship("Branch",          foreign_keys=[branch_id])
+    loading_warehouse  = relationship("CompanyWarehouse", foreign_keys=[loading_warehouse_id])
+    loading_photos     = relationship(
+        "BookingLoadingPhoto",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        order_by="BookingLoadingPhoto.uploaded_at",
+    )
+    cargo_lines        = relationship(
         "BookingCargoLine",
         back_populates="booking",
         cascade="all, delete-orphan",
@@ -120,3 +136,16 @@ class BookingCargoImage(Base):
     uploaded_at       = Column(DateTime(timezone=True), server_default=func.now())
 
     cargo_line = relationship("BookingCargoLine", back_populates="images")
+
+
+class BookingLoadingPhoto(Base):
+    __tablename__ = "booking_loading_photos"
+
+    id                = Column(Integer,     primary_key=True, index=True)
+    booking_id        = Column(Integer,     ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_path         = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=True)
+    caption           = Column(String(300), nullable=True)
+    uploaded_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+    booking = relationship("Booking", back_populates="loading_photos")

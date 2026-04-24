@@ -2,6 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   THEME SYSTEM — Dark base, swappable accent color
+   The background/surface/text/border NEVER change.
+   Only the accent (primary) color changes per theme.
+   This guarantees every component remains readable.
+───────────────────────────────────────────────────────────── */
+
+/* ── Base palette (shared by ALL themes) ──────────────────── */
+:root {
+  /* Backgrounds */
+  --brand-bg:      #030B18;
+  --brand-surface: #061220;
+  --brand-card:    #0A1929;
+  --brand-navy:    #1A2744;
+  --brand-navy-light: #243460;
+
+  /* Text */
+  --brand-text:       #F1F5F9;
+  --brand-text-muted: #94A3B8;
+  --brand-text-dim:   #64748B;
+
+  /* Borders */
+  --brand-border:       #1E3A5F;
+  --brand-border-light: #2A4F7A;
+
+  /* Functional */
+  --brand-red:       #EF4444;
+  --brand-green:     #10B981;
+  --brand-green-dim: #059669;
+
+  /* ── Default accent: Indigo ── */
+  --brand-primary:        #6366F1;
+  --brand-primary-dark:   #4F46E5;
+  --brand-primary-light:  #818CF8;
+  --brand-border-focus:   #6366F1;
+}
+
+/* ── Accent: Purple ──────────────────────────────────────── */
+[data-theme="accent-purple"] {
+  --brand-primary:        #8B5CF6;
+  --brand-primary-dark:   #7C3AED;
+  --brand-primary-light:  #A78BFA;
+  --brand-border-focus:   #8B5CF6;
+}
+
+/* ── Accent: Emerald ─────────────────────────────────────── */
+[data-theme="accent-emerald"] {
+  --brand-primary:        #10B981;
+  --brand-primary-dark:   #059669;
+  --brand-primary-light:  #34D399;
+  --brand-border-focus:   #10B981;
+}
+
+/* ── Accent: Rose ────────────────────────────────────────── */
+[data-theme="accent-rose"] {
+  --brand-primary:        #F43F5E;
+  --brand-primary-dark:   #E11D48;
+  --brand-primary-light:  #FB7185;
+  --brand-border-focus:   #F43F5E;
+}
+
+/* ── Accent: Amber ───────────────────────────────────────── */
+[data-theme="accent-amber"] {
+  --brand-primary:        #F59E0B;
+  --brand-primary-dark:   #D97706;
+  --brand-primary-light:  #FCD34D;
+  --brand-border-focus:   #F59E0B;
+}
+
+/* ── Accent: Cyan ────────────────────────────────────────── */
+[data-theme="accent-cyan"] {
+  --brand-primary:        #06B6D4;
+  --brand-primary-dark:   #0891B2;
+  --brand-primary-light:  #22D3EE;
+  --brand-border-focus:   #06B6D4;
+}
+
+/* ── Accent: Blue ────────────────────────────────────────── */
+[data-theme="accent-blue"] {
+  --brand-primary:        #3B82F6;
+  --brand-primary-dark:   #2563EB;
+  --brand-primary-light:  #60A5FA;
+  --brand-border-focus:   #3B82F6;
+}
+
+/* ── Accent: Teal ────────────────────────────────────────── */
+[data-theme="accent-teal"] {
+  --brand-primary:        #14B8A6;
+  --brand-primary-dark:   #0D9488;
+  --brand-primary-light:  #2DD4BF;
+  --brand-border-focus:   #14B8A6;
+}
+
+
 /* ─── Base ────────────────────────────────────────────────── */
 @layer base {
   * { box-sizing: border-box; }
@@ -9,21 +103,23 @@
   html { scroll-behavior: smooth; }
 
   body {
-    background-color: #030B18;
-    color: #F1F5F9;
+    background-color: var(--brand-bg);
+    color: var(--brand-text);
     font-family: 'Cairo', 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   [dir='ltr'] body { font-family: 'Inter', 'Cairo', sans-serif; }
 
   ::-webkit-scrollbar       { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #040D1A; }
-  ::-webkit-scrollbar-thumb { background: #1E3A5F; border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: #6366F1; }
+  ::-webkit-scrollbar-track { background: var(--brand-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--brand-border); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--brand-primary); }
 
   ::selection { background: rgba(99, 102, 241, 0.35); color: #fff; }
 }
+
 
 /* ─── Components ──────────────────────────────────────────── */
 @layer components {
@@ -41,8 +137,8 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
   }
   .card-glass {
-    @apply rounded-xl border border-white/10 p-5;
-    background: rgba(10, 25, 41, 0.75);
+    @apply rounded-xl border border-brand-border p-5;
+    background: color-mix(in srgb, var(--brand-surface) 75%, transparent);
     backdrop-filter: blur(16px);
     box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
   }
@@ -60,9 +156,9 @@
   }
   .nav-item-active {
     @apply text-white;
-    background: rgba(99, 102, 241, 0.15);
-    border: 1px solid rgba(99, 102, 241, 0.3);
-    box-shadow: inset 0 1px 0 rgba(99,102,241,0.1);
+    background: color-mix(in srgb, var(--brand-primary) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand-primary) 30%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
   [dir='rtl'] .nav-item-active::before {
     content: '';
@@ -100,8 +196,8 @@
            hover:border-brand-border-light;
   }
   .input-base:-webkit-autofill {
-    -webkit-box-shadow: 0 0 0 1000px #061220 inset;
-    -webkit-text-fill-color: #F1F5F9;
+    -webkit-box-shadow: 0 0 0 1000px var(--brand-surface) inset;
+    -webkit-text-fill-color: var(--brand-text);
   }
   select.input-base { @apply appearance-none cursor-pointer; }
 
@@ -119,7 +215,7 @@
   /* Skeleton */
   .skeleton {
     @apply rounded;
-    background: linear-gradient(90deg, #0A1929 25%, #12263F 50%, #0A1929 75%);
+    background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-border) 50%, var(--brand-surface) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
   }
@@ -133,22 +229,56 @@
   [dir='ltr'] .search-input { @apply input-base pl-9; }
 }
 
+
 /* ─── Utilities ───────────────────────────────────────────── */
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #6366F1, #818CF8);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
   .text-gradient-green {
-    background: linear-gradient(135deg, #10B981, #34D399);
+    background: linear-gradient(135deg, var(--brand-green), var(--brand-green-dim));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  .bg-glow-primary { background: radial-gradient(ellipse at center, rgba(99,102,241,0.15) 0%, transparent 70%); }
-  .bg-glow-green   { background: radial-gradient(ellipse at center, rgba(16,185,129,0.15) 0%, transparent 70%); }
+  .bg-glow-primary { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--brand-primary) 15%, transparent) 0%, transparent 70%); }
+  .bg-glow-green   { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--brand-green) 15%, transparent) 0%, transparent 70%); }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+
+/* ─── CSS-variable overrides (beat Tailwind's baked-in values) ─
+   Tailwind bakes hex values at build time. These overrides ensure
+   that brand color classes always read from runtime CSS variables.
+─────────────────────────────────────────────────────────────── */
+.bg-brand-bg      { background-color: var(--brand-bg)      !important; }
+.bg-brand-surface { background-color: var(--brand-surface)  !important; }
+.bg-brand-card    { background-color: var(--brand-card)     !important; }
+
+.text-brand-text          { color: var(--brand-text)          !important; }
+.text-brand-text-muted    { color: var(--brand-text-muted)    !important; }
+.text-brand-text-dim      { color: var(--brand-text-dim)      !important; }
+.text-brand-primary       { color: var(--brand-primary)       !important; }
+.text-brand-primary-light { color: var(--brand-primary-light) !important; }
+.text-brand-red           { color: var(--brand-red)           !important; }
+.text-brand-green         { color: var(--brand-green)         !important; }
+
+.border-brand-border       { border-color: var(--brand-border)       !important; }
+.border-brand-border-light { border-color: var(--brand-border-light)  !important; }
+.border-brand-primary      { border-color: var(--brand-primary)       !important; }
+
+/* Primary backgrounds — no !important so hover: variants work */
+.bg-brand-primary      { background-color: var(--brand-primary); }
+.bg-brand-primary-dark { background-color: var(--brand-primary-dark); }
+.bg-brand-red          { background-color: var(--brand-red); }
+.bg-brand-green        { background-color: var(--brand-green); }
+
+.placeholder-brand-text-muted::placeholder { color: var(--brand-text-muted); }
+.focus\:border-brand-primary:focus         { border-color: var(--brand-primary) !important; }
+.hover\:text-brand-primary:hover           { color: var(--brand-primary) !important; }
+.hover\:text-brand-red:hover               { color: var(--brand-red) !important; }
+.hover\:text-brand-text:hover              { color: var(--brand-text) !important; }

@@ -6,6 +6,7 @@ import { ArrowLeft, Package, Calculator, ChevronLeft, ChevronRight } from 'lucid
 import { getProduct } from '@/services/productService'
 import { calculateShipping } from '@/services/shopService'
 import ShopLayout from '@/components/layout/ShopLayout'
+import { useShopCurrency } from '@/hooks/useShopCurrency'
 import type { ShippingOption } from '@/types'
 
 function ShippingCalculator({ cbmPerCarton, pcsPerCarton }: { cbmPerCarton: number; pcsPerCarton: number }) {
@@ -132,6 +133,8 @@ export default function ProductDetail() {
   const isAr = i18n.language === 'ar'
   const [photoIdx, setPhotoIdx] = useState(0)
 
+  const { formatPrice } = useShopCurrency()
+
   const { data: product, isLoading } = useQuery({
     queryKey: ['shop-product', id],
     queryFn: () => getProduct(Number(id)),
@@ -252,8 +255,8 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-yellow-400">¥{Number(product.price_cny).toFixed(2)}</span>
-              <span className="text-gray-500">per {product.pcs_per_carton} pcs</span>
+              <span className="text-3xl font-bold text-yellow-400">{formatPrice(Number(product.price_cny))}</span>
+              <span className="text-gray-500 text-sm">/ {product.pcs_per_carton} pcs</span>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

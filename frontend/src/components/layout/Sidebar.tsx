@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FileText, Ship,
   Anchor, TrendingUp, UserCog, ChevronLeft, ChevronRight,
-  LogOut, Building2, Container, Warehouse, Store, Package,
+  LogOut, Building2, Container, Warehouse, Store, Package, FolderInput,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
@@ -21,8 +21,9 @@ const NAV = [
   { to: '/users',            icon: UserCog,         key: 'users' },
   { to: '/company',          icon: Building2,       key: 'company' },
   { to: '/warehouses',       icon: Warehouse,       key: 'warehouses' },
-  { to: '/suppliers',        icon: Store,            key: 'suppliers' },
-  { to: '/products',         icon: Package,          key: 'products' },
+  { to: '/suppliers',              icon: Store,        key: 'suppliers' },
+  { to: '/products',               icon: Package,      key: 'products' },
+  { to: '/products/bulk-import',   icon: FolderInput,  key: 'bulk_import' },
 ]
 
 export default function Sidebar() {
@@ -55,7 +56,7 @@ export default function Sidebar() {
           isRTL ? 'right-0 border-l border-brand-border' : 'left-0 border-r border-brand-border',
           sidebarOpen ? 'w-64' : 'w-16',
         )}
-        style={{ background: 'linear-gradient(180deg, #040D1A 0%, #050F22 100%)' }}
+        style={{ background: 'linear-gradient(180deg, var(--brand-bg) 0%, var(--brand-surface) 100%)' }}
       >
         {/* ── Logo / Brand ── */}
         <div className={clsx(
@@ -63,7 +64,7 @@ export default function Sidebar() {
           !sidebarOpen && 'justify-center',
         )}>
           <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #6366F1, #818CF8)', boxShadow: '0 0 12px rgba(99,102,241,0.4)' }}>
+            style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))', boxShadow: '0 0 12px color-mix(in srgb, var(--brand-primary) 40%, transparent)' }}>
             <span className="text-white font-black text-sm leading-none">L</span>
           </div>
           {sidebarOpen && (
@@ -110,7 +111,7 @@ export default function Sidebar() {
           {sidebarOpen && user && (
             <div className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-lg bg-white/[0.03] border border-brand-border/40">
               <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-brand-primary-light"
-                style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)' }}>
+                style={{ background: 'color-mix(in srgb, var(--brand-primary) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand-primary) 30%, transparent)' }}>
                 {(user.full_name?.[0] ?? user.email[0]).toUpperCase()}
               </div>
               <div className="flex-1 overflow-hidden">

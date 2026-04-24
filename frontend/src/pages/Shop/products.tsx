@@ -2,13 +2,34 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Filter, Package } from 'lucide-react'
+import { Package } from 'lucide-react'
 import { listProducts, listCategories } from '@/services/productService'
 import ShopLayout from '@/components/layout/ShopLayout'
 import ProductCard from '@/components/shop/ProductCard'
+import ProductSearchCombobox from '@/components/shop/ProductSearchCombobox'
+
+const CATEGORY_AR: Record<string, string> = {
+  'T-Shirts':   'تيشيرتات',
+  'Shirts':     'قمصان',
+  'Jeans':      'جينز',
+  'Trousers':   'بناطيل',
+  'Pajamas':    'بيجامات',
+  'Sportswear': 'ملابس رياضية',
+  'Dresses':    'فساتين',
+  'Jackets':    'جاكيتات',
+  'Underwear':  'ملابس داخلية',
+  'Socks':      'جوارب',
+  'Shoes':      'أحذية',
+  'Bags':       'حقائب',
+  'Kids':       'أطفال',
+  'Women':      'نساء',
+  'Men':        'رجال',
+  'Fabric':     'أقمشة',
+}
 
 export default function ShopProducts() {
   const { t, i18n } = useTranslation()
+  void t // used in pagination
   const isAr = i18n.language === 'ar'
   const [searchParams] = useSearchParams()
 
@@ -45,33 +66,17 @@ export default function ShopProducts() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
+          {/* Smart search combobox — searches code + EN name + AR name, scoped to selected category */}
+          <div className="flex-1 min-w-[240px] max-w-lg">
+            <ProductSearchCombobox
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              placeholder={t('common.search')}
-              className="input-base ps-9 w-full"
+              onChange={(v) => { setSearch(v); setPage(1) }}
+              category={category}
+              isAr={isAr}
             />
           </div>
 
-          {categories && categories.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Filter size={14} className="text-gray-400" />
-              <select
-                value={category}
-                onChange={(e) => { setCategory(e.target.value); setPage(1) }}
-                className="input-base"
-              >
-                <option value="">{isAr ? 'الكل' : 'All categories'}</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400 hover:text-white transition-colors">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400 hover:text-white transition-colors ms-auto">
             <input
               type="checkbox"
               checked={featuredOnly}
@@ -105,7 +110,7 @@ export default function ShopProducts() {
                     : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
                 }`}
               >
-                {c}
+                {isAr ? (CATEGORY_AR[c] ?? c) : c}
               </button>
             ))}
           </div>

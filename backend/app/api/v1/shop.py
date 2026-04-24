@@ -198,3 +198,20 @@ def calculate_shipping(
         "usd_to_cny_rate": usd_to_cny,
         "options": results,
     }
+
+
+# ── Public rates endpoint ──────────────────────────────────────────────────────
+
+@router.get("/rates")
+def get_rates(db: Session = Depends(get_db)):
+    """Return latest USD-based market rates for currency conversion in the shop."""
+    from app.api.v1.market import _get_cached_rates
+    from app.utils.currency import FALLBACK_RATES
+    rates, fetched_at = _get_cached_rates(db)
+    if not rates:
+        rates = FALLBACK_RATES.copy()
+    rates["USD"] = 1.0
+    return {
+        "rates": rates,
+        "fetched_at": fetched_at.isoformat() if fetched_at else None,
+    }

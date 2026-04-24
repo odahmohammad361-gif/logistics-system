@@ -133,6 +133,8 @@ class BookingCreate(BaseModel):
     notes: Optional[str] = None
     is_direct_booking: bool = False
     carrier_name: Optional[str] = None
+    max_cbm: Optional[Decimal] = None
+    markup_pct: Optional[Decimal] = None
     cargo_lines: List[BookingCargoLineCreate] = []
 
 
@@ -158,6 +160,8 @@ class BookingUpdate(BaseModel):
     notes: Optional[str] = None
     is_direct_booking: Optional[bool] = None
     carrier_name: Optional[str] = None
+    max_cbm: Optional[Decimal] = None
+    markup_pct: Optional[Decimal] = None
 
 
 class BookingResponse(BaseModel):
@@ -186,10 +190,20 @@ class BookingResponse(BaseModel):
     agent: Optional[AgentShort] = None
     branch: Optional[BranchShort] = None
     cargo_lines: List[BookingCargoLineResponse] = []
+    max_cbm: Optional[Decimal] = None
+    markup_pct: Optional[Decimal] = None
     # Computed capacity fields
     total_cbm_used: Optional[Decimal] = None
     container_cbm_capacity: Optional[float] = None
     fill_percent: Optional[float] = None
+    # Loading info
+    loading_warehouse_id:   Optional[int]      = None
+    loading_warehouse_name: Optional[str]      = None
+    loading_warehouse_city: Optional[str]      = None
+    loading_date:           Optional[datetime] = None
+    loading_notes:          Optional[str]      = None
+    loading_photos:         List[dict]         = []
+    is_locked:              bool               = False
     created_at: datetime
     updated_at: datetime
 
@@ -211,6 +225,12 @@ class BookingListItem(BaseModel):
     total_cbm_used: Optional[Decimal] = None
     fill_percent: Optional[float] = None
     agent_name: Optional[str] = None
+    freight_cost: Optional[Decimal] = None
+    max_cbm: Optional[Decimal] = None
+    markup_pct: Optional[Decimal] = None
+    container_no: Optional[str] = None
+    bl_number: Optional[str] = None
+    vessel_name: Optional[str] = None
     created_at: datetime
 
     class Config:

@@ -323,12 +323,20 @@ export interface BookingCargoLine {
   created_at: string
 }
 
+export interface BookingLoadingPhoto {
+  id: number
+  file_path: string
+  original_filename: string | null
+  caption: string | null
+  uploaded_at: string
+}
+
 export interface Booking {
   id: number
   booking_number: string
   mode: BookingMode
   status: BookingStatus
-  container_size: string | null   // 20GP | 40GP | 40HQ
+  container_size: string | null
   container_no: string | null
   seal_no: string | null
   bl_number: string | null
@@ -346,12 +354,22 @@ export interface Booking {
   notes: string | null
   is_direct_booking: boolean
   carrier_name: string | null
+  max_cbm: number | null
+  markup_pct: number | null
   agent: { id: number; name: string } | null
   branch: { id: number; name: string; name_ar: string | null; code: string } | null
   cargo_lines: BookingCargoLine[]
   total_cbm_used: number | null
   container_cbm_capacity: number | null
   fill_percent: number | null
+  // Loading info
+  loading_warehouse_id: number | null
+  loading_warehouse_name: string | null
+  loading_warehouse_city: string | null
+  loading_date: string | null
+  loading_notes: string | null
+  loading_photos: BookingLoadingPhoto[]
+  is_locked: boolean
   created_at: string
   updated_at: string
 }
@@ -362,6 +380,9 @@ export interface BookingListItem {
   mode: BookingMode
   status: BookingStatus
   container_size: string | null
+  container_no: string | null
+  bl_number: string | null
+  vessel_name: string | null
   port_of_loading: string | null
   port_of_discharge: string | null
   etd: string | null
@@ -370,6 +391,9 @@ export interface BookingListItem {
   total_cbm_used: number | null
   fill_percent: number | null
   agent_name: string | null
+  freight_cost: number | null
+  max_cbm: number | null
+  markup_pct: number | null
   created_at: string
 }
 
@@ -475,6 +499,26 @@ export interface Customer {
   country: string
   is_verified: boolean
   created_at: string
+}
+
+export interface CustomerAdmin {
+  id: number
+  full_name: string
+  email: string
+  phone: string
+  telegram: string | null
+  country: string
+  is_verified: boolean
+  is_active: boolean
+  notes: string | null
+  created_at: string
+}
+
+export interface CustomerAdminListResponse {
+  total: number
+  page: number
+  page_size: number
+  results: CustomerAdmin[]
 }
 
 export interface CustomerTokenResponse {

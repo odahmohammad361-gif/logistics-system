@@ -15,12 +15,13 @@ interface Props {
   index: number
   mode: BookingMode
   bookingId: number
-  onEdit: () => void
-  onDelete: () => void
+  onEdit?: () => void
+  onDelete?: () => void
   onRefresh: () => void
+  locked?: boolean
 }
 
-export default function CargoLineCard({ line, index, mode, bookingId, onEdit, onDelete, onRefresh }: Props) {
+export default function CargoLineCard({ line, index, mode, bookingId, onEdit, onDelete, onRefresh, locked }: Props) {
   const { t, i18n } = useTranslation()
   const isRTL = i18n.language === 'ar'
   const [showImages, setShowImages] = useState(false)
@@ -57,29 +58,33 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           <p className="text-[10px] text-brand-text-muted font-mono">{line.client.client_code}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            onClick={onEdit}
-            className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-primary hover:bg-brand-primary/10 transition-colors"
-            title={t('common.edit')}
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-red hover:bg-brand-red/10 transition-colors"
-            title={t('common.delete')}
-          >
-            <Trash2 size={14} />
-          </button>
+          {!locked && onEdit && (
+            <button
+              onClick={onEdit}
+              className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-primary hover:bg-brand-primary/10 transition-colors"
+              title={t('common.edit')}
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+          {!locked && onDelete && (
+            <button
+              onClick={onDelete}
+              className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-red hover:bg-brand-red/10 transition-colors"
+              title={t('common.delete')}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — backend returns Numeric as strings, so coerce to Number */}
       <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
         {line.cbm != null && (
           <div>
             <p className="text-[10px] text-brand-text-muted">{t('bookings.cbm_label')}</p>
-            <p className="text-sm font-bold text-brand-text font-mono">{line.cbm.toFixed(3)}</p>
+            <p className="text-sm font-bold text-brand-text font-mono">{Number(line.cbm).toFixed(3)}</p>
           </div>
         )}
         {line.cartons != null && (
@@ -91,25 +96,25 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
         {line.gross_weight_kg != null && (
           <div>
             <p className="text-[10px] text-brand-text-muted">{t('bookings.gross_weight')}</p>
-            <p className="text-sm font-bold text-brand-text font-mono">{line.gross_weight_kg.toFixed(2)}</p>
+            <p className="text-sm font-bold text-brand-text font-mono">{Number(line.gross_weight_kg).toFixed(2)}</p>
           </div>
         )}
         {line.net_weight_kg != null && (
           <div>
             <p className="text-[10px] text-brand-text-muted">{t('bookings.net_weight')}</p>
-            <p className="text-sm font-bold text-brand-text font-mono">{line.net_weight_kg.toFixed(2)}</p>
+            <p className="text-sm font-bold text-brand-text font-mono">{Number(line.net_weight_kg).toFixed(2)}</p>
           </div>
         )}
         {mode === 'AIR' && line.chargeable_weight_kg != null && (
           <div>
             <p className="text-[10px] text-brand-text-muted">{t('bookings.chargeable_weight')}</p>
-            <p className="text-sm font-bold text-amber-400 font-mono">{line.chargeable_weight_kg.toFixed(2)}</p>
+            <p className="text-sm font-bold text-amber-400 font-mono">{Number(line.chargeable_weight_kg).toFixed(2)}</p>
           </div>
         )}
         {line.freight_share != null && (
           <div>
             <p className="text-[10px] text-brand-text-muted">{t('bookings.freight_share')}</p>
-            <p className="text-sm font-bold text-brand-text font-mono">${line.freight_share.toFixed(2)}</p>
+            <p className="text-sm font-bold text-brand-text font-mono">${Number(line.freight_share).toFixed(2)}</p>
           </div>
         )}
       </div>
@@ -159,7 +164,7 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
                 {line.images.map((img) => (
                   <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border">
                     <img
-                      src={getCargoImageUrl(bookingId, line.id, img.id)}
+                      src={`/uploads/${img.file_path}`}
                       alt={img.original_filename ?? ''}
                       className="w-full h-full object-cover"
                     />

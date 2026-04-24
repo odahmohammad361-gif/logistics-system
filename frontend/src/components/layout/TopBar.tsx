@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Menu, Globe, Tv2, Bell } from 'lucide-react'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
+import ThemePicker from '@/components/ui/ThemePicker'
 
 export default function TopBar() {
   const { t }                        = useTranslation()
@@ -12,9 +13,9 @@ export default function TopBar() {
     <header
       className="h-14 flex items-center px-4 gap-3 shrink-0 z-10"
       style={{
-        background: 'rgba(6, 18, 32, 0.85)',
+        background: 'color-mix(in srgb, var(--brand-card) 85%, transparent)',
         backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(18, 38, 63, 0.8)',
+        borderBottom: '1px solid var(--brand-border)',
       }}
     >
       {/* Mobile menu */}
@@ -46,6 +47,9 @@ export default function TopBar() {
         <span className="absolute top-1 end-1 w-1.5 h-1.5 bg-brand-primary rounded-full" />
       </button>
 
+      {/* Theme picker */}
+      <ThemePicker />
+
       {/* Language */}
       <button
         onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
@@ -61,7 +65,7 @@ export default function TopBar() {
         <div className="flex items-center gap-2.5 ps-1 cursor-default">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-brand-primary-light"
-            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)' }}
+            style={{ background: 'color-mix(in srgb, var(--brand-primary) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand-primary) 30%, transparent)' }}
           >
             {(user.full_name?.[0] ?? user.email[0]).toUpperCase()}
           </div>

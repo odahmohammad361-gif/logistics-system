@@ -9,7 +9,7 @@ import time
 
 from app.config import settings
 from app.core.limiter import limiter
-from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop
+from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop, customers, client_portal
 
 app = FastAPI(
     title="Logistics System API",
@@ -77,6 +77,8 @@ app.include_router(warehouses.router,       prefix=f"{API_PREFIX}/warehouses",  
 app.include_router(suppliers.router,        prefix=f"{API_PREFIX}/suppliers",        tags=["Suppliers"])
 app.include_router(products.router,         prefix=f"{API_PREFIX}/products",         tags=["Products"])
 app.include_router(shop.router,             prefix=f"{API_PREFIX}/shop",             tags=["Shop"])
+app.include_router(customers.router,        prefix=f"{API_PREFIX}/customers",        tags=["Customers"])
+app.include_router(client_portal.router,   prefix=f"{API_PREFIX}/client-portal",    tags=["Client Portal"])
 
 
 @app.get("/health", tags=["Health"])
@@ -85,4 +87,5 @@ def health_check():
 
 # Serve uploaded product photos
 os.makedirs("uploads/products", exist_ok=True)
+os.makedirs("uploads/bookings", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
