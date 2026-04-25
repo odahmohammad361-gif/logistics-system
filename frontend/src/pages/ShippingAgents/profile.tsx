@@ -365,6 +365,12 @@ export default function AgentProfilePage() {
   const { isStaff, isAdmin } = useAuth()
   const BackIcon     = isAr ? ArrowRight : ArrowLeft
 
+  const { data: agent, isLoading } = useQuery<ShippingAgent>({
+    queryKey: ['agent-profile', agentId],
+    queryFn:  () => getAgentProfile(agentId),
+    enabled:  !isNaN(agentId),
+  })
+
   const today = new Date().toISOString().slice(0, 10)
 
   // Price modal state
