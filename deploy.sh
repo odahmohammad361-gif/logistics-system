@@ -8,8 +8,9 @@ git pull origin main
 
 # Run DB migrations
 echo "--- Running migrations..."
-docker compose exec backend alembic upgrade head 2>/dev/null || \
-  docker compose run --rm backend alembic upgrade head
+# Use 'heads' to handle multiple alembic heads (merge-aware)
+docker compose exec backend alembic upgrade heads 2>/dev/null || \
+  docker compose run --rm backend alembic upgrade heads
 
 # Rebuild and restart all services
 echo "--- Building and restarting services..."
