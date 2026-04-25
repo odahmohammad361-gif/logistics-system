@@ -323,6 +323,8 @@ export interface ClearanceAgentRate {
   country: string | null
   port: string | null
   route: string | null
+  container_size: string | null
+  carrier_name: string | null
   buy_clearance_fee: number | null
   sell_clearance_fee: number | null
   buy_transportation: number | null

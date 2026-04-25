@@ -25,6 +25,8 @@ def _serialize_rate(r: ClearanceAgentRate) -> dict:
         "country": r.country,
         "port": r.port,
         "route": r.route,
+        "container_size": r.container_size,
+        "carrier_name": r.carrier_name,
         "buy_clearance_fee": _money(r.buy_clearance_fee),
         "sell_clearance_fee": _money(r.sell_clearance_fee),
         "buy_transportation": _money(r.buy_transportation),
@@ -189,7 +191,7 @@ def create_rate(
     db.add(ClearanceAgentEditLog(
         agent_id=agent_id,
         action="rate_create",
-        summary=f"Added {rate.service_mode} clearance rate for {rate.country or '-'} / {rate.port or '-'}",
+        summary=f"Added {rate.service_mode} clearance rate for {rate.country or '-'} / {rate.port or '-'} / {rate.container_size or '-'} / {rate.carrier_name or '-'}",
         changed_by_id=current_user.id,
     ))
     db.commit()
@@ -223,7 +225,7 @@ def update_rate(
         db.add(ClearanceAgentEditLog(
             agent_id=agent_id,
             action="rate_edit",
-            summary=f"{rate.service_mode} {rate.country or '-'} {rate.port or '-'}: " + "; ".join(changes[:12]),
+            summary=f"{rate.service_mode} {rate.country or '-'} {rate.port or '-'} {rate.container_size or '-'} {rate.carrier_name or '-'}: " + "; ".join(changes[:12]),
             changed_by_id=current_user.id,
         ))
     db.commit()
@@ -249,7 +251,7 @@ def delete_rate(
     db.add(ClearanceAgentEditLog(
         agent_id=agent_id,
         action="rate_delete",
-        summary=f"Deleted {rate.service_mode} clearance rate for {rate.country or '-'} / {rate.port or '-'}",
+        summary=f"Deleted {rate.service_mode} clearance rate for {rate.country or '-'} / {rate.port or '-'} / {rate.container_size or '-'} / {rate.carrier_name or '-'}",
         changed_by_id=current_user.id,
     ))
     db.commit()

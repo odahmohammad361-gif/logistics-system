@@ -236,9 +236,10 @@ export default function ClearanceAgentsPage() {
                               <Icon size={10} className={rate.service_mode === 'air' ? 'text-violet-300' : 'text-blue-300'} />
                               {rate.service_mode.toUpperCase()}
                             </span>
-                            {(rate.port || rate.route) && (
+                            {(rate.port || rate.route || rate.container_size || rate.carrier_name) && (
                               <span className="text-[9px] text-gray-500 truncate">
-                                {rate.port ?? '—'} {rate.route ? `→ ${rate.route}` : ''}
+                                {[rate.port, rate.container_size, rate.carrier_name].filter(Boolean).join(' · ')}
+                                {rate.route ? ` → ${rate.route}` : ''}
                               </span>
                             )}
                           </div>

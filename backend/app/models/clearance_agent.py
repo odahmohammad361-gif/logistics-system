@@ -45,7 +45,7 @@ class ClearanceAgent(Base):
     rates = relationship(
         "ClearanceAgentRate",
         back_populates="agent",
-        order_by="ClearanceAgentRate.country, ClearanceAgentRate.service_mode, ClearanceAgentRate.port",
+        order_by="ClearanceAgentRate.country, ClearanceAgentRate.service_mode, ClearanceAgentRate.port, ClearanceAgentRate.container_size, ClearanceAgentRate.carrier_name",
         cascade="all, delete-orphan",
     )
     edit_log = relationship(
@@ -66,6 +66,8 @@ class ClearanceAgentRate(Base):
     country = Column(String(100), nullable=True)                      # Jordan | Iraq
     port = Column(String(150), nullable=True)                         # Aqaba, Queen Alia, Umm Qasr...
     route = Column(String(200), nullable=True)                        # Aqaba -> Amman, airport -> warehouse...
+    container_size = Column(String(20), nullable=True)                 # 20GP, 40GP, 40HQ for sea clearance
+    carrier_name = Column(String(100), nullable=True)                  # shipping line / carrier reference
 
     buy_clearance_fee = Column(Numeric(10, 2), nullable=True)
     sell_clearance_fee = Column(Numeric(10, 2), nullable=True)

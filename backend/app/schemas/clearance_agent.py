@@ -53,6 +53,8 @@ class ClearanceAgentRateBase(BaseModel):
     country: Optional[str] = None
     port: Optional[str] = None
     route: Optional[str] = None
+    container_size: Optional[str] = None
+    carrier_name: Optional[str] = None
     buy_clearance_fee: Optional[Decimal] = None
     sell_clearance_fee: Optional[Decimal] = None
     buy_transportation: Optional[Decimal] = None
@@ -77,6 +79,8 @@ class ClearanceAgentRateUpdate(BaseModel):
     country: Optional[str] = None
     port: Optional[str] = None
     route: Optional[str] = None
+    container_size: Optional[str] = None
+    carrier_name: Optional[str] = None
     buy_clearance_fee: Optional[Decimal] = None
     sell_clearance_fee: Optional[Decimal] = None
     buy_transportation: Optional[Decimal] = None

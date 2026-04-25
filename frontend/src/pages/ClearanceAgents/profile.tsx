@@ -24,6 +24,12 @@ const COUNTRY_PORTS: Record<string, { sea: string[]; air: string[] }> = {
   },
 }
 
+const CONTAINER_SIZE_OPTIONS = ['20GP', '40GP', '40HQ']
+const CARRIER_OPTIONS = [
+  'CMA CGM', 'MSC', 'Evergreen', 'PIL', 'COSCO', 'Yang Ming',
+  'Hapag-Lloyd', 'ONE', 'HMM', 'ZIM', 'OOCL', 'Maersk', 'Wan Hai',
+]
+
 const PRICE_FIELDS = [
   ['clearance_fee', 'Clearance Fees', 'تكاليف التخليص'],
   ['transportation', 'Transportation', 'رسوم نقل'],
@@ -52,6 +58,8 @@ function emptyRateForm(agent?: ClearanceAgent | null): RateForm {
     country: agent?.country ?? 'Jordan',
     port: '',
     route: '',
+    container_size: '',
+    carrier_name: '',
     buy_clearance_fee: '',
     sell_clearance_fee: '',
     buy_transportation: '',
@@ -75,6 +83,8 @@ function formFromRate(rate: ClearanceAgentRate): RateForm {
     country: rate.country ?? '',
     port: rate.port ?? '',
     route: rate.route ?? '',
+    container_size: rate.container_size ?? '',
+    carrier_name: rate.carrier_name ?? '',
     buy_clearance_fee: rate.buy_clearance_fee?.toString() ?? '',
     sell_clearance_fee: rate.sell_clearance_fee?.toString() ?? '',
     buy_transportation: rate.buy_transportation?.toString() ?? '',
@@ -121,6 +131,8 @@ export default function ClearanceAgentProfilePage() {
         country: form.country || null,
         port: form.port || null,
         route: form.route || null,
+        container_size: form.service_mode === 'sea' ? form.container_size || null : null,
+        carrier_name: form.service_mode === 'sea' ? form.carrier_name || null : null,
         buy_clearance_fee: n(form.buy_clearance_fee),
         sell_clearance_fee: n(form.sell_clearance_fee),
         buy_transportation: n(form.buy_transportation),
@@ -316,6 +328,25 @@ export default function ClearanceAgentProfilePage() {
             <Input label={isAr ? 'المسار' : 'Route'} placeholder="Aqaba -> Amman" value={form.route} onChange={e => setField('route', e.target.value)} />
           </div>
 
+          {form.service_mode === 'sea' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-brand-border/50 bg-white/[0.02] p-3">
+              <div>
+                <label className="label-base">{isAr ? 'حجم الحاوية' : 'Container Size'}</label>
+                <select className="input-base w-full" value={form.container_size} onChange={e => setField('container_size', e.target.value)}>
+                  <option value="">—</option>
+                  {CONTAINER_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label-base">{isAr ? 'الناقل / الخط الملاحي' : 'Carrier / Shipping Line'}</label>
+                <input list="clearance-carriers" className="input-base w-full" value={form.carrier_name} onChange={e => setField('carrier_name', e.target.value)} />
+                <datalist id="clearance-carriers">
+                  {CARRIER_OPTIONS.map(carrier => <option key={carrier} value={carrier} />)}
+                </datalist>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 flex-wrap">
             <input type="number" step="0.1" min="0" className="input-base w-28 text-xs" value={form.markup_pct} onChange={e => setField('markup_pct', e.target.value)} placeholder={isAr ? 'نسبة %' : 'Margin %'} />
             <button type="button" onClick={applyMarkup} className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
@@ -402,7 +433,9 @@ function RateCard({ rate, isAr, canEdit, onEdit, onDelete }: { rate: ClearanceAg
       <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.03] border-b border-brand-border/40">
         <Icon size={13} className={rate.service_mode === 'air' ? 'text-violet-400' : 'text-blue-400'} />
         <span className="text-sm font-bold text-brand-text">{rate.service_mode === 'air' ? (isAr ? 'تخليص جوي' : 'Air Clearance') : (isAr ? 'تخليص بحري' : 'Sea Clearance')}</span>
-        <span className="text-xs text-brand-text-muted">{[rate.country, rate.port, rate.route].filter(Boolean).join(' · ')}</span>
+        <span className="text-xs text-brand-text-muted">
+          {[rate.country, rate.port, rate.container_size, rate.carrier_name, rate.route].filter(Boolean).join(' · ')}
+        </span>
         {canEdit && (
           <div className="ms-auto flex items-center gap-1">
             <button type="button" onClick={onEdit} className="btn-icon p-1.5 text-brand-text-muted hover:text-brand-primary-light"><Pencil size={13} /></button>
@@ -416,6 +449,20 @@ function RateCard({ rate, isAr, canEdit, onEdit, onDelete }: { rate: ClearanceAg
             <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
           ))}
         </div>
+        {rate.service_mode === 'sea' && (rate.container_size || rate.carrier_name) && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {rate.container_size && (
+              <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">
+                {rate.container_size}
+              </span>
+            )}
+            {rate.carrier_name && (
+              <span className="text-[10px] bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded-full">
+                {rate.carrier_name}
+              </span>
+            )}
+          </div>
+        )}
         {row(isAr ? 'تكاليف التخليص' : 'Clearance Fees', rate.buy_clearance_fee, rate.sell_clearance_fee)}
         {row(isAr ? 'رسوم نقل' : 'Transportation', rate.buy_transportation, rate.sell_transportation)}
         {row(isAr ? 'اذن تسليم' : 'Delivery Authorization', rate.buy_delivery_authorization, rate.sell_delivery_authorization)}
