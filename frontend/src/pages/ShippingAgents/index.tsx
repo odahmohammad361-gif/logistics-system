@@ -345,120 +345,155 @@ export default function ShippingAgentsPage() {
         />
       </div>
 
-      {/* Agent cards with expandable quotes */}
-      <div className="space-y-2">
-        {isLoading ? (
-          <div className="card py-12 text-center text-gray-400 text-sm">{t('common.loading')}</div>
-        ) : (data?.results ?? []).length === 0 ? (
-          <div className="card py-12 text-center text-gray-500 text-sm">{t('common.no_data')}</div>
-        ) : (
-          (data?.results ?? []).map((agent) => (
-            <div key={agent.id} className="card p-0 overflow-hidden">
-              {/* Agent row */}
-              <div className="flex items-center gap-4 px-4 py-3">
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Name */}
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        onClick={() => navigate(`/shipping-agents/${agent.id}`)}
-                        className="text-sm text-white font-medium hover:text-brand-primary-light transition-colors flex items-center gap-1 group"
-                      >
-                        {agent.name}
-                        <ExternalLink size={11} className="opacity-0 group-hover:opacity-60 transition-opacity" />
-                      </button>
-                      {agent.serves_sea && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300">
-                          <Ship size={8} /> SEA
-                        </span>
-                      )}
-                      {agent.serves_air && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300">
-                          <Wind size={8} /> AIR
-                        </span>
-                      )}
-                    </div>
-                    {agent.wechat_id && (
-                      <p className="text-xs text-green-400 mt-0.5">WeChat: {agent.wechat_id}</p>
-                    )}
-                    {agent.phone && <p className="text-xs text-gray-500">{agent.phone}</p>}
-                  </div>
-                  {/* Location */}
-                  <div>
-                    <p className="text-xs text-gray-500">
-                      {[agent.warehouse_city, agent.country].filter(Boolean).join(', ') || '—'}
-                    </p>
-                  </div>
-                  {/* Quick prices */}
-                  <div className="flex flex-wrap gap-2">
-                    {agent.price_20gp != null && (
-                      <span className="inline-flex items-center gap-1 text-xs bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">
-                        <Ship size={10} /> 20GP ${Number(agent.price_20gp).toFixed(0)}
-                      </span>
-                    )}
-                    {agent.price_40ft != null && (
-                      <span className="inline-flex items-center gap-1 text-xs bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">
-                        <Ship size={10} /> 40FT ${Number(agent.price_40ft).toFixed(0)}
-                      </span>
-                    )}
-                    {agent.price_40hq != null && (
-                      <span className="inline-flex items-center gap-1 text-xs bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">
-                        <Ship size={10} /> 40HQ ${Number(agent.price_40hq).toFixed(0)}
-                      </span>
-                    )}
-                    {agent.price_air_kg != null && (
-                      <span className="inline-flex items-center gap-1 text-xs bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded-full">
-                        <Wind size={10} /> Air ${Number(agent.price_air_kg).toFixed(2)}/kg
-                      </span>
-                    )}
-                  </div>
-                </div>
+      {/* Agent card grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.02] h-56 animate-pulse" />
+          ))}
+        </div>
+      ) : (data?.results ?? []).length === 0 ? (
+        <div className="card py-16 text-center text-gray-500 text-sm">{t('common.no_data')}</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {(data?.results ?? []).map((agent) => (
+            <div key={agent.id} className="rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col overflow-hidden">
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
+              {/* Card header */}
+              <div className="px-4 pt-4 pb-3 border-b border-white/5 flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                    {agent.serves_sea && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400">
+                        <Ship size={9} /> SEA
+                      </span>
+                    )}
+                    {agent.serves_air && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400">
+                        <Wind size={9} /> AIR
+                      </span>
+                    )}
+                    {agent.country && (
+                      <span className="text-[10px] text-gray-500">{agent.country}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-white truncate">{agent.name}</p>
+                  {agent.name_ar && <p className="text-xs text-gray-500 truncate">{agent.name_ar}</p>}
+                </div>
+                {/* Action buttons */}
+                <div className="flex items-center gap-0.5 flex-shrink-0">
                   <button
-                    onClick={() => setExpandedAgent(expandedAgent === agent.id ? null : agent.id)}
-                    className="p-1.5 rounded hover:bg-white/5 text-gray-400 hover:text-brand-green transition-colors"
-                    title={t('agents.quotes')}
+                    onClick={() => navigate(`/shipping-agents/${agent.id}`)}
+                    className="p-1.5 rounded-lg hover:bg-white/8 text-gray-400 hover:text-brand-primary-light transition-colors"
+                    title={isAr ? 'الملف الشخصي' : 'Profile'}
                   >
-                    {expandedAgent === agent.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    <ExternalLink size={13} />
                   </button>
                   {isStaff && (
-                    <>
-                      <button
-                        onClick={() => openEditAgent(agent)}
-                        className="p-1.5 rounded hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      {isAdmin && (
-                        <button
-                          onClick={() => setDeletingAgent(agent)}
-                          className="p-1.5 rounded hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </>
+                    <button onClick={() => openEditAgent(agent)}
+                      className="p-1.5 rounded-lg hover:bg-white/8 text-gray-400 hover:text-white transition-colors">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => setDeletingAgent(agent)}
+                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors">
+                      <Trash2 size={13} />
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* Quotes panel */}
-              {expandedAgent === agent.id && (
-                <AgentQuotesPanel
-                  agentId={agent.id}
-                  canEdit={isStaff ?? false}
-                  onAddQuote={() => {
-                    setQuoteModal({ agentId: agent.id, agentName: agent.name })
-                    quoteForm.reset({ service_mode: 'SEA_FCL', incoterm: 'FOB', status: 'ACTIVE', container_type: '40FT' })
-                  }}
-                />
-              )}
+              {/* Card body */}
+              <div className="px-4 py-3 flex flex-col gap-2.5 flex-1">
+
+                {/* Contact */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {agent.wechat_id && (
+                    <span className="text-[11px] text-green-400">💬 {agent.wechat_id}</span>
+                  )}
+                  {agent.phone && (
+                    <span className="text-[11px] text-gray-500">📞 {agent.phone}</span>
+                  )}
+                  {agent.warehouse_city && (
+                    <span className="text-[11px] text-gray-500">📍 {agent.warehouse_city}</span>
+                  )}
+                </div>
+
+                {/* Offer validity */}
+                {agent.offer_valid_to && (() => {
+                  const days = Math.round((new Date(agent.offer_valid_to).getTime() - Date.now()) / 86400000)
+                  const color = days < 0 ? 'text-red-400 bg-red-500/10' : days <= 14 ? 'text-amber-400 bg-amber-500/10' : 'text-emerald-400 bg-emerald-500/10'
+                  return (
+                    <span className={clsx('self-start text-[10px] font-semibold px-2 py-0.5 rounded-full', color)}>
+                      {days < 0 ? `⚠ Expired ${Math.abs(days)}d ago` : `✓ ${days}d left`}
+                    </span>
+                  )
+                })()}
+
+                {/* Carrier rates pills */}
+                {(agent as any).carrier_rates?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {(agent as any).carrier_rates.slice(0, 4).map((cr: any) => (
+                      <span key={cr.id} className="text-[10px] font-mono bg-white/5 text-gray-300 px-2 py-0.5 rounded-full border border-white/8">
+                        {cr.carrier_name}
+                      </span>
+                    ))}
+                    {(agent as any).carrier_rates.length > 4 && (
+                      <span className="text-[10px] text-gray-500">+{(agent as any).carrier_rates.length - 4}</span>
+                    )}
+                  </div>
+                ) : (
+                  /* fallback: old flat price pills */
+                  <div className="flex flex-wrap gap-1.5">
+                    {agent.price_20gp != null && (
+                      <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">20GP ${Number(agent.price_20gp).toFixed(0)}</span>
+                    )}
+                    {agent.price_40ft != null && (
+                      <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">40GP ${Number(agent.price_40ft).toFixed(0)}</span>
+                    )}
+                    {agent.price_40hq != null && (
+                      <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">40HQ ${Number(agent.price_40hq).toFixed(0)}</span>
+                    )}
+                    {agent.price_air_kg != null && (
+                      <span className="text-[10px] bg-violet-500/10 text-violet-300 px-2 py-0.5 rounded-full">Air ${Number(agent.price_air_kg).toFixed(2)}/kg</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Transit days */}
+                {(agent.transit_sea_days != null || agent.transit_air_days != null) && (
+                  <div className="flex gap-3 text-[10px] text-gray-500">
+                    {agent.transit_sea_days != null && <span><Ship size={9} className="inline me-0.5" />{agent.transit_sea_days}d sea</span>}
+                    {agent.transit_air_days != null && <span><Wind size={9} className="inline me-0.5" />{agent.transit_air_days}d air</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Quotes toggle footer */}
+              <div className="border-t border-white/5">
+                <button
+                  onClick={() => setExpandedAgent(expandedAgent === agent.id ? null : agent.id)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] transition-colors"
+                >
+                  <span>{isAr ? 'عروض الأسعار' : 'Shipping Quotes'}</span>
+                  {expandedAgent === agent.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                {expandedAgent === agent.id && (
+                  <AgentQuotesPanel
+                    agentId={agent.id}
+                    canEdit={isStaff ?? false}
+                    onAddQuote={() => {
+                      setQuoteModal({ agentId: agent.id, agentName: agent.name })
+                      quoteForm.reset({ service_mode: 'SEA_FCL', incoterm: 'FOB', status: 'ACTIVE', container_type: '40FT' })
+                    }}
+                  />
+                )}
+              </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {(data?.total ?? 0) > 20 && (

@@ -1,8 +1,25 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 from app.models.shipping_quote import QuoteServiceMode, QuoteStatus, Incoterm
+
+
+class CarrierRateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    carrier_name: str
+    pol: Optional[str] = None
+    pod: Optional[str] = None
+    effective_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    buy_20gp: Optional[Decimal] = None;  sell_20gp: Optional[Decimal] = None
+    buy_40ft: Optional[Decimal] = None;  sell_40ft: Optional[Decimal] = None
+    buy_40hq: Optional[Decimal] = None;  sell_40hq: Optional[Decimal] = None
+    buy_lcl_cbm: Optional[Decimal] = None; sell_lcl_cbm: Optional[Decimal] = None
+    transit_sea_days: Optional[int] = None
+    notes: Optional[str] = None
+    is_active: bool
 
 
 # ── Shipping Agent schemas ────────────────────────────────────────────────────
@@ -87,10 +104,13 @@ class AgentResponse(BaseModel):
     transit_air_days: Optional[int] = None
     serves_sea: bool = True
     serves_air: bool = False
+    offer_valid_from: Optional[date] = None
+    offer_valid_to: Optional[date] = None
     notes: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    carrier_rates: list[CarrierRateResponse] = []
 
 
 class AgentListResponse(BaseModel):
