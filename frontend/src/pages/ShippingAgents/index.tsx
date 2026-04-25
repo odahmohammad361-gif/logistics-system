@@ -317,17 +317,39 @@ export default function ShippingAgentsPage() {
                   <div className="space-y-1.5">
                     {(agent.carrier_rates ?? []).slice(0, 3).map((cr) => {
                       const prices = linePricePills(cr)
+                      const airPrice = preferredPrice(cr.sell_air_kg, cr.buy_air_kg)
                       return (
                         <div key={cr.id} className="rounded-xl border border-white/8 bg-white/[0.025] px-2.5 py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-semibold text-white truncate">{cr.carrier_name}</span>
+                            <span className="text-[11px] font-semibold text-white truncate flex items-center gap-1.5">
+                              {cr.rate_type === 'air' ? <Wind size={10} className="text-violet-300" /> : <Ship size={10} className="text-blue-300" />}
+                              {cr.carrier_name}
+                            </span>
                             {(cr.pol || cr.pod) && (
                               <span className="text-[9px] text-gray-500 truncate">
                                 {cr.pol ?? '—'} → {cr.pod ?? '—'}
                               </span>
                             )}
                           </div>
-                          {prices.fcl.length > 0 ? (
+                          {cr.rate_type === 'air' ? (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {airPrice != null && (
+                                <span className="text-[10px] bg-violet-500/10 text-violet-300 px-2 py-0.5 rounded-full">
+                                  Air {fmtCardUsd(airPrice, 2)}/kg
+                                </span>
+                              )}
+                              {(cr.min_load_kg != null || cr.max_load_kg != null) && (
+                                <span className="text-[10px] bg-white/5 text-gray-300 px-2 py-0.5 rounded-full">
+                                  {cr.min_load_kg ?? '—'}-{cr.max_load_kg ?? '—'} kg
+                                </span>
+                              )}
+                              {cr.transit_air_days != null && (
+                                <span className="text-[10px] bg-white/5 text-gray-300 px-2 py-0.5 rounded-full">
+                                  {cr.transit_air_days}d air
+                                </span>
+                              )}
+                            </div>
+                          ) : prices.fcl.length > 0 ? (
                             <div className="flex flex-wrap gap-1 mt-1.5">
                               {prices.fcl.map(p => (
                                 <span key={p.label} className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">

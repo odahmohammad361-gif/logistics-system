@@ -332,15 +332,12 @@ export default function AgentProfilePage() {
   const [updateCurrent, setUpdateCurrent] = useState(true)
   const [carrierRows, setCarrierRows]     = useState<CarrierRow[]>([emptyCarrierRow()])
   const [airRows, setAirRows]             = useState<AirRow[]>([emptyAirRow()])
-  const [airBuy, setAirBuy]               = useState('')
-  const [airSell, setAirSell]             = useState('')
-  const [airTransit, setAirTransit]       = useState('')
   const [editingRate, setEditingRate]     = useState<AgentCarrierRate | null>(null)
   const [rateEditForm, setRateEditForm]   = useState<RateEditForm>({})
 
   function openPriceModal() {
     setEffectiveDate(today); setExpiryDate(defaultExpiry); setUpdateCurrent(true)
-    setCarrierRows([emptyCarrierRow()]); setAirRows([emptyAirRow()]); setAirBuy(''); setAirSell(''); setAirTransit('')
+    setCarrierRows([emptyCarrierRow()]); setAirRows([emptyAirRow()])
     setPriceModal(true)
   }
 
@@ -436,8 +433,6 @@ export default function AgentProfilePage() {
       return addPriceHistory(agentId, {
         effective_date: effectiveDate,
         expiry_date: expiryDate || null,
-        buy_air_kg: n(airBuy), sell_air_kg: n(airSell),
-        transit_air_days: ni(airTransit),
         update_current: updateCurrent,
         carriers: carrierRows
           .filter(r => r.carrier_name.trim())
@@ -809,18 +804,6 @@ export default function AgentProfilePage() {
               </div>
             )}
 
-            {/* Air prices (agent-level, not per-carrier) */}
-            {agent.serves_air && agent.price_air_kg != null && (
-              <div className="mt-3 pt-3 border-t border-brand-border/50">
-                <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1">✈ {isAr ? 'جوي' : 'Air'}</p>
-                <div className="grid grid-cols-4 gap-2 mb-1">
-                  {['', isAr ? 'شراء/كغ' : 'Buy/kg', isAr ? 'بيع/كغ' : 'Sell/kg', isAr ? 'هامش' : 'Margin'].map((h, i) => (
-                    <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
-                  ))}
-                </div>
-                <PriceRow label="Air/kg" buy={agent.price_air_kg} sell={agent.sell_price_air_kg} />
-              </div>
-            )}
           </div>
 
           {/* Price History */}

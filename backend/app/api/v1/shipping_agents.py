@@ -39,6 +39,10 @@ def _quote_number(db: Session) -> str:
     return f"QT-{year}-{str(count + 1).zfill(4)}"
 
 
+def _is_expired_date(value: date_type | None) -> bool:
+    return bool(value and value < date_type.today())
+
+
 def _calc_totals(p: QuoteCreate | QuoteUpdate) -> tuple[Decimal, Decimal, Decimal, Decimal]:
     """Returns (total_origin, total_destination, total_surcharges, total_all)."""
     def _s(*vals) -> Decimal:
@@ -265,6 +269,8 @@ def _serialize_quote_summary(sq: ShippingQuote) -> dict:
 
 def _serialize_agent(a: ShippingAgent) -> dict:
     def f(v): return float(v) if v is not None else None
+    current_rates = [r for r in a.carrier_rates if r.is_active and not _is_expired_date(r.expiry_date)]
+    expired_history = [p for p in a.price_history if _is_expired_date(p.expiry_date)]
     # Sort quotes: active first, then by validity_to desc
     all_quotes = sorted(
         a.quotes,
@@ -292,8 +298,8 @@ def _serialize_agent(a: ShippingAgent) -> dict:
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
         "quotes":        [_serialize_quote_summary(q) for q in all_quotes],
-        "carrier_rates": [_serialize_carrier_rate(r) for r in a.carrier_rates if r.is_active],
-        "price_history": [_serialize_ph(p) for p in a.price_history],
+        "carrier_rates": [_serialize_carrier_rate(r) for r in current_rates],
+        "price_history": [_serialize_ph(p) for p in expired_history],
         "contracts":     [_serialize_contract(c) for c in a.contracts],
         "edit_log":      [_serialize_log(l) for l in a.edit_log],
     }
@@ -603,6 +609,7 @@ def get_carrier_rates(
         AgentCarrierRate.agent_id == agent_id,
         AgentCarrierRate.is_active == True,
     ).order_by(AgentCarrierRate.carrier_name).all()
+    rates = [r for r in rates if not _is_expired_date(r.expiry_date)]
     return [_serialize_carrier_rate(r) for r in rates]
 
 
