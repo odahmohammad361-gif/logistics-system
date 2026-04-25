@@ -311,6 +311,9 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
         "buy_40hq": f(p.buy_40hq), "sell_40hq": f(p.sell_40hq),
         "buy_air_kg": f(p.buy_air_kg), "sell_air_kg": f(p.sell_air_kg),
         "buy_lcl_cbm": f(p.buy_lcl_cbm), "sell_lcl_cbm": f(p.sell_lcl_cbm),
+        "buy_lcl_20gp": f(getattr(p, 'buy_lcl_20gp', None)), "sell_lcl_20gp": f(getattr(p, 'sell_lcl_20gp', None)),
+        "buy_lcl_40ft": f(getattr(p, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(p, 'sell_lcl_40ft', None)),
+        "buy_lcl_40hq": f(getattr(p, 'buy_lcl_40hq', None)), "sell_lcl_40hq": f(getattr(p, 'sell_lcl_40hq', None)),
         "transit_sea_days": p.transit_sea_days, "transit_air_days": p.transit_air_days,
         "notes": p.notes,
         "created_by": p.created_by.full_name if p.created_by else None,
@@ -330,6 +333,9 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft), "cbm_40ft": f(r.cbm_40ft),
         "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq), "cbm_40hq": f(r.cbm_40hq),
         "buy_lcl_cbm": f(r.buy_lcl_cbm), "sell_lcl_cbm": f(r.sell_lcl_cbm),
+        "buy_lcl_20gp": f(getattr(r, 'buy_lcl_20gp', None)), "sell_lcl_20gp": f(getattr(r, 'sell_lcl_20gp', None)),
+        "buy_lcl_40ft": f(getattr(r, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(r, 'sell_lcl_40ft', None)),
+        "buy_lcl_40hq": f(getattr(r, 'buy_lcl_40hq', None)), "sell_lcl_40hq": f(getattr(r, 'sell_lcl_40hq', None)),
         "transit_sea_days": r.transit_sea_days,
         "notes": r.notes, "is_active": r.is_active,
     }
@@ -382,8 +388,16 @@ class CarrierRowCreate(BaseModel):
     buy_40hq:         Optional[float] = None
     sell_40hq:        Optional[float] = None
     cbm_40hq:         Optional[float] = None
+    # legacy single LCL per-CBM (kept for compatibility)
     buy_lcl_cbm:      Optional[float] = None
     sell_lcl_cbm:     Optional[float] = None
+    # per-size LCL per-CBM fields
+    buy_lcl_20gp:     Optional[float] = None
+    sell_lcl_20gp:    Optional[float] = None
+    buy_lcl_40ft:     Optional[float] = None
+    sell_lcl_40ft:    Optional[float] = None
+    buy_lcl_40hq:     Optional[float] = None
+    sell_lcl_40hq:    Optional[float] = None
     transit_sea_days: Optional[int]   = None
     notes:            Optional[str]   = None
 
@@ -424,6 +438,9 @@ def add_price_history(
             buy_40hq=row.buy_40hq,   sell_40hq=row.sell_40hq,
             buy_air_kg=payload.buy_air_kg, sell_air_kg=payload.sell_air_kg,
             buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
+            buy_lcl_20gp=row.buy_lcl_20gp, sell_lcl_20gp=row.sell_lcl_20gp,
+            buy_lcl_40ft=row.buy_lcl_40ft, sell_lcl_40ft=row.sell_lcl_40ft,
+            buy_lcl_40hq=row.buy_lcl_40hq, sell_lcl_40hq=row.sell_lcl_40hq,
             transit_sea_days=row.transit_sea_days,
             transit_air_days=payload.transit_air_days,
             notes=row.notes,
@@ -446,6 +463,9 @@ def add_price_history(
             existing.buy_40ft = row.buy_40ft; existing.sell_40ft = row.sell_40ft; existing.cbm_40ft = row.cbm_40ft
             existing.buy_40hq = row.buy_40hq; existing.sell_40hq = row.sell_40hq; existing.cbm_40hq = row.cbm_40hq
             existing.buy_lcl_cbm = row.buy_lcl_cbm; existing.sell_lcl_cbm = row.sell_lcl_cbm
+            existing.buy_lcl_20gp = row.buy_lcl_20gp; existing.sell_lcl_20gp = row.sell_lcl_20gp
+            existing.buy_lcl_40ft = row.buy_lcl_40ft; existing.sell_lcl_40ft = row.sell_lcl_40ft
+            existing.buy_lcl_40hq = row.buy_lcl_40hq; existing.sell_lcl_40hq = row.sell_lcl_40hq
             existing.transit_sea_days = row.transit_sea_days
             existing.notes = row.notes; existing.is_active = True
         else:
@@ -458,6 +478,9 @@ def add_price_history(
                 buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft, cbm_40ft=row.cbm_40ft,
                 buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq, cbm_40hq=row.cbm_40hq,
                 buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
+                buy_lcl_20gp=row.buy_lcl_20gp, sell_lcl_20gp=row.sell_lcl_20gp,
+                buy_lcl_40ft=row.buy_lcl_40ft, sell_lcl_40ft=row.sell_lcl_40ft,
+                buy_lcl_40hq=row.buy_lcl_40hq, sell_lcl_40hq=row.sell_lcl_40hq,
                 transit_sea_days=row.transit_sea_days,
                 notes=row.notes,
             ))

@@ -122,9 +122,12 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
 
     // Auto-detect mode: if only LCL prices → LCL, else FCL
     const hasFcl = rate.sell_20gp != null || rate.sell_40ft != null || rate.sell_40hq != null
-    const hasLcl = rate.sell_lcl_cbm != null
+    const hasLcl = rate.sell_lcl_cbm != null || rate.sell_lcl_20gp != null || rate.sell_lcl_40ft != null || rate.sell_lcl_40hq != null
     if (!hasFcl && hasLcl) {
       setValue('mode', 'LCL')
+      // pick a per-size LCL price if available (prefer 40HQ -> 40FT -> 20GP)
+      const pref = rate.sell_lcl_40hq ?? rate.sell_lcl_40ft ?? rate.sell_lcl_20gp ?? rate.sell_lcl_cbm
+      if (pref != null) setValue('freight_cost', String(pref))
     } else {
       setValue('mode', 'FCL')
       // Pick largest available size as default
@@ -150,14 +153,25 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     const watchedCarrier = watch('carrier_name')
     const rate = (carrierRates ?? []).find(r => r.carrier_name === watchedCarrier)
     if (rate) {
-      const priceMap: Record<string, { sell: number | null; cbm: number | null }> = {
-        '20GP': { sell: rate.sell_20gp, cbm: rate.cbm_20gp ?? 28 },
-        '40GP': { sell: rate.sell_40ft, cbm: rate.cbm_40ft ?? 67 },
-        '40HQ': { sell: rate.sell_40hq, cbm: rate.cbm_40hq ?? 76 },
+      const modeNow = watch('mode')
+      if (modeNow === 'LCL') {
+        const lclMap: Record<string, number | null> = {
+          '20GP': rate.sell_lcl_20gp ?? rate.sell_lcl_cbm ?? null,
+          '40GP': rate.sell_lcl_40ft ?? rate.sell_lcl_cbm ?? null,
+          '40HQ': rate.sell_lcl_40hq ?? rate.sell_lcl_cbm ?? null,
+        }
+        const lcl = lclMap[size]
+        if (lcl != null) setValue('freight_cost', String(lcl))
+      } else {
+        const priceMap: Record<string, { sell: number | null; cbm: number | null }> = {
+          '20GP': { sell: rate.sell_20gp, cbm: rate.cbm_20gp ?? 28 },
+          '40GP': { sell: rate.sell_40ft, cbm: rate.cbm_40ft ?? 67 },
+          '40HQ': { sell: rate.sell_40hq, cbm: rate.cbm_40hq ?? 76 },
+        }
+        const entry = priceMap[size]
+        if (entry?.sell != null) setValue('freight_cost', String(entry.sell))
+        if (entry?.cbm != null)  setValue('max_cbm', String(entry.cbm))
       }
-      const entry = priceMap[size]
-      if (entry?.sell != null) setValue('freight_cost', String(entry.sell))
-      if (entry?.cbm != null)  setValue('max_cbm', String(entry.cbm))
     }
   }
 

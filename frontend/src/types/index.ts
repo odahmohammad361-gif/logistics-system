@@ -157,6 +157,9 @@ export interface AgentCarrierRate {
   buy_40ft: number | null;  sell_40ft: number | null;  cbm_40ft: number | null
   buy_40hq: number | null;  sell_40hq: number | null;  cbm_40hq: number | null
   buy_lcl_cbm: number | null; sell_lcl_cbm: number | null
+  buy_lcl_20gp: number | null; sell_lcl_20gp: number | null
+  buy_lcl_40ft: number | null; sell_lcl_40ft: number | null
+  buy_lcl_40hq: number | null; sell_lcl_40hq: number | null
   transit_sea_days: number | null
   notes: string | null
   is_active: boolean
@@ -174,6 +177,9 @@ export interface AgentPriceHistory {
   buy_40hq: number | null;  sell_40hq: number | null
   buy_air_kg: number | null; sell_air_kg: number | null
   buy_lcl_cbm: number | null; sell_lcl_cbm: number | null
+  buy_lcl_20gp: number | null; sell_lcl_20gp: number | null
+  buy_lcl_40ft: number | null; sell_lcl_40ft: number | null
+  buy_lcl_40hq: number | null; sell_lcl_40hq: number | null
   transit_sea_days: number | null
   transit_air_days: number | null
   notes: string | null

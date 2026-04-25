@@ -348,6 +348,10 @@ interface CarrierRow {
   buy_40ft: string; sell_40ft: string; cbm_40ft: string
   buy_40hq: string; sell_40hq: string; cbm_40hq: string
   buy_lcl_cbm: string; sell_lcl_cbm: string
+  // per-size LCL per-CBM (entered per size, optional)
+  buy_lcl_20gp: string; sell_lcl_20gp: string
+  buy_lcl_40ft: string; sell_lcl_40ft: string
+  buy_lcl_40hq: string; sell_lcl_40hq: string
   markup_pct: string
   transit_sea_days: string
   notes: string
@@ -361,7 +365,10 @@ function emptyCarrierRow(): CarrierRow {
     buy_20gp: '', sell_20gp: '', cbm_20gp: DEFAULT_CBM['20gp'],
     buy_40ft: '', sell_40ft: '', cbm_40ft: DEFAULT_CBM['40ft'],
     buy_40hq: '', sell_40hq: '', cbm_40hq: DEFAULT_CBM['40hq'],
-    buy_lcl_cbm: '', sell_lcl_cbm: '',
+      buy_lcl_cbm: '', sell_lcl_cbm: '',
+      buy_lcl_20gp: '', sell_lcl_20gp: '',
+      buy_lcl_40ft: '', sell_lcl_40ft: '',
+      buy_lcl_40hq: '', sell_lcl_40hq: '',
     markup_pct: '', transit_sea_days: '', notes: '',
   }
 }
@@ -424,7 +431,9 @@ export default function AgentProfilePage() {
       const m = (v: string) => { const n = parseFloat(v); return n ? (n * (1 + pct / 100)).toFixed(2) : '' }
       return { ...r,
         sell_20gp: m(r.buy_20gp), sell_40ft: m(r.buy_40ft),
-        sell_40hq: m(r.buy_40hq), sell_lcl_cbm: m(r.buy_lcl_cbm),
+        sell_40hq: m(r.buy_40hq),
+        sell_lcl_cbm: m(r.buy_lcl_cbm),
+        sell_lcl_20gp: m((r as any).buy_lcl_20gp), sell_lcl_40ft: m((r as any).buy_lcl_40ft), sell_lcl_40hq: m((r as any).buy_lcl_40hq),
       }
     }))
   }
@@ -448,6 +457,9 @@ export default function AgentProfilePage() {
             buy_40ft: n(r.buy_40ft), sell_40ft: n(r.sell_40ft), cbm_40ft: n(r.cbm_40ft),
             buy_40hq: n(r.buy_40hq), sell_40hq: n(r.sell_40hq), cbm_40hq: n(r.cbm_40hq),
             buy_lcl_cbm: n(r.buy_lcl_cbm), sell_lcl_cbm: n(r.sell_lcl_cbm),
+            buy_lcl_20gp: n((r as any).buy_lcl_20gp), sell_lcl_20gp: n((r as any).sell_lcl_20gp),
+            buy_lcl_40ft: n((r as any).buy_lcl_40ft), sell_lcl_40ft: n((r as any).sell_lcl_40ft),
+            buy_lcl_40hq: n((r as any).buy_lcl_40hq), sell_lcl_40hq: n((r as any).sell_lcl_40hq),
             transit_sea_days: ni(r.transit_sea_days),
             notes: r.notes || null,
           })),
@@ -920,12 +932,14 @@ export default function AgentProfilePage() {
                     ) : <span />}
                   </div>
 
-                  {/* FCL price grid — columns: Size | Capacity (CBM) | Buy (per container) | Sell (per container) | Margin */}
-                  <div className="grid grid-cols-[36px_60px_70px_1fr_52px] gap-1.5 px-1 mb-0.5">
+                  {/* FCL price grid — columns: Size | Capacity (CBM) | Buy (per container) | Sell (per container) | LCL Buy/m3 | LCL Sell/m3 | Margin */}
+                  <div className="grid grid-cols-[36px_60px_70px_1fr_96px_96px_52px] gap-1.5 px-1 mb-0.5">
                     <span />
                     <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
                     <span className="text-[10px] text-blue-400 uppercase">{isAr ? 'سعر الحاوية' : 'Buy (per container)'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell (per container)'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'LCL شراء/م³' : 'LCL Buy/m³'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'LCL بيع/م³' : 'LCL Sell/m³'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
                   </div>
                   {([
@@ -933,7 +947,7 @@ export default function AgentProfilePage() {
                     { k: '40ft' as const, l: '40GP' },
                     { k: '40hq' as const, l: '40HQ' },
                   ]).map(({ k, l }) => (
-                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_52px] gap-1.5 items-center">
+                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_96px_96px_52px] gap-1.5 items-center">
                       <span className="text-xs font-mono text-brand-text-muted">{l}</span>
                       {/* CBM capacity (editable, stored in DB) */}
                       <input type="number" step="0.1" min="1" placeholder={DEFAULT_CBM[k]}
@@ -957,28 +971,25 @@ export default function AgentProfilePage() {
                         onChange={e => setRow(row._id, `sell_${k}` as keyof CarrierRow, e.target.value)}
                       />
 
+                      {/* LCL per-CBM buy for this size */}
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="input-base text-xs" value={(row as any)[`buy_lcl_${k}`]}
+                        onChange={e => setRow(row._id, `buy_lcl_${k}` as keyof CarrierRow, e.target.value)}
+                        title={isAr ? 'LCL سعر شراء/م³' : 'LCL Buy per m³'}
+                      />
+
+                      {/* LCL per-CBM sell for this size */}
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="input-base text-xs" value={(row as any)[`sell_lcl_${k}`]}
+                        onChange={e => setRow(row._id, `sell_lcl_${k}` as keyof CarrierRow, e.target.value)}
+                        title={isAr ? 'LCL سعر بيع/م³' : 'LCL Sell per m³'}
+                      />
+
                       <div className="text-center">
                         <LiveMargin buy={(row as any)[`buy_${k}`]} sell={(row as any)[`sell_${k}`]} />
                       </div>
                     </div>
                   ))}
-
-                  {/* LCL row */}
-                  <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-center border-t border-brand-border/30 pt-2">
-                    <span className="text-xs font-mono text-brand-text-muted">LCL</span>
-                    <span className="text-[10px] text-brand-text-dim text-center">{isAr ? 'مباشرة/م³' : 'direct/m³'}</span>
-                    <input type="number" step="0.01" min="0" placeholder="0.00"
-                      className="input-base text-xs" value={row.buy_lcl_cbm}
-                      onChange={e => setRow(row._id, 'buy_lcl_cbm', e.target.value)}
-                    />
-                    <input type="number" step="0.01" min="0" placeholder="0.00"
-                      className="input-base text-xs" value={row.sell_lcl_cbm}
-                      onChange={e => setRow(row._id, 'sell_lcl_cbm', e.target.value)}
-                    />
-                    <div className="text-center">
-                      <LiveMargin buy={row.buy_lcl_cbm} sell={row.sell_lcl_cbm} />
-                    </div>
-                  </div>
 
                   {/* Markup + transit */}
                   <div className="flex items-center gap-2 pt-1 border-t border-brand-border/20 flex-wrap">
