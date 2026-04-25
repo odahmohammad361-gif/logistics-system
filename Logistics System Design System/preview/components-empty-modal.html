@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_card.css"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script></head>
+<body>
+  <p class="eyebrow">Empty state · Modal · Pagination</p>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+    <!-- Empty -->
+    <div style="background:#0A1929; border:1px solid #12263F; border-radius:12px; padding:24px; text-align:center;">
+      <div style="width:48px; height:48px; margin:0 auto 12px; border-radius:12px; background:rgba(99,102,241,.1); display:flex; align-items:center; justify-content:center;">
+        <i data-lucide="inbox" style="color:#6366F1; width:22px; height:22px;"></i>
+      </div>
+      <p style="margin:0; font-family:'Inter',sans-serif; font-weight:700; font-size:14px; color:#F1F5F9;">No invoices yet</p>
+      <p style="margin:4px 0 14px 0; font-size:12px; color:#94A3B8; line-height:1.5;">Create your first invoice to start tracking payments.</p>
+      <button style="background:#6366F1; color:#fff; border:none; padding:8px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:500;">+ New invoice</button>
+    </div>
+    <!-- Pagination -->
+    <div style="background:#0A1929; border:1px solid #12263F; border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:14px; justify-content:center;">
+      <div>
+        <p style="margin:0 0 8px 0; font-size:11px; font-weight:600; color:#64748B; letter-spacing:.08em; text-transform:uppercase;">Pagination</p>
+        <div style="display:flex; gap:4px; align-items:center;">
+          <button style="background:transparent; border:1px solid #1E3A5F; color:#94A3B8; width:32px; height:32px; border-radius:6px; font-size:12px;">‹</button>
+          <button style="background:#6366F1; border:none; color:#fff; width:32px; height:32px; border-radius:6px; font-size:12px; font-weight:600;">1</button>
+          <button style="background:transparent; border:1px solid #1E3A5F; color:#94A3B8; width:32px; height:32px; border-radius:6px; font-size:12px;">2</button>
+          <button style="background:transparent; border:1px solid #1E3A5F; color:#94A3B8; width:32px; height:32px; border-radius:6px; font-size:12px;">3</button>
+          <span style="color:#475569; padding:0 4px;">…</span>
+          <button style="background:transparent; border:1px solid #1E3A5F; color:#94A3B8; width:32px; height:32px; border-radius:6px; font-size:12px;">12</button>
+          <button style="background:transparent; border:1px solid #1E3A5F; color:#94A3B8; width:32px; height:32px; border-radius:6px; font-size:12px;">›</button>
+        </div>
+        <p style="margin:8px 0 0 0; font-size:11px; color:#64748B; font-variant-numeric:tabular-nums;">Showing 1–20 of 643</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal preview -->
+  <div style="margin-top:10px; background:rgba(3,11,24,0.7); border:1px solid #12263F; border-radius:12px; padding:18px; backdrop-filter:blur(4px); position:relative;">
+    <p style="margin:0 0 8px 0; font-size:11px; font-weight:600; color:#64748B; letter-spacing:.08em; text-transform:uppercase;">Modal — confirm dialog</p>
+    <div style="background:#0A1929; border:1px solid #2A4F7A; border-radius:12px; padding:18px; box-shadow:0 12px 36px rgba(0,0,0,.6);">
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:36px; height:36px; border-radius:9999px; background:rgba(239,68,68,.15); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <i data-lucide="alert-triangle" style="color:#EF4444; width:18px; height:18px;"></i>
+        </div>
+        <div style="flex:1;">
+          <p style="margin:0; font-family:'Inter',sans-serif; font-weight:700; font-size:15px; color:#F1F5F9;">Cancel container SEA-2026-0001?</p>
+          <p style="margin:4px 0 14px 0; font-size:12px; color:#94A3B8; line-height:1.5;">This will mark all attached invoices as cancelled and notify the client.</p>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button style="background:rgba(255,255,255,.05); color:#F1F5F9; border:1px solid #1E3A5F; padding:7px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px;">Keep</button>
+            <button style="background:rgba(239,68,68,.1); color:#EF4444; border:1px solid rgba(239,68,68,.3); padding:7px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:500;">Cancel container</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>lucide.createIcons();</script>
+</body></html>

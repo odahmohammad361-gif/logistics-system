@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_card.css"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+.label{display:block;font-family:'Inter',sans-serif;font-size:11px;font-weight:500;color:#64748B;letter-spacing:.025em;text-transform:uppercase;margin-bottom:6px;}
+.input{width:100%;background:#061220;border:1px solid #1E3A5F;border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:#F1F5F9;outline:none;transition:all .2s;}
+.input::placeholder{color:#475569;}
+.input:focus{border-color:#6366F1;box-shadow:0 0 0 3px rgba(99,102,241,.15);}
+.input.error{border-color:#EF4444;}
+.err{font-size:11px; color:#EF4444; margin-top:4px;}
+.hint{font-size:11px; color:#475569; margin-top:4px;}
+</style></head>
+<body>
+  <p class="eyebrow">Form fields — Input / Select / Textarea</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="label">Client name</label>
+      <input class="input" value="حسام للتجارة"/>
+      <p class="hint">Default focus state below ↓</p>
+    </div>
+    <div>
+      <label class="label">Email</label>
+      <input class="input" placeholder="admin@logistics.jo" style="border-color:#6366F1; box-shadow:0 0 0 3px rgba(99,102,241,.15);" />
+      <p class="hint">Focused</p>
+    </div>
+    <div>
+      <label class="label">Branch</label>
+      <select class="input" style="appearance:none; background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394A3B8%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-position:right 10px center; background-repeat:no-repeat; padding-right:30px;">
+        <option>Jordan</option><option>China</option><option>Iraq</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">Phone</label>
+      <input class="input error" value="+962 xxx" />
+      <p class="err">This field is required</p>
+    </div>
+  </div>
+</body></html>

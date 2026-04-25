@@ -1,0 +1,98 @@
+/* =========================================================
+   Logistics Design System — Tokens
+   Single source of truth for color, type, spacing, motion.
+   Import in every product surface:  <link rel="stylesheet" href="/colors_and_type.css">
+   ========================================================= */
+
+/* ───── Type ───── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Cairo:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  /* === Backgrounds (NEVER change between accent themes) === */
+  --bg:           #030B18;   /* page */
+  --sidebar:      #040D1A;   /* nav rail */
+  --surface:      #061220;   /* topbar / inputs / sub-surfaces */
+  --card:         #0A1929;   /* cards / panels */
+  --navy:         #1A2744;   /* hover wash for cards */
+  --navy-lt:      #243460;   /* selected wash */
+
+  /* === Borders === */
+  --border:       #1E3A5F;
+  --border-light: #2A4F7A;
+
+  /* === Text — three-tier dim scale === */
+  --fg-1:         #F1F5F9;   /* primary  */
+  --fg-2:         #94A3B8;   /* secondary / muted */
+  --fg-3:         #64748B;   /* labels / placeholders */
+
+  /* === Accent — DEFAULT (Indigo). Override these 5 vars to retheme. === */
+  --primary:        #6366F1;
+  --primary-dark:   #4F46E5;   /* hover / press */
+  --primary-light:  #818CF8;   /* active wash, tints */
+  --primary-soft:   rgba(99,102,241,.12);    /* tinted icon bg, active nav */
+  --primary-glow:   rgba(99,102,241,.35);    /* brand-mark / focus glow */
+
+  --brand-gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  --focus-ring:     0 0 0 3px rgba(99,102,241,.15);
+
+  /* === Status === */
+  --success: #10B981;   /* paid · cleared · delivered */
+  --info:    #3B82F6;   /* sent · in_transit */
+  --warning: #F59E0B;   /* booking · pending */
+  --purple:  #8B5CF6;   /* arrived */
+  --danger:  #EF4444;   /* cancelled · failed */
+  --orange:  #F97316;   /* expired */
+
+  /* === Type === */
+  --font-ui:      'Inter', 'Cairo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ar:      'Cairo', 'Inter', system-ui, sans-serif;
+  --font-mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* === Spacing (Tailwind-rooted) === */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+
+  /* === Radii === */
+  --radius-sm: 6px;  --radius-lg: 8px;  --radius-xl: 12px;  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  /* === Shadows (paired with inset highlight on dark) === */
+  --shadow-card:  0 1px 3px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
+  --shadow-hover: 0 6px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-modal: 0 12px 36px rgba(0,0,0,.6);
+  --shadow-glow:  0 0 24px var(--primary-glow);
+
+  /* === Motion === */
+  --t-fast:   .15s ease;
+  --t-normal: .2s ease;
+  --t-slow:   .3s cubic-bezier(.4,0,.2,1);
+}
+
+/* === Theme variants — set [data-accent] on <html> or any container === */
+[data-accent="purple"]  { --primary:#8B5CF6; --primary-dark:#7C3AED; --primary-light:#A78BFA;
+                          --primary-soft:rgba(139,92,246,.12); --primary-glow:rgba(139,92,246,.35);
+                          --focus-ring:0 0 0 3px rgba(139,92,246,.15); }
+[data-accent="emerald"] { --primary:#10B981; --primary-dark:#059669; --primary-light:#34D399;
+                          --primary-soft:rgba(16,185,129,.12); --primary-glow:rgba(16,185,129,.35);
+                          --focus-ring:0 0 0 3px rgba(16,185,129,.15); }
+[data-accent="rose"]    { --primary:#F43F5E; --primary-dark:#E11D48; --primary-light:#FB7185;
+                          --primary-soft:rgba(244,63,94,.12);  --primary-glow:rgba(244,63,94,.35);
+                          --focus-ring:0 0 0 3px rgba(244,63,94,.15); }
+[data-accent="amber"]   { --primary:#F59E0B; --primary-dark:#D97706; --primary-light:#FCD34D;
+                          --primary-soft:rgba(245,158,11,.12); --primary-glow:rgba(245,158,11,.35);
+                          --focus-ring:0 0 0 3px rgba(245,158,11,.15); }
+[data-accent="cyan"]    { --primary:#06B6D4; --primary-dark:#0891B2; --primary-light:#22D3EE;
+                          --primary-soft:rgba(6,182,212,.12);  --primary-glow:rgba(6,182,212,.35);
+                          --focus-ring:0 0 0 3px rgba(6,182,212,.15); }
+[data-accent="blue"]    { --primary:#3B82F6; --primary-dark:#2563EB; --primary-light:#60A5FA;
+                          --primary-soft:rgba(59,130,246,.12); --primary-glow:rgba(59,130,246,.35);
+                          --focus-ring:0 0 0 3px rgba(59,130,246,.15); }
+[data-accent="teal"]    { --primary:#14B8A6; --primary-dark:#0D9488; --primary-light:#2DD4BF;
+                          --primary-soft:rgba(20,184,166,.12); --primary-glow:rgba(20,184,166,.35);
+                          --focus-ring:0 0 0 3px rgba(20,184,166,.15); }
+
+/* === Direction-aware base === */
+html[dir="rtl"] body { font-family: var(--font-ar); }
+
+/* === Numerals are tabular wherever they appear in a stat, code, or ID === */
+.tabular { font-variant-numeric: tabular-nums; }

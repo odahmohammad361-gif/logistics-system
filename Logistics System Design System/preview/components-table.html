@@ -1,0 +1,54 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_card.css"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+.row{display:flex; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(30,58,95,.5); transition:background .15s;}
+.row:hover{background:rgba(99,102,241,.04);}
+.row:last-child{border-bottom:none;}
+.head{display:flex; padding:10px 16px; background:#06121E; border-bottom:1px solid #12263F;}
+.h{font-family:'Inter',sans-serif; font-size:10px; font-weight:600; color:#64748B; letter-spacing:.08em; text-transform:uppercase;}
+.cell{font-family:'Inter',sans-serif; font-size:13px; color:#F1F5F9;}
+.muted{color:#94A3B8; font-size:12px;}
+.code{font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#94A3B8;}
+.badge{display:inline-flex; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600;}
+</style></head>
+<body>
+  <p class="eyebrow">Data table — sticky head, hover row, divider rules</p>
+  <div style="background:#0A1929; border:1px solid #12263F; border-radius:12px; overflow:hidden;">
+    <div class="head">
+      <div class="h" style="flex:0 0 90px;">REF</div>
+      <div class="h" style="flex:2;">CLIENT</div>
+      <div class="h" style="flex:1;">ROUTE</div>
+      <div class="h" style="flex:0 0 90px;">STATUS</div>
+      <div class="h" style="flex:0 0 100px; text-align:right;">AMOUNT</div>
+    </div>
+    <div class="row">
+      <div class="cell code" style="flex:0 0 90px;">SEA-0001</div>
+      <div class="cell" style="flex:2;">حسام للتجارة <span class="muted" style="margin-left:6px;">JO-0042</span></div>
+      <div class="cell muted" style="flex:1;">CN → JO</div>
+      <div style="flex:0 0 90px;"><span class="badge" style="background:rgba(59,130,246,.15); color:#93C5FD;">in_transit</span></div>
+      <div class="cell" style="flex:0 0 100px; text-align:right; font-variant-numeric:tabular-nums;">$4,820</div>
+    </div>
+    <div class="row">
+      <div class="cell code" style="flex:0 0 90px;">SEA-0002</div>
+      <div class="cell" style="flex:2;">Baghdad Imports <span class="muted" style="margin-left:6px;">IQ-0019</span></div>
+      <div class="cell muted" style="flex:1;">CN → IQ</div>
+      <div style="flex:0 0 90px;"><span class="badge" style="background:rgba(16,185,129,.15); color:#34D399;">delivered</span></div>
+      <div class="cell" style="flex:0 0 100px; text-align:right; font-variant-numeric:tabular-nums;">$12,400</div>
+    </div>
+    <div class="row">
+      <div class="cell code" style="flex:0 0 90px;">AIR-0014</div>
+      <div class="cell" style="flex:2;">شركة الفجر <span class="muted" style="margin-left:6px;">JO-0102</span></div>
+      <div class="cell muted" style="flex:1;">CN → JO</div>
+      <div style="flex:0 0 90px;"><span class="badge" style="background:rgba(245,158,11,.15); color:#F59E0B;">booking</span></div>
+      <div class="cell" style="flex:0 0 100px; text-align:right; font-variant-numeric:tabular-nums;">$890</div>
+    </div>
+    <div class="row">
+      <div class="cell code" style="flex:0 0 90px;">SEA-0003</div>
+      <div class="cell" style="flex:2;">Mosul Trading <span class="muted" style="margin-left:6px;">IQ-0023</span></div>
+      <div class="cell muted" style="flex:1;">CN → IQ</div>
+      <div style="flex:0 0 90px;"><span class="badge" style="background:rgba(139,92,246,.15); color:#C4B5FD;">arrived</span></div>
+      <div class="cell" style="flex:0 0 100px; text-align:right; font-variant-numeric:tabular-nums;">$8,150</div>
+    </div>
+  </div>
+  <script>lucide.createIcons();</script>
+</body></html>

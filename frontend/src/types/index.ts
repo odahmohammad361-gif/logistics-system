@@ -146,8 +146,27 @@ export interface InvoiceListResponse {
 }
 
 // ── Shipping Agent ────────────────────────────────────────────────────────────
+export interface AgentCarrierRate {
+  id: number
+  carrier_name: string
+  pol: string | null
+  pod: string | null
+  effective_date: string | null
+  expiry_date: string | null
+  buy_20gp: number | null;  sell_20gp: number | null
+  buy_40ft: number | null;  sell_40ft: number | null
+  buy_40hq: number | null;  sell_40hq: number | null
+  buy_lcl_cbm: number | null; sell_lcl_cbm: number | null
+  transit_sea_days: number | null
+  notes: string | null
+  is_active: boolean
+}
+
 export interface AgentPriceHistory {
   id: number
+  carrier_name: string | null
+  pol: string | null
+  pod: string | null
   effective_date: string
   expiry_date: string | null
   buy_20gp: number | null;  sell_20gp: number | null
@@ -253,6 +272,7 @@ export interface ShippingAgent {
   notes: string | null
   is_active: boolean
   quotes?: AgentQuoteSummary[]
+  carrier_rates?: AgentCarrierRate[]
   price_history?: AgentPriceHistory[]
   contracts?: AgentContract[]
   edit_log?: AgentEditLog[]

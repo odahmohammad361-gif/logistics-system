@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
 import {
   ArrowLeft, ArrowRight, Ship, Plane, Phone, Mail, MessageSquare,
   Warehouse, CreditCard, Plus, Trash2, Download, FileText,
@@ -18,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection, Textarea } from '@/components/ui/Form'
-import type { ShippingAgent, AgentPriceHistory, AgentContract, AgentEditLog, AgentQuoteSummary } from '@/types'
+import type { ShippingAgent, AgentCarrierRate, AgentPriceHistory, AgentContract, AgentEditLog, AgentQuoteSummary } from '@/types'
 import clsx from 'clsx'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -324,27 +323,37 @@ function LiveMargin({ buy, sell }: { buy: string; sell: string }) {
   return <span className={clsx('text-xs font-bold tabular-nums', color)}>{pct > 0 ? '+' : ''}{pct.toFixed(1)}%</span>
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
-// Standard container CBM capacities
-const CBM_CAPACITY = { '20gp': 28, '40ft': 67, '40hq': 76 }
+// ── Multi-carrier price form helpers ──────────────────────────────────────────
+const CBM_CAPACITY = { '20gp': 28, '40ft': 67, '40hq': 76 } as const
 
-interface PriceForm {
-  effective_date: string
-  expiry_date: string
+interface CarrierRow {
+  _id: string
+  carrier_name: string
+  pol: string; pod: string
+  cbm_20gp: string; cbm_40ft: string; cbm_40hq: string  // per-CBM calc helpers
   buy_20gp: string; sell_20gp: string
   buy_40ft: string; sell_40ft: string
   buy_40hq: string; sell_40hq: string
-  buy_air_kg: string; sell_air_kg: string
   buy_lcl_cbm: string; sell_lcl_cbm: string
-  transit_sea_days: string; transit_air_days: string
-  notes: string
-  update_current: boolean
-  // Calculator helpers (not sent to server)
-  cbm_rate_20gp: string
-  cbm_rate_40ft: string
-  cbm_rate_40hq: string
   markup_pct: string
+  transit_sea_days: string
+  notes: string
 }
+
+function emptyCarrierRow(): CarrierRow {
+  return {
+    _id: Math.random().toString(36).slice(2),
+    carrier_name: '', pol: '', pod: '',
+    cbm_20gp: '', cbm_40ft: '', cbm_40hq: '',
+    buy_20gp: '', sell_20gp: '',
+    buy_40ft: '', sell_40ft: '',
+    buy_40hq: '', sell_40hq: '',
+    buy_lcl_cbm: '', sell_lcl_cbm: '',
+    markup_pct: '', transit_sea_days: '', notes: '',
+  }
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function AgentProfilePage() {
   const { id }       = useParams<{ id: string }>()
@@ -356,7 +365,76 @@ export default function AgentProfilePage() {
   const { isStaff, isAdmin } = useAuth()
   const BackIcon     = isAr ? ArrowRight : ArrowLeft
 
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Price modal state
   const [priceModal, setPriceModal]       = useState(false)
+  const [effectiveDate, setEffectiveDate] = useState(today)
+  const [expiryDate, setExpiryDate]       = useState('')
+  const [updateCurrent, setUpdateCurrent] = useState(true)
+  const [carrierRows, setCarrierRows]     = useState<CarrierRow[]>([emptyCarrierRow()])
+  const [airBuy, setAirBuy]               = useState('')
+  const [airSell, setAirSell]             = useState('')
+  const [airTransit, setAirTransit]       = useState('')
+
+  function openPriceModal() {
+    setEffectiveDate(today); setExpiryDate(''); setUpdateCurrent(true)
+    setCarrierRows([emptyCarrierRow()]); setAirBuy(''); setAirSell(''); setAirTransit('')
+    setPriceModal(true)
+  }
+
+  function setRow(id: string, field: keyof CarrierRow, value: string) {
+    setCarrierRows(rows => rows.map(r => r._id === id ? { ...r, [field]: value } : r))
+  }
+
+  function applyCbm(id: string, size: keyof typeof CBM_CAPACITY, rateStr: string) {
+    const rate = parseFloat(rateStr)
+    const buyField = `buy_${size}` as keyof CarrierRow
+    if (rate > 0) setRow(id, buyField, (rate * CBM_CAPACITY[size]).toFixed(2))
+    else setRow(id, buyField, '')
+  }
+
+  function applyMarkup(id: string) {
+    setCarrierRows(rows => rows.map(r => {
+      if (r._id !== id) return r
+      const pct = parseFloat(r.markup_pct)
+      if (!pct) return r
+      const m = (v: string) => { const n = parseFloat(v); return n ? (n * (1 + pct / 100)).toFixed(2) : '' }
+      return { ...r,
+        sell_20gp: m(r.buy_20gp), sell_40ft: m(r.buy_40ft),
+        sell_40hq: m(r.buy_40hq), sell_lcl_cbm: m(r.buy_lcl_cbm),
+      }
+    }))
+  }
+
+  const priceMut = useMutation({
+    mutationFn: () => {
+      const n = (s: string) => s ? parseFloat(s) : null
+      const ni = (s: string) => s ? parseInt(s) : null
+      return addPriceHistory(agentId, {
+        effective_date: effectiveDate,
+        expiry_date: expiryDate || null,
+        buy_air_kg: n(airBuy), sell_air_kg: n(airSell),
+        transit_air_days: ni(airTransit),
+        update_current: updateCurrent,
+        carriers: carrierRows
+          .filter(r => r.carrier_name.trim())
+          .map(r => ({
+            carrier_name: r.carrier_name.trim(),
+            pol: r.pol || null, pod: r.pod || null,
+            buy_20gp: n(r.buy_20gp), sell_20gp: n(r.sell_20gp),
+            buy_40ft: n(r.buy_40ft), sell_40ft: n(r.sell_40ft),
+            buy_40hq: n(r.buy_40hq), sell_40hq: n(r.sell_40hq),
+            buy_lcl_cbm: n(r.buy_lcl_cbm), sell_lcl_cbm: n(r.sell_lcl_cbm),
+            transit_sea_days: ni(r.transit_sea_days),
+            notes: r.notes || null,
+          })),
+      })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agent-profile', agentId] }); setPriceModal(false) },
+  })
+
+  // Contract modal state
   const [contractModal, setContractModal] = useState(false)
   const [deletingContract, setDeletingContract] = useState<AgentContract | null>(null)
   const [contractFile, setContractFile]   = useState<File | null>(null)
@@ -365,52 +443,6 @@ export default function AgentProfilePage() {
   const [contractValidFrom, setContractValidFrom] = useState('')
   const [contractValidTo, setContractValidTo]     = useState('')
   const [contractNotes, setContractNotes]         = useState('')
-
-  const { data: agent, isLoading } = useQuery<ShippingAgent>({
-    queryKey: ['agent-profile', agentId],
-    queryFn:  () => getAgentProfile(agentId),
-    enabled:  !isNaN(agentId),
-  })
-
-  const { register, handleSubmit, reset, watch, setValue } = useForm<PriceForm>({
-    defaultValues: { effective_date: new Date().toISOString().slice(0, 10), expiry_date: '', update_current: true },
-  })
-  const fw = watch()
-
-  function applyMarkupToSell() {
-    const pct = parseFloat(fw.markup_pct)
-    if (!pct) return
-    const apply = (buyStr: string, field: keyof PriceForm) => {
-      const b = parseFloat(buyStr)
-      if (b) setValue(field, (b * (1 + pct / 100)).toFixed(2))
-    }
-    apply(fw.buy_20gp, 'sell_20gp')
-    apply(fw.buy_40ft, 'sell_40ft')
-    apply(fw.buy_40hq, 'sell_40hq')
-    apply(fw.buy_lcl_cbm, 'sell_lcl_cbm')
-    apply(fw.buy_air_kg, 'sell_air_kg')
-  }
-
-  const priceMut = useMutation({
-    mutationFn: (v: PriceForm) => addPriceHistory(agentId, {
-      effective_date:   v.effective_date,
-      expiry_date:      v.expiry_date || null,
-      buy_20gp:    v.buy_20gp    ? parseFloat(v.buy_20gp)    : null,
-      sell_20gp:   v.sell_20gp   ? parseFloat(v.sell_20gp)   : null,
-      buy_40ft:    v.buy_40ft    ? parseFloat(v.buy_40ft)    : null,
-      sell_40ft:   v.sell_40ft   ? parseFloat(v.sell_40ft)   : null,
-      buy_40hq:    v.buy_40hq    ? parseFloat(v.buy_40hq)    : null,
-      sell_40hq:   v.sell_40hq   ? parseFloat(v.sell_40hq)   : null,
-      buy_air_kg:  v.buy_air_kg  ? parseFloat(v.buy_air_kg)  : null,
-      sell_air_kg: v.sell_air_kg ? parseFloat(v.sell_air_kg) : null,
-      buy_lcl_cbm:  v.buy_lcl_cbm  ? parseFloat(v.buy_lcl_cbm)  : null,
-      sell_lcl_cbm: v.sell_lcl_cbm ? parseFloat(v.sell_lcl_cbm) : null,
-      transit_sea_days: v.transit_sea_days ? parseInt(v.transit_sea_days) : null,
-      transit_air_days: v.transit_air_days ? parseInt(v.transit_air_days) : null,
-      notes: v.notes || null, update_current: v.update_current,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agent-profile', agentId] }); setPriceModal(false); reset() },
-  })
 
   const deleteContractMut = useMutation({
     mutationFn: (cid: number) => deleteAgentContract(agentId, cid),
@@ -572,40 +604,71 @@ export default function AgentProfilePage() {
         {/* ── RIGHT column ── */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Current Prices */}
+          {/* Current Carrier Rates */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-brand-text flex items-center gap-2">
                 <TrendingUp size={14} className="text-emerald-400" />
-                {isAr ? 'الأسعار الحالية' : 'Current Prices'}
+                {isAr ? 'الأسعار الحالية (لكل شركة شحن)' : 'Current Rates (per Carrier)'}
+                <span className="text-xs text-brand-text-muted">({(agent.carrier_rates ?? []).length})</span>
               </h3>
               {isStaff && (
-                <Button size="sm" onClick={() => { setPriceModal(true); reset({ effective_date: new Date().toISOString().slice(0, 10), update_current: true }) }}>
+                <Button size="sm" onClick={openPriceModal}>
                   <Plus size={13} /> {isAr ? 'تحديث الأسعار' : 'Update Prices'}
                 </Button>
               )}
             </div>
 
-            {agent.serves_sea && (
-              <div className="mb-4">
-                <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Ship size={10} /> {isAr ? 'بحري' : 'Sea Freight'}</p>
-                <div className="grid grid-cols-4 gap-2 mb-1">
-                  {['', isAr ? 'شراء' : 'Buy', isAr ? 'بيع' : 'Sell', isAr ? 'هامش' : 'Margin'].map((h, i) => (
-                    <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
-                  ))}
-                </div>
-                <PriceRow label="20GP" buy={agent.price_20gp} sell={agent.sell_price_20gp} />
-                <PriceRow label="40GP" buy={agent.price_40ft} sell={agent.sell_price_40ft} />
-                <PriceRow label="40HQ" buy={agent.price_40hq} sell={agent.sell_price_40hq} />
-                {(agent.buy_lcl_cbm != null || agent.sell_lcl_cbm != null) && (
-                  <PriceRow label={isAr ? 'LCL/م³' : 'LCL/CBM'} buy={agent.buy_lcl_cbm} sell={agent.sell_lcl_cbm} />
-                )}
+            {(agent.carrier_rates ?? []).length === 0 ? (
+              <p className="text-sm text-brand-text-muted text-center py-4">
+                {isAr ? 'لا توجد أسعار بعد — أضف تحديث أسعار لإضافة شركات الشحن' : 'No rates yet — add a price update to define carriers'}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {(agent.carrier_rates ?? []).map(cr => (
+                  <div key={cr.id} className="rounded-xl border border-brand-border/60 bg-brand-surface overflow-hidden">
+                    {/* Carrier header */}
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.03] border-b border-brand-border/40">
+                      <Ship size={13} className="text-blue-400 flex-shrink-0" />
+                      <span className="text-sm font-bold text-brand-text">{cr.carrier_name}</span>
+                      {(cr.pol || cr.pod) && (
+                        <span className="text-xs text-brand-text-muted">
+                          {cr.pol ?? '—'} → {cr.pod ?? '—'}
+                        </span>
+                      )}
+                      {cr.expiry_date && (
+                        <span className={clsx('ms-auto text-[11px] flex items-center gap-1',
+                          new Date(cr.expiry_date) < new Date() ? 'text-red-400' : 'text-amber-400')}>
+                          <Timer size={10} /> {cr.expiry_date}
+                        </span>
+                      )}
+                    </div>
+                    {/* Prices grid */}
+                    <div className="px-4 py-2.5">
+                      <div className="grid grid-cols-4 gap-2 mb-1">
+                        {['', isAr ? 'شراء' : 'Buy', isAr ? 'بيع' : 'Sell', isAr ? 'هامش' : 'Margin'].map((h, i) => (
+                          <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
+                        ))}
+                      </div>
+                      {cr.buy_20gp  != null && <PriceRow label="20GP"    buy={cr.buy_20gp}   sell={cr.sell_20gp} />}
+                      {cr.buy_40ft  != null && <PriceRow label="40GP"    buy={cr.buy_40ft}   sell={cr.sell_40ft} />}
+                      {cr.buy_40hq  != null && <PriceRow label="40HQ"    buy={cr.buy_40hq}   sell={cr.sell_40hq} />}
+                      {cr.buy_lcl_cbm != null && <PriceRow label="LCL/m³" buy={cr.buy_lcl_cbm} sell={cr.sell_lcl_cbm} />}
+                      {cr.transit_sea_days != null && (
+                        <p className="text-[11px] text-brand-text-muted mt-1.5">
+                          <Ship size={10} className="inline me-1" />{cr.transit_sea_days} {isAr ? 'يوم' : 'days'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            {agent.serves_air && (
-              <div>
-                {agent.serves_sea && <div className="border-t border-brand-border/50 pt-3 mt-2" />}
-                <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1">✈ {isAr ? 'جوي' : 'Air Freight'}</p>
+
+            {/* Air prices (agent-level, not per-carrier) */}
+            {agent.serves_air && agent.price_air_kg != null && (
+              <div className="mt-3 pt-3 border-t border-brand-border/50">
+                <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1">✈ {isAr ? 'جوي' : 'Air'}</p>
                 <div className="grid grid-cols-4 gap-2 mb-1">
                   {['', isAr ? 'شراء/كغ' : 'Buy/kg', isAr ? 'بيع/كغ' : 'Sell/kg', isAr ? 'هامش' : 'Margin'].map((h, i) => (
                     <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
@@ -737,109 +800,156 @@ export default function AgentProfilePage() {
         </div>
       </div>
 
-      {/* ── Add Price Modal ── */}
+      {/* ── Update Prices Modal ── */}
       <Modal open={priceModal} onClose={() => setPriceModal(false)}
-        title={isAr ? 'تحديث الأسعار الأسبوعية' : 'Weekly Price Update'} size="lg"
-        footer={<><Button variant="secondary" onClick={() => setPriceModal(false)}>{isAr ? 'إلغاء' : 'Cancel'}</Button><Button loading={priceMut.isPending} onClick={handleSubmit(v => priceMut.mutate(v))}>{isAr ? 'حفظ' : 'Save'}</Button></>}>
+        title={isAr ? 'تحديث الأسعار الأسبوعية' : 'Weekly Price Update'} size="xl"
+        footer={
+          <><Button variant="secondary" onClick={() => setPriceModal(false)}>{isAr ? 'إلغاء' : 'Cancel'}</Button>
+          <Button loading={priceMut.isPending} onClick={() => priceMut.mutate()}>{isAr ? 'حفظ' : 'Save'}</Button></>
+        }>
         <div className="space-y-5">
-          {/* Dates */}
-          <FormSection title={isAr ? 'فترة السريان' : 'Validity Period'}>
-            <FormRow>
-              <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} {...register('effective_date', { required: true })} />
-              <Input type="date" label={isAr ? 'تاريخ الانتهاء' : 'Expiry Date'} {...register('expiry_date')} />
-            </FormRow>
-            <label className="flex items-center gap-2 text-sm text-brand-text cursor-pointer">
-              <input type="checkbox" {...register('update_current')} />
-              {isAr ? 'تحديث الأسعار الحالية للوكيل أيضاً' : "Also update agent's current prices"}
-            </label>
-          </FormSection>
 
-          {/* Sea prices */}
+          {/* Dates + options */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} />
+            <Input type="date" label={isAr ? 'تاريخ الانتهاء' : 'Expiry Date'} value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-brand-text cursor-pointer">
+            <input type="checkbox" checked={updateCurrent} onChange={e => setUpdateCurrent(e.target.checked)} />
+            {isAr ? 'تحديث الأسعار الحالية للوكيل أيضاً' : "Also update agent's current prices"}
+          </label>
+
+          {/* Carrier rows */}
           {agent.serves_sea && (
-            <FormSection title={isAr ? 'أسعار بحرية FCL (USD)' : 'Sea FCL Prices (USD)'}>
-              {/* Apply markup % button row */}
-              <div className="flex items-center gap-2 pb-1">
-                <input type="number" step="0.1" min="0" placeholder={isAr ? 'هامش %' : 'Markup %'}
-                  className="input-base w-28 text-sm"
-                  {...register('markup_pct')}
-                />
-                <button type="button" onClick={applyMarkupToSell}
-                  className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition-colors">
-                  {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                  <Ship size={11} /> {isAr ? 'شركات الشحن (FCL / LCL)' : 'Shipping Lines (FCL / LCL)'}
+                </p>
+                <button type="button" onClick={() => setCarrierRows(r => [...r, emptyCarrierRow()])}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand-primary/15 text-brand-primary-light text-xs font-semibold hover:bg-brand-primary/25 transition-colors">
+                  <Plus size={11} /> {isAr ? 'إضافة شركة شحن' : 'Add Carrier'}
                 </button>
               </div>
 
-              {/* Column headers: Size | Per m³ | Buy (total) | Sell (total) | Margin */}
-              <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 px-1 mb-1">
-                <span />
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'لكل م³' : 'Per m³'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء (إجمالي)' : 'Buy (total)'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع (إجمالي)' : 'Sell (total)'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center">{isAr ? 'هامش' : 'Margin'}</span>
-              </div>
+              {carrierRows.map((row, idx) => (
+                <div key={row._id} className="rounded-xl border border-brand-border bg-brand-surface p-3 space-y-2.5">
+                  {/* Row header */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-brand-text-muted font-semibold w-4">{idx + 1}</span>
+                    <input type="text" placeholder={isAr ? 'اسم الشركة (PIL, CMA...)' : 'Carrier name (PIL, CMA...)'}
+                      value={row.carrier_name}
+                      onChange={e => setRow(row._id, 'carrier_name', e.target.value)}
+                      className="input-base flex-1 text-sm font-semibold"
+                    />
+                    <input type="text" placeholder={isAr ? 'ميناء التحميل' : 'Port of Loading'}
+                      value={row.pol} onChange={e => setRow(row._id, 'pol', e.target.value)}
+                      className="input-base flex-1 text-sm"
+                    />
+                    <input type="text" placeholder={isAr ? 'ميناء التفريغ' : 'Port of Discharge'}
+                      value={row.pod} onChange={e => setRow(row._id, 'pod', e.target.value)}
+                      className="input-base flex-1 text-sm"
+                    />
+                    {carrierRows.length > 1 && (
+                      <button type="button" onClick={() => setCarrierRows(r => r.filter(x => x._id !== row._id))}
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors flex-shrink-0">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
 
-              {([
-                { k: '20gp' as const, l: '20GP', cap: CBM_CAPACITY['20gp'] },
-                { k: '40ft' as const, l: '40GP', cap: CBM_CAPACITY['40ft'] },
-                { k: '40hq' as const, l: '40HQ', cap: CBM_CAPACITY['40hq'] },
-              ]).map(({ k, l, cap }) => (
-                <div key={k} className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-end">
-                  <span className="text-xs font-mono text-brand-text-muted pb-2">{l}</span>
-                  {/* Per m³ → auto-fills buy total */}
-                  <input type="number" step="0.01" min="0" placeholder="0.00"
-                    className="input-base text-sm text-blue-300"
-                    title={`×${cap} m³ = total`}
-                    {...register(`cbm_rate_${k}` as any, {
-                      onChange: (e) => {
-                        const rate = parseFloat(e.target.value)
-                        if (rate > 0) setValue(`buy_${k}` as any, (rate * cap).toFixed(2))
-                        else if (e.target.value === '') setValue(`buy_${k}` as any, '')
-                      },
-                    })}
-                  />
-                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`buy_${k}` as any)} />
-                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register(`sell_${k}` as any)} />
-                  <div className="pb-2 text-center">
-                    <LiveMargin buy={(fw as any)[`buy_${k}`] ?? ''} sell={(fw as any)[`sell_${k}`] ?? ''} />
+                  {/* FCL price grid */}
+                  <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 px-1">
+                    <span />
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'لكل م³' : 'Per m³'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء' : 'Buy'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                  </div>
+                  {([
+                    { k: '20gp' as const, l: '20GP', cbmKey: 'cbm_20gp' as const },
+                    { k: '40ft' as const, l: '40GP', cbmKey: 'cbm_40ft' as const },
+                    { k: '40hq' as const, l: '40HQ', cbmKey: 'cbm_40hq' as const },
+                  ]).map(({ k, l, cbmKey }) => (
+                    <div key={k} className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-center">
+                      <span className="text-xs font-mono text-brand-text-muted">{l}</span>
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="input-base text-xs text-blue-300" title={`×${CBM_CAPACITY[k]}m³`}
+                        value={(row as any)[cbmKey]}
+                        onChange={e => { setRow(row._id, cbmKey, e.target.value); applyCbm(row._id, k, e.target.value) }}
+                      />
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="input-base text-xs" value={(row as any)[`buy_${k}`]}
+                        onChange={e => setRow(row._id, `buy_${k}` as keyof CarrierRow, e.target.value)}
+                      />
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="input-base text-xs" value={(row as any)[`sell_${k}`]}
+                        onChange={e => setRow(row._id, `sell_${k}` as keyof CarrierRow, e.target.value)}
+                      />
+                      <div className="text-center">
+                        <LiveMargin buy={(row as any)[`buy_${k}`]} sell={(row as any)[`sell_${k}`]} />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* LCL row */}
+                  <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-center border-t border-brand-border/30 pt-2">
+                    <span className="text-xs font-mono text-brand-text-muted">LCL</span>
+                    <span className="text-[10px] text-brand-text-dim text-center">{isAr ? 'مباشرة/م³' : 'direct/m³'}</span>
+                    <input type="number" step="0.01" min="0" placeholder="0.00"
+                      className="input-base text-xs" value={row.buy_lcl_cbm}
+                      onChange={e => setRow(row._id, 'buy_lcl_cbm', e.target.value)}
+                    />
+                    <input type="number" step="0.01" min="0" placeholder="0.00"
+                      className="input-base text-xs" value={row.sell_lcl_cbm}
+                      onChange={e => setRow(row._id, 'sell_lcl_cbm', e.target.value)}
+                    />
+                    <div className="text-center">
+                      <LiveMargin buy={row.buy_lcl_cbm} sell={row.sell_lcl_cbm} />
+                    </div>
+                  </div>
+
+                  {/* Markup + transit */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-brand-border/20 flex-wrap">
+                    <input type="number" step="0.1" min="0" placeholder={isAr ? 'هامش %' : 'Markup %'}
+                      className="input-base w-24 text-xs" value={row.markup_pct}
+                      onChange={e => setRow(row._id, 'markup_pct', e.target.value)}
+                    />
+                    <button type="button" onClick={() => applyMarkup(row._id)}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
+                      {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
+                    </button>
+                    <div className="flex items-center gap-1 ms-auto">
+                      <Clock size={11} className="text-brand-text-muted" />
+                      <input type="number" min="0" placeholder={isAr ? 'أيام العبور' : 'Transit days'}
+                        className="input-base w-28 text-xs" value={row.transit_sea_days}
+                        onChange={e => setRow(row._id, 'transit_sea_days', e.target.value)}
+                      />
+                    </div>
+                    <input type="text" placeholder={isAr ? 'ملاحظات...' : 'Notes...'}
+                      className="input-base text-xs flex-1 min-w-32" value={row.notes}
+                      onChange={e => setRow(row._id, 'notes', e.target.value)}
+                    />
                   </div>
                 </div>
               ))}
-
-              {/* LCL per CBM */}
-              <div className="pt-2 border-t border-brand-border/30">
-                <p className="text-[10px] text-brand-text-muted uppercase tracking-wider mb-1.5">
-                  {isAr ? 'LCL — لكل م³' : 'LCL — per CBM'}
-                </p>
-                <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-end">
-                  <span className="text-xs font-mono text-brand-text-muted pb-2">LCL</span>
-                  <span /> {/* no per-m³ calc for LCL (it's already per m³) */}
-                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('buy_lcl_cbm')} />
-                  <Input label="" type="number" step="0.01" min="0" placeholder="0.00" {...register('sell_lcl_cbm')} />
-                  <div className="pb-2 text-center">
-                    <LiveMargin buy={fw.buy_lcl_cbm ?? ''} sell={fw.sell_lcl_cbm ?? ''} />
-                  </div>
-                </div>
-              </div>
-
-              <Input label={isAr ? 'أيام العبور البحري' : 'Sea Transit Days'} type="number" {...register('transit_sea_days')} />
-            </FormSection>
+            </div>
           )}
 
           {/* Air prices */}
           {agent.serves_air && (
             <FormSection title={isAr ? 'أسعار جوية (USD/كغ)' : 'Air Prices (USD/kg)'}>
               <div className="grid grid-cols-[1fr_1fr_60px] gap-3 items-end">
-                <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" placeholder="0.00" {...register('buy_air_kg')} />
-                <Input label={isAr ? 'بيع/كغ'  : 'Sell/kg'} type="number" step="0.01" min="0" placeholder="0.00" {...register('sell_air_kg')} />
-                <div className="pb-2 text-center">
-                  <LiveMargin buy={fw.buy_air_kg ?? ''} sell={fw.sell_air_kg ?? ''} />
-                </div>
+                <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" placeholder="0.00"
+                  value={airBuy} onChange={e => setAirBuy(e.target.value)} />
+                <Input label={isAr ? 'بيع/كغ' : 'Sell/kg'} type="number" step="0.01" min="0" placeholder="0.00"
+                  value={airSell} onChange={e => setAirSell(e.target.value)} />
+                <div className="pb-2 text-center"><LiveMargin buy={airBuy} sell={airSell} /></div>
               </div>
-              <Input label={isAr ? 'أيام العبور الجوي' : 'Air Transit Days'} type="number" {...register('transit_air_days')} />
+              <Input label={isAr ? 'أيام العبور الجوي' : 'Air Transit Days'} type="number"
+                value={airTransit} onChange={e => setAirTransit(e.target.value)} />
             </FormSection>
           )}
-
-          <Input label={isAr ? 'ملاحظات' : 'Notes'} {...register('notes')} />
         </div>
       </Modal>
 

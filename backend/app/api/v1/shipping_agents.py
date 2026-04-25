@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.shipping_agent import ShippingAgent, AgentPriceHistory, AgentContract, AgentEditLog
+from app.models.shipping_agent import ShippingAgent, AgentPriceHistory, AgentCarrierRate, AgentContract, AgentEditLog
 from app.models.shipping_quote import ShippingQuote, QuoteServiceMode, QuoteStatus
 from app.models.client import Client
 from app.schemas.agent import (
@@ -292,6 +292,7 @@ def _serialize_agent(a: ShippingAgent) -> dict:
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
         "quotes":        [_serialize_quote_summary(q) for q in all_quotes],
+        "carrier_rates": [_serialize_carrier_rate(r) for r in a.carrier_rates if r.is_active],
         "price_history": [_serialize_ph(p) for p in a.price_history],
         "contracts":     [_serialize_contract(c) for c in a.contracts],
         "edit_log":      [_serialize_log(l) for l in a.edit_log],
@@ -300,7 +301,10 @@ def _serialize_agent(a: ShippingAgent) -> dict:
 def _serialize_ph(p: AgentPriceHistory) -> dict:
     def f(v): return float(v) if v is not None else None
     return {
-        "id": p.id, "effective_date": str(p.effective_date),
+        "id": p.id,
+        "carrier_name": p.carrier_name,
+        "pol": p.pol, "pod": p.pod,
+        "effective_date": str(p.effective_date),
         "expiry_date": str(p.expiry_date) if p.expiry_date else None,
         "buy_20gp": f(p.buy_20gp), "sell_20gp": f(p.sell_20gp),
         "buy_40ft": f(p.buy_40ft), "sell_40ft": f(p.sell_40ft),
@@ -311,6 +315,23 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
         "notes": p.notes,
         "created_by": p.created_by.full_name if p.created_by else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
+
+
+def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
+    def f(v): return float(v) if v is not None else None
+    return {
+        "id": r.id,
+        "carrier_name": r.carrier_name,
+        "pol": r.pol, "pod": r.pod,
+        "effective_date": str(r.effective_date) if r.effective_date else None,
+        "expiry_date": str(r.expiry_date) if r.expiry_date else None,
+        "buy_20gp": f(r.buy_20gp), "sell_20gp": f(r.sell_20gp),
+        "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft),
+        "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq),
+        "buy_lcl_cbm": f(r.buy_lcl_cbm), "sell_lcl_cbm": f(r.sell_lcl_cbm),
+        "transit_sea_days": r.transit_sea_days,
+        "notes": r.notes, "is_active": r.is_active,
     }
 
 def _serialize_contract(c: AgentContract) -> dict:
@@ -348,29 +369,36 @@ def get_agent_profile(
 
 # ── Price history ─────────────────────────────────────────────────────────────
 
-class PriceHistoryCreate(BaseModel):
-    effective_date:   str
-    expiry_date:      Optional[str]   = None
+class CarrierRowCreate(BaseModel):
+    carrier_name:     str
+    pol:              Optional[str]   = None
+    pod:              Optional[str]   = None
     buy_20gp:         Optional[float] = None
     sell_20gp:        Optional[float] = None
     buy_40ft:         Optional[float] = None
     sell_40ft:        Optional[float] = None
     buy_40hq:         Optional[float] = None
     sell_40hq:        Optional[float] = None
-    buy_air_kg:       Optional[float] = None
-    sell_air_kg:      Optional[float] = None
     buy_lcl_cbm:      Optional[float] = None
     sell_lcl_cbm:     Optional[float] = None
     transit_sea_days: Optional[int]   = None
-    transit_air_days: Optional[int]   = None
     notes:            Optional[str]   = None
-    update_current:   bool            = True  # also update agent's current prices
+
+
+class PriceUpdateCreate(BaseModel):
+    effective_date:   str
+    expiry_date:      Optional[str]        = None
+    buy_air_kg:       Optional[float]      = None
+    sell_air_kg:      Optional[float]      = None
+    transit_air_days: Optional[int]        = None
+    carriers:         list[CarrierRowCreate] = []
+    update_current:   bool                 = True
 
 
 @router.post("/{agent_id}/price-history")
 def add_price_history(
     agent_id: int,
-    payload:  PriceHistoryCreate,
+    payload:  PriceUpdateCreate,
     db:       Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
@@ -378,48 +406,88 @@ def add_price_history(
     if not a:
         raise HTTPException(404, "Agent not found")
 
-    ph = AgentPriceHistory(
-        agent_id=agent_id,
-        effective_date=payload.effective_date,
-        expiry_date=payload.expiry_date or None,
-        buy_20gp=payload.buy_20gp,   sell_20gp=payload.sell_20gp,
-        buy_40ft=payload.buy_40ft,   sell_40ft=payload.sell_40ft,
-        buy_40hq=payload.buy_40hq,   sell_40hq=payload.sell_40hq,
-        buy_air_kg=payload.buy_air_kg, sell_air_kg=payload.sell_air_kg,
-        buy_lcl_cbm=payload.buy_lcl_cbm, sell_lcl_cbm=payload.sell_lcl_cbm,
-        transit_sea_days=payload.transit_sea_days,
-        transit_air_days=payload.transit_air_days,
-        notes=payload.notes,
-        created_by_id=current_user.id,
-    )
-    db.add(ph)
+    created = []
+    carrier_names = []
 
-    # Optionally sync to agent's current prices
+    for row in payload.carriers:
+        ph = AgentPriceHistory(
+            agent_id=agent_id,
+            carrier_name=row.carrier_name,
+            pol=row.pol, pod=row.pod,
+            effective_date=payload.effective_date,
+            expiry_date=payload.expiry_date or None,
+            buy_20gp=row.buy_20gp,   sell_20gp=row.sell_20gp,
+            buy_40ft=row.buy_40ft,   sell_40ft=row.sell_40ft,
+            buy_40hq=row.buy_40hq,   sell_40hq=row.sell_40hq,
+            buy_air_kg=payload.buy_air_kg, sell_air_kg=payload.sell_air_kg,
+            buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
+            transit_sea_days=row.transit_sea_days,
+            transit_air_days=payload.transit_air_days,
+            notes=row.notes,
+            created_by_id=current_user.id,
+        )
+        db.add(ph)
+        created.append(ph)
+        carrier_names.append(row.carrier_name)
+
+        # Upsert into agent_carrier_rates (current rates table)
+        existing = db.query(AgentCarrierRate).filter(
+            AgentCarrierRate.agent_id == agent_id,
+            AgentCarrierRate.carrier_name == row.carrier_name,
+        ).first()
+        if existing:
+            existing.pol = row.pol; existing.pod = row.pod
+            existing.effective_date = payload.effective_date
+            existing.expiry_date = payload.expiry_date or None
+            existing.buy_20gp = row.buy_20gp; existing.sell_20gp = row.sell_20gp
+            existing.buy_40ft = row.buy_40ft; existing.sell_40ft = row.sell_40ft
+            existing.buy_40hq = row.buy_40hq; existing.sell_40hq = row.sell_40hq
+            existing.buy_lcl_cbm = row.buy_lcl_cbm; existing.sell_lcl_cbm = row.sell_lcl_cbm
+            existing.transit_sea_days = row.transit_sea_days
+            existing.notes = row.notes; existing.is_active = True
+        else:
+            db.add(AgentCarrierRate(
+                agent_id=agent_id, carrier_name=row.carrier_name,
+                pol=row.pol, pod=row.pod,
+                effective_date=payload.effective_date,
+                expiry_date=payload.expiry_date or None,
+                buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp,
+                buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft,
+                buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq,
+                buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
+                transit_sea_days=row.transit_sea_days,
+                notes=row.notes,
+            ))
+
+    # Update agent offer dates
     if payload.update_current:
-        if payload.buy_20gp    is not None: a.price_20gp    = payload.buy_20gp
-        if payload.buy_40ft    is not None: a.price_40ft    = payload.buy_40ft
-        if payload.buy_40hq    is not None: a.price_40hq    = payload.buy_40hq
-        if payload.buy_air_kg  is not None: a.price_air_kg  = payload.buy_air_kg
-        if payload.buy_lcl_cbm is not None: a.buy_lcl_cbm   = payload.buy_lcl_cbm
-        if payload.sell_20gp   is not None: a.sell_price_20gp    = payload.sell_20gp
-        if payload.sell_40ft   is not None: a.sell_price_40ft    = payload.sell_40ft
-        if payload.sell_40hq   is not None: a.sell_price_40hq    = payload.sell_40hq
-        if payload.sell_air_kg is not None: a.sell_price_air_kg  = payload.sell_air_kg
-        if payload.sell_lcl_cbm is not None: a.sell_lcl_cbm      = payload.sell_lcl_cbm
-        if payload.transit_sea_days is not None: a.transit_sea_days = payload.transit_sea_days
-        if payload.transit_air_days is not None: a.transit_air_days = payload.transit_air_days
-        if payload.expiry_date: a.offer_valid_to = payload.expiry_date
+        if payload.expiry_date:   a.offer_valid_to   = payload.expiry_date
         if payload.effective_date: a.offer_valid_from = payload.effective_date
+        if payload.buy_air_kg  is not None: a.price_air_kg     = payload.buy_air_kg
+        if payload.sell_air_kg is not None: a.sell_price_air_kg = payload.sell_air_kg
+        if payload.transit_air_days is not None: a.transit_air_days = payload.transit_air_days
 
-    db.add(AgentEditLog(
-        agent_id=agent_id,
-        action="price_update",
-        summary=f"Price update for {payload.effective_date} — sea buy:{payload.buy_20gp}/{payload.buy_40ft}/{payload.buy_40hq} sell:{payload.sell_20gp}/{payload.sell_40ft}/{payload.sell_40hq} | air buy:{payload.buy_air_kg} sell:{payload.sell_air_kg} | LCL buy:{payload.buy_lcl_cbm} sell:{payload.sell_lcl_cbm}",
-        changed_by_id=current_user.id,
-    ))
+    summary = f"Price update {payload.effective_date}: carriers={','.join(carrier_names)}"
+    db.add(AgentEditLog(agent_id=agent_id, action="price_update", summary=summary, changed_by_id=current_user.id))
     db.commit()
-    db.refresh(ph)
-    return _serialize_ph(ph)
+    return [_serialize_ph(p) for p in created]
+
+
+@router.get("/{agent_id}/carrier-rates")
+def get_carrier_rates(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Returns active carrier rates for this agent (used by container booking dropdown)."""
+    a = db.query(ShippingAgent).filter(ShippingAgent.id == agent_id).first()
+    if not a:
+        raise HTTPException(404, "Agent not found")
+    rates = db.query(AgentCarrierRate).filter(
+        AgentCarrierRate.agent_id == agent_id,
+        AgentCarrierRate.is_active == True,
+    ).order_by(AgentCarrierRate.carrier_name).all()
+    return [_serialize_carrier_rate(r) for r in rates]
 
 
 # ── Contracts ─────────────────────────────────────────────────────────────────

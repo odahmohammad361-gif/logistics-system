@@ -2,12 +2,12 @@ import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
-import { getAgents } from '@/services/agentService'
+import { getAgents, getAgentCarrierRates } from '@/services/agentService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import clsx from 'clsx'
-import type { Booking, BookingMode, BookingStatus } from '@/types'
+import type { Booking, BookingMode, BookingStatus, AgentCarrierRate } from '@/types'
 import { getFlatPortOptions } from '@/constants/logistics'
 
 const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
@@ -85,11 +85,40 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
 
   const mode          = watch('mode')
   const isDirect      = watch('is_direct_booking')
+  const agentId       = watch('agent_id')
   const containerSize = watch('container_size')
   const freightCost   = watch('freight_cost')
   const maxCbm        = watch('max_cbm')
   const markupPct     = watch('markup_pct')
   const portDischarge = watch('port_of_discharge')
+
+  // Load carrier rates when an agent is selected
+  const { data: carrierRates } = useQuery<AgentCarrierRate[]>({
+    queryKey: ['agent-carrier-rates', agentId],
+    queryFn:  () => getAgentCarrierRates(Number(agentId)),
+    enabled:  !!agentId && !isDirect && mode !== 'AIR',
+  })
+
+  // When a carrier is selected from agent rates, auto-fill POL/POD/freight/size
+  function applyCarrierRate(carrierName: string) {
+    const rate = (carrierRates ?? []).find(r => r.carrier_name === carrierName)
+    if (!rate) return
+    if (rate.pol) setValue('port_of_loading', rate.pol)
+    if (rate.pod) setValue('port_of_discharge', rate.pod)
+    // Determine available sizes and pick the sell price
+    // Priority: 40HQ > 40GP > 20GP (pick whichever exists)
+    if (rate.sell_40hq != null) {
+      setValue('container_size', '40HQ')
+      setValue('freight_cost', String(rate.sell_40hq))
+    } else if (rate.sell_40ft != null) {
+      setValue('container_size', '40GP')
+      setValue('freight_cost', String(rate.sell_40ft))
+    } else if (rate.sell_20gp != null) {
+      setValue('container_size', '20GP')
+      setValue('freight_cost', String(rate.sell_20gp))
+    }
+    setValue('carrier_name', carrierName)
+  }
 
   // Detect destination from port of discharge
   const JORDAN_KW = ['jordan', 'aqaba', 'amman', 'zarqa', 'irbid']
@@ -117,11 +146,34 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     return filtered.map(a => ({ value: String(a.id), label: a.name }))
   }, [agentsData, mode])
 
+  // Build carrier options from agent's rates (if loaded), otherwise fall back to static list
+  const carrierOptionsFromAgent = useMemo(() => {
+    if (!carrierRates || carrierRates.length === 0) return null
+    return carrierRates.map(r => ({
+      value: r.carrier_name,
+      label: `${r.carrier_name}${r.pol && r.pod ? ` (${r.pol} → ${r.pod})` : ''}`,
+    }))
+  }, [carrierRates])
+
+  // Container sizes available for selected carrier
+  const sizeOptionsForCarrier = useMemo(() => {
+    const watchedCarrier = watch('carrier_name')
+    if (!carrierRates || !watchedCarrier) return CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+    const rate = carrierRates.find(r => r.carrier_name === watchedCarrier)
+    if (!rate) return CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+    const available: string[] = []
+    if (rate.sell_20gp != null) available.push('20GP')
+    if (rate.sell_40ft != null) available.push('40GP')
+    if (rate.sell_40hq != null) available.push('40HQ')
+    return available.length ? available.map(s => ({ value: s, label: s })) : CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+  }, [carrierRates, watch('carrier_name')])
+
   const statusOptions        = STATUSES.map(s => ({ value: s, label: t(`bookings.status_${s}`) }))
-  const containerSizeOptions = CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+  const containerSizeOptions = sizeOptionsForCarrier
   const incotermOptions      = INCOTERMS.map(i => ({ value: i, label: i }))
   const currencyOptions      = CURRENCIES.map(c => ({ value: c, label: c }))
-  const carrierOptions       = (mode === 'AIR' ? AIR_CARRIERS : SEA_CARRIERS).map(c => ({ value: c, label: c }))
+  const carrierOptions       = carrierOptionsFromAgent
+    ?? (mode === 'AIR' ? AIR_CARRIERS : SEA_CARRIERS).map(c => ({ value: c, label: c }))
 
   // Live price calculations
   const freight  = parseFloat(freightCost) || 0
@@ -271,7 +323,10 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
                 }
                 {...register('agent_id')} />
               <Select label={t('bookings.carrier_line')} options={carrierOptions}
-                placeholder={t('bookings.select_carrier')} {...register('carrier_name')} />
+                placeholder={carrierOptionsFromAgent ? (isAr ? 'اختر شركة الشحن...' : 'Select carrier...') : t('bookings.select_carrier')}
+                {...register('carrier_name', {
+                  onChange: (e) => { if (carrierOptionsFromAgent) applyCarrierRate(e.target.value) }
+                })} />
             </FormRow>
           )}
           {isDirect && (
@@ -282,7 +337,19 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
           {mode !== 'AIR' && (
             <FormRow>
               <Select label={t('bookings.container_size')} options={containerSizeOptions}
-                placeholder="—" {...register('container_size')} />
+                placeholder="—"
+                {...register('container_size', {
+                  onChange: (e) => {
+                    // When size changes, update freight_cost from carrier rate sell price
+                    const size = e.target.value
+                    const watchedCarrier = watch('carrier_name')
+                    const rate = (carrierRates ?? []).find(r => r.carrier_name === watchedCarrier)
+                    if (rate) {
+                      const price = size === '20GP' ? rate.sell_20gp : size === '40GP' ? rate.sell_40ft : size === '40HQ' ? rate.sell_40hq : null
+                      if (price != null) setValue('freight_cost', String(price))
+                    }
+                  }
+                })} />
               <Input
                 label={isAr ? 'سعة الحاوية (CBM)' : 'Container Capacity (CBM)'}
                 type="number" step="0.5" min="1"

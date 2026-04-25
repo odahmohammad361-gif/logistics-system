@@ -1,0 +1,18 @@
+how to run : (windows)
+terminal 1 : run powershell windows 
+
+cd C:\Users\odahm\OneDrive\Desktop\logistics-system-jo\backend
+.venv\Scripts\activate
+python scripts/seed.py
+
+cd C:\Users\odahm\OneDrive\Desktop\logistics-system-jo\backend
+.venv\Scripts\activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+
+terminal 2 : another powershell window 
+
+cd C:\Users\odahm\OneDrive\Desktop\logistics-system-jo\frontend
+npm install
+npm run dev
+ 

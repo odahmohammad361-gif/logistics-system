@@ -58,6 +58,7 @@ class ShippingAgent(Base):
     # Relationships
     quotes        = relationship("ShippingQuote",     back_populates="agent")
     price_history = relationship("AgentPriceHistory", back_populates="agent", order_by="AgentPriceHistory.effective_date.desc()", cascade="all, delete-orphan")
+    carrier_rates = relationship("AgentCarrierRate",  back_populates="agent", order_by="AgentCarrierRate.carrier_name", cascade="all, delete-orphan")
     contracts     = relationship("AgentContract",     back_populates="agent", order_by="AgentContract.created_at.desc()", cascade="all, delete-orphan")
     edit_log      = relationship("AgentEditLog",      back_populates="agent", order_by="AgentEditLog.changed_at.desc()", cascade="all, delete-orphan")
 
@@ -67,7 +68,11 @@ class AgentPriceHistory(Base):
 
     id             = Column(Integer, primary_key=True, index=True)
     agent_id       = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    carrier_name   = Column(String(100), nullable=True, index=True)   # e.g. PIL, CMA, Evergreen
+    pol            = Column(String(150), nullable=True)                # port of loading
+    pod            = Column(String(150), nullable=True)                # port of discharge
     effective_date = Column(Date, nullable=False)
+    expiry_date    = Column(Date, nullable=True)
     buy_20gp       = Column(Numeric(10, 2), nullable=True)
     sell_20gp      = Column(Numeric(10, 2), nullable=True)
     buy_40ft       = Column(Numeric(10, 2), nullable=True)
@@ -78,7 +83,6 @@ class AgentPriceHistory(Base):
     sell_air_kg    = Column(Numeric(10, 2), nullable=True)
     buy_lcl_cbm    = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm   = Column(Numeric(10, 2), nullable=True)
-    expiry_date    = Column(Date, nullable=True)
     transit_sea_days = Column(Integer, nullable=True)
     transit_air_days = Column(Integer, nullable=True)
     notes          = Column(Text, nullable=True)
@@ -87,6 +91,33 @@ class AgentPriceHistory(Base):
 
     agent      = relationship("ShippingAgent", back_populates="price_history")
     created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class AgentCarrierRate(Base):
+    """Current (latest) rate per carrier per agent — upserted on each price update."""
+    __tablename__ = "agent_carrier_rates"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    agent_id     = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    carrier_name = Column(String(100), nullable=False, index=True)
+    pol          = Column(String(150), nullable=True)
+    pod          = Column(String(150), nullable=True)
+    effective_date = Column(Date, nullable=True)
+    expiry_date    = Column(Date, nullable=True)
+    buy_20gp     = Column(Numeric(10, 2), nullable=True)
+    sell_20gp    = Column(Numeric(10, 2), nullable=True)
+    buy_40ft     = Column(Numeric(10, 2), nullable=True)
+    sell_40ft    = Column(Numeric(10, 2), nullable=True)
+    buy_40hq     = Column(Numeric(10, 2), nullable=True)
+    sell_40hq    = Column(Numeric(10, 2), nullable=True)
+    buy_lcl_cbm  = Column(Numeric(10, 2), nullable=True)
+    sell_lcl_cbm = Column(Numeric(10, 2), nullable=True)
+    transit_sea_days = Column(Integer, nullable=True)
+    notes        = Column(Text, nullable=True)
+    is_active    = Column(Boolean, default=True, nullable=False)
+    updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    agent = relationship("ShippingAgent", back_populates="carrier_rates")
 
 
 class AgentContract(Base):
