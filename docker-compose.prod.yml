@@ -54,8 +54,7 @@ services:
     container_name: logistics_nginx
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "8000:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - frontend_dist:/usr/share/nginx/html:ro
