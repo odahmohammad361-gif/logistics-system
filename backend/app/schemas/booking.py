@@ -114,6 +114,7 @@ class BookingCargoLineResponse(BaseModel):
 class BookingCreate(BaseModel):
     mode: str                             # LCL | FCL | AIR
     shipping_agent_id: Optional[int] = None
+    agent_carrier_rate_id: Optional[int] = None
     branch_id: Optional[int] = None
     container_size: Optional[str] = None  # 20GP | 40GP | 40HQ
     container_no: Optional[str] = None
@@ -187,6 +188,8 @@ class BookingResponse(BaseModel):
     notes: Optional[str] = None
     is_direct_booking: bool = False
     carrier_name: Optional[str] = None
+    agent_carrier_rate_id: Optional[int] = None
+    is_agent_snapshot: bool = False
     agent: Optional[AgentShort] = None
     branch: Optional[BranchShort] = None
     cargo_lines: List[BookingCargoLineResponse] = []

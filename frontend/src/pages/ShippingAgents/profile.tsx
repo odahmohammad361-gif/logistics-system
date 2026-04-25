@@ -334,14 +334,19 @@ function LiveMargin({ buy, sell }: { buy: string; sell: string }) {
 // ── Multi-carrier price form helpers ──────────────────────────────────────────
 const CBM_CAPACITY = { '20gp': 28, '40ft': 67, '40hq': 76 } as const
 
+// Standard CBM defaults (editable per row)
+const DEFAULT_CBM = { '20gp': '28', '40ft': '67', '40hq': '76' }
+
 interface CarrierRow {
   _id: string
   carrier_name: string
   pol: string; pod: string
-  cbm_20gp: string; cbm_40ft: string; cbm_40hq: string  // per-CBM calc helpers
-  buy_20gp: string; sell_20gp: string
-  buy_40ft: string; sell_40ft: string
-  buy_40hq: string; sell_40hq: string
+  // per-CBM rate helpers (for auto-calculating buy total)
+  rate_20gp: string; rate_40ft: string; rate_40hq: string
+  // prices
+  buy_20gp: string; sell_20gp: string; cbm_20gp: string
+  buy_40ft: string; sell_40ft: string; cbm_40ft: string
+  buy_40hq: string; sell_40hq: string; cbm_40hq: string
   buy_lcl_cbm: string; sell_lcl_cbm: string
   markup_pct: string
   transit_sea_days: string
@@ -352,10 +357,10 @@ function emptyCarrierRow(): CarrierRow {
   return {
     _id: Math.random().toString(36).slice(2),
     carrier_name: '', pol: '', pod: '',
-    cbm_20gp: '', cbm_40ft: '', cbm_40hq: '',
-    buy_20gp: '', sell_20gp: '',
-    buy_40ft: '', sell_40ft: '',
-    buy_40hq: '', sell_40hq: '',
+    rate_20gp: '', rate_40ft: '', rate_40hq: '',
+    buy_20gp: '', sell_20gp: '', cbm_20gp: DEFAULT_CBM['20gp'],
+    buy_40ft: '', sell_40ft: '', cbm_40ft: DEFAULT_CBM['40ft'],
+    buy_40hq: '', sell_40hq: '', cbm_40hq: DEFAULT_CBM['40hq'],
     buy_lcl_cbm: '', sell_lcl_cbm: '',
     markup_pct: '', transit_sea_days: '', notes: '',
   }
@@ -401,10 +406,13 @@ export default function AgentProfilePage() {
     setCarrierRows(rows => rows.map(r => r._id === id ? { ...r, [field]: value } : r))
   }
 
-  function applyCbm(id: string, size: keyof typeof CBM_CAPACITY, rateStr: string) {
+  function applyCbmRate(id: string, size: '20gp' | '40ft' | '40hq', rateStr: string) {
     const rate = parseFloat(rateStr)
+    const row = carrierRows.find(r => r._id === id)
+    if (!row) return
+    const cap = parseFloat((row as any)[`cbm_${size}`]) || CBM_CAPACITY[size]
     const buyField = `buy_${size}` as keyof CarrierRow
-    if (rate > 0) setRow(id, buyField, (rate * CBM_CAPACITY[size]).toFixed(2))
+    if (rate > 0) setRow(id, buyField, (rate * cap).toFixed(2))
     else setRow(id, buyField, '')
   }
 
@@ -436,9 +444,9 @@ export default function AgentProfilePage() {
           .map(r => ({
             carrier_name: r.carrier_name.trim(),
             pol: r.pol || null, pod: r.pod || null,
-            buy_20gp: n(r.buy_20gp), sell_20gp: n(r.sell_20gp),
-            buy_40ft: n(r.buy_40ft), sell_40ft: n(r.sell_40ft),
-            buy_40hq: n(r.buy_40hq), sell_40hq: n(r.sell_40hq),
+            buy_20gp: n(r.buy_20gp), sell_20gp: n(r.sell_20gp), cbm_20gp: n(r.cbm_20gp),
+            buy_40ft: n(r.buy_40ft), sell_40ft: n(r.sell_40ft), cbm_40ft: n(r.cbm_40ft),
+            buy_40hq: n(r.buy_40hq), sell_40hq: n(r.sell_40hq), cbm_40hq: n(r.cbm_40hq),
             buy_lcl_cbm: n(r.buy_lcl_cbm), sell_lcl_cbm: n(r.sell_lcl_cbm),
             transit_sea_days: ni(r.transit_sea_days),
             notes: r.notes || null,
@@ -912,25 +920,38 @@ export default function AgentProfilePage() {
                     ) : <span />}
                   </div>
 
-                  {/* FCL price grid */}
-                  <div className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 px-1">
+                  {/* FCL price grid — columns: Size | Capacity(CBM) | Rate/m³ | Buy total | Sell total | Margin */}
+                  <div className="grid grid-cols-[36px_60px_70px_1fr_1fr_52px] gap-1.5 px-1 mb-0.5">
                     <span />
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'لكل م³' : 'Per m³'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
+                    <span className="text-[10px] text-blue-400 uppercase">{isAr ? 'سعر/م³' : 'Rate/m³'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء' : 'Buy'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
                   </div>
                   {([
-                    { k: '20gp' as const, l: '20GP', cbmKey: 'cbm_20gp' as const },
-                    { k: '40ft' as const, l: '40GP', cbmKey: 'cbm_40ft' as const },
-                    { k: '40hq' as const, l: '40HQ', cbmKey: 'cbm_40hq' as const },
-                  ]).map(({ k, l, cbmKey }) => (
-                    <div key={k} className="grid grid-cols-[44px_1fr_1fr_1fr_52px] gap-2 items-center">
+                    { k: '20gp' as const, l: '20GP' },
+                    { k: '40ft' as const, l: '40GP' },
+                    { k: '40hq' as const, l: '40HQ' },
+                  ]).map(({ k, l }) => (
+                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_1fr_52px] gap-1.5 items-center">
                       <span className="text-xs font-mono text-brand-text-muted">{l}</span>
+                      {/* CBM capacity (editable, stored in DB) */}
+                      <input type="number" step="0.1" min="1" placeholder={DEFAULT_CBM[k]}
+                        className="input-base text-xs text-amber-300"
+                        title={isAr ? 'سعة الحاوية بالمتر المكعب' : 'Container CBM capacity'}
+                        value={(row as any)[`cbm_${k}`]}
+                        onChange={e => setRow(row._id, `cbm_${k}` as keyof CarrierRow, e.target.value)}
+                      />
+                      {/* Rate per m³ — auto-calculates buy total */}
                       <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs text-blue-300" title={`×${CBM_CAPACITY[k]}m³`}
-                        value={(row as any)[cbmKey]}
-                        onChange={e => { setRow(row._id, cbmKey, e.target.value); applyCbm(row._id, k, e.target.value) }}
+                        className="input-base text-xs text-blue-300"
+                        title={isAr ? 'سعر الشراء لكل م³' : 'Buy rate per m³'}
+                        value={(row as any)[`rate_${k}`]}
+                        onChange={e => {
+                          setRow(row._id, `rate_${k}` as keyof CarrierRow, e.target.value)
+                          applyCbmRate(row._id, k, e.target.value)
+                        }}
                       />
                       <input type="number" step="0.01" min="0" placeholder="0.00"
                         className="input-base text-xs" value={(row as any)[`buy_${k}`]}

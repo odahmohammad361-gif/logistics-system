@@ -326,9 +326,9 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "pol": r.pol, "pod": r.pod,
         "effective_date": str(r.effective_date) if r.effective_date else None,
         "expiry_date": str(r.expiry_date) if r.expiry_date else None,
-        "buy_20gp": f(r.buy_20gp), "sell_20gp": f(r.sell_20gp),
-        "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft),
-        "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq),
+        "buy_20gp": f(r.buy_20gp), "sell_20gp": f(r.sell_20gp), "cbm_20gp": f(r.cbm_20gp),
+        "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft), "cbm_40ft": f(r.cbm_40ft),
+        "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq), "cbm_40hq": f(r.cbm_40hq),
         "buy_lcl_cbm": f(r.buy_lcl_cbm), "sell_lcl_cbm": f(r.sell_lcl_cbm),
         "transit_sea_days": r.transit_sea_days,
         "notes": r.notes, "is_active": r.is_active,
@@ -375,10 +375,13 @@ class CarrierRowCreate(BaseModel):
     pod:              Optional[str]   = None
     buy_20gp:         Optional[float] = None
     sell_20gp:        Optional[float] = None
+    cbm_20gp:         Optional[float] = None
     buy_40ft:         Optional[float] = None
     sell_40ft:        Optional[float] = None
+    cbm_40ft:         Optional[float] = None
     buy_40hq:         Optional[float] = None
     sell_40hq:        Optional[float] = None
+    cbm_40hq:         Optional[float] = None
     buy_lcl_cbm:      Optional[float] = None
     sell_lcl_cbm:     Optional[float] = None
     transit_sea_days: Optional[int]   = None
@@ -439,9 +442,9 @@ def add_price_history(
             existing.pol = row.pol; existing.pod = row.pod
             existing.effective_date = payload.effective_date
             existing.expiry_date = payload.expiry_date or None
-            existing.buy_20gp = row.buy_20gp; existing.sell_20gp = row.sell_20gp
-            existing.buy_40ft = row.buy_40ft; existing.sell_40ft = row.sell_40ft
-            existing.buy_40hq = row.buy_40hq; existing.sell_40hq = row.sell_40hq
+            existing.buy_20gp = row.buy_20gp; existing.sell_20gp = row.sell_20gp; existing.cbm_20gp = row.cbm_20gp
+            existing.buy_40ft = row.buy_40ft; existing.sell_40ft = row.sell_40ft; existing.cbm_40ft = row.cbm_40ft
+            existing.buy_40hq = row.buy_40hq; existing.sell_40hq = row.sell_40hq; existing.cbm_40hq = row.cbm_40hq
             existing.buy_lcl_cbm = row.buy_lcl_cbm; existing.sell_lcl_cbm = row.sell_lcl_cbm
             existing.transit_sea_days = row.transit_sea_days
             existing.notes = row.notes; existing.is_active = True
@@ -451,9 +454,9 @@ def add_price_history(
                 pol=row.pol, pod=row.pod,
                 effective_date=payload.effective_date,
                 expiry_date=payload.expiry_date or None,
-                buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp,
-                buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft,
-                buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq,
+                buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp, cbm_20gp=row.cbm_20gp,
+                buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft, cbm_40ft=row.cbm_40ft,
+                buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq, cbm_40hq=row.cbm_40hq,
                 buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
                 transit_sea_days=row.transit_sea_days,
                 notes=row.notes,

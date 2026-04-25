@@ -153,9 +153,9 @@ export interface AgentCarrierRate {
   pod: string | null
   effective_date: string | null
   expiry_date: string | null
-  buy_20gp: number | null;  sell_20gp: number | null
-  buy_40ft: number | null;  sell_40ft: number | null
-  buy_40hq: number | null;  sell_40hq: number | null
+  buy_20gp: number | null;  sell_20gp: number | null;  cbm_20gp: number | null
+  buy_40ft: number | null;  sell_40ft: number | null;  cbm_40ft: number | null
+  buy_40hq: number | null;  sell_40hq: number | null;  cbm_40hq: number | null
   buy_lcl_cbm: number | null; sell_lcl_cbm: number | null
   transit_sea_days: number | null
   notes: string | null
@@ -480,6 +480,8 @@ export interface Booking {
   loading_notes: string | null
   loading_photos: BookingLoadingPhoto[]
   is_locked: boolean
+  is_agent_snapshot?: boolean
+  agent_carrier_rate_id?: number | null
   created_at: string
   updated_at: string
 }

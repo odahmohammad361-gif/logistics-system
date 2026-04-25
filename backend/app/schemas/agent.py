@@ -13,9 +13,9 @@ class CarrierRateResponse(BaseModel):
     pod: Optional[str] = None
     effective_date: Optional[date] = None
     expiry_date: Optional[date] = None
-    buy_20gp: Optional[Decimal] = None;  sell_20gp: Optional[Decimal] = None
-    buy_40ft: Optional[Decimal] = None;  sell_40ft: Optional[Decimal] = None
-    buy_40hq: Optional[Decimal] = None;  sell_40hq: Optional[Decimal] = None
+    buy_20gp: Optional[Decimal] = None;  sell_20gp: Optional[Decimal] = None;  cbm_20gp: Optional[Decimal] = None
+    buy_40ft: Optional[Decimal] = None;  sell_40ft: Optional[Decimal] = None;  cbm_40ft: Optional[Decimal] = None
+    buy_40hq: Optional[Decimal] = None;  sell_40hq: Optional[Decimal] = None;  cbm_40hq: Optional[Decimal] = None
     buy_lcl_cbm: Optional[Decimal] = None; sell_lcl_cbm: Optional[Decimal] = None
     transit_sea_days: Optional[int] = None
     notes: Optional[str] = None

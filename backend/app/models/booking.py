@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Text, Date
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Text, Date, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -24,6 +24,9 @@ class Booking(Base):
 
     # Agent & Branch
     shipping_agent_id = Column(Integer, ForeignKey("shipping_agents.id"), nullable=True)
+    # Link to the current agent carrier rate used to create this booking (snapshot)
+    agent_carrier_rate_id = Column(Integer, ForeignKey("agent_carrier_rates.id"), nullable=True)
+    is_agent_snapshot = Column(Boolean, default=False, nullable=False)
     branch_id         = Column(Integer, ForeignKey("branches.id"),        nullable=True)
 
     # Container / transport identifiers
@@ -69,6 +72,7 @@ class Booking(Base):
 
     # Relationships
     agent              = relationship("ShippingAgent",   foreign_keys=[shipping_agent_id])
+    agent_carrier_rate = relationship("AgentCarrierRate", foreign_keys=[agent_carrier_rate_id])
     branch             = relationship("Branch",          foreign_keys=[branch_id])
     loading_warehouse  = relationship("CompanyWarehouse", foreign_keys=[loading_warehouse_id])
     loading_photos     = relationship(

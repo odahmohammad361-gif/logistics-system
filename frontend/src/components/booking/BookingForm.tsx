@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
@@ -99,25 +99,66 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     enabled:  !!agentId && !isDirect && mode !== 'AIR',
   })
 
-  // When a carrier is selected from agent rates, auto-fill POL/POD/freight/size
+  // Track which fields were locked from agent
+  const [lockedFromAgent, setLockedFromAgent] = useState(false)
+
+  // Reset locking when agent changes or booking is direct
+  useEffect(() => {
+    if (!agentId || isDirect) setLockedFromAgent(false)
+  }, [agentId, isDirect])
+
+  // If editing an existing booking that was locked from agent, restore lock
+  useEffect(() => {
+    if (initial && (((initial as any).is_locked) || (initial.is_agent_snapshot))) setLockedFromAgent(true)
+  }, [initial])
+
+  // When a carrier is selected from agent rates, auto-fill and lock fields
   function applyCarrierRate(carrierName: string) {
     const rate = (carrierRates ?? []).find(r => r.carrier_name === carrierName)
-    if (!rate) return
+    if (!rate) { setLockedFromAgent(false); return }
     if (rate.pol) setValue('port_of_loading', rate.pol)
     if (rate.pod) setValue('port_of_discharge', rate.pod)
-    // Determine available sizes and pick the sell price
-    // Priority: 40HQ > 40GP > 20GP (pick whichever exists)
-    if (rate.sell_40hq != null) {
-      setValue('container_size', '40HQ')
-      setValue('freight_cost', String(rate.sell_40hq))
-    } else if (rate.sell_40ft != null) {
-      setValue('container_size', '40GP')
-      setValue('freight_cost', String(rate.sell_40ft))
-    } else if (rate.sell_20gp != null) {
-      setValue('container_size', '20GP')
-      setValue('freight_cost', String(rate.sell_20gp))
-    }
     setValue('carrier_name', carrierName)
+
+    // Auto-detect mode: if only LCL prices → LCL, else FCL
+    const hasFcl = rate.sell_20gp != null || rate.sell_40ft != null || rate.sell_40hq != null
+    const hasLcl = rate.sell_lcl_cbm != null
+    if (!hasFcl && hasLcl) {
+      setValue('mode', 'LCL')
+    } else {
+      setValue('mode', 'FCL')
+      // Pick largest available size as default
+      if (rate.sell_40hq != null) {
+        setValue('container_size', '40HQ')
+        setValue('freight_cost', String(rate.sell_40hq))
+        setValue('max_cbm', String(rate.cbm_40hq ?? 76))
+      } else if (rate.sell_40ft != null) {
+        setValue('container_size', '40GP')
+        setValue('freight_cost', String(rate.sell_40ft))
+        setValue('max_cbm', String(rate.cbm_40ft ?? 67))
+      } else if (rate.sell_20gp != null) {
+        setValue('container_size', '20GP')
+        setValue('freight_cost', String(rate.sell_20gp))
+        setValue('max_cbm', String(rate.cbm_20gp ?? 28))
+      }
+    }
+    setLockedFromAgent(true)
+  }
+
+  // When size changes while carrier is locked, update freight + CBM from that carrier
+  function onSizeChange(size: string) {
+    const watchedCarrier = watch('carrier_name')
+    const rate = (carrierRates ?? []).find(r => r.carrier_name === watchedCarrier)
+    if (rate) {
+      const priceMap: Record<string, { sell: number | null; cbm: number | null }> = {
+        '20GP': { sell: rate.sell_20gp, cbm: rate.cbm_20gp ?? 28 },
+        '40GP': { sell: rate.sell_40ft, cbm: rate.cbm_40ft ?? 67 },
+        '40HQ': { sell: rate.sell_40hq, cbm: rate.cbm_40hq ?? 76 },
+      }
+      const entry = priceMap[size]
+      if (entry?.sell != null) setValue('freight_cost', String(entry.sell))
+      if (entry?.cbm != null)  setValue('max_cbm', String(entry.cbm))
+    }
   }
 
   // Detect destination from port of discharge
@@ -155,18 +196,19 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     }))
   }, [carrierRates])
 
-  // Container sizes available for selected carrier
+  const watchedCarrierName = watch('carrier_name')
+
+  // Container sizes available for selected carrier — with sell price in label
   const sizeOptionsForCarrier = useMemo(() => {
-    const watchedCarrier = watch('carrier_name')
-    if (!carrierRates || !watchedCarrier) return CONTAINER_SIZES.map(s => ({ value: s, label: s }))
-    const rate = carrierRates.find(r => r.carrier_name === watchedCarrier)
+    if (!carrierRates || !watchedCarrierName) return CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+    const rate = carrierRates.find(r => r.carrier_name === watchedCarrierName)
     if (!rate) return CONTAINER_SIZES.map(s => ({ value: s, label: s }))
-    const available: string[] = []
-    if (rate.sell_20gp != null) available.push('20GP')
-    if (rate.sell_40ft != null) available.push('40GP')
-    if (rate.sell_40hq != null) available.push('40HQ')
-    return available.length ? available.map(s => ({ value: s, label: s })) : CONTAINER_SIZES.map(s => ({ value: s, label: s }))
-  }, [carrierRates, watch('carrier_name')])
+    const opts: { value: string; label: string }[] = []
+    if (rate.sell_20gp != null) opts.push({ value: '20GP', label: `20GP — $${Number(rate.sell_20gp).toLocaleString()}` })
+    if (rate.sell_40ft != null) opts.push({ value: '40GP', label: `40GP — $${Number(rate.sell_40ft).toLocaleString()}` })
+    if (rate.sell_40hq != null) opts.push({ value: '40HQ', label: `40HQ — $${Number(rate.sell_40hq).toLocaleString()}` })
+    return opts.length ? opts : CONTAINER_SIZES.map(s => ({ value: s, label: s }))
+  }, [carrierRates, watchedCarrierName])
 
   const statusOptions        = STATUSES.map(s => ({ value: s, label: t(`bookings.status_${s}`) }))
   const containerSizeOptions = sizeOptionsForCarrier
@@ -222,7 +264,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
   function toNum(v: string) { const n = parseFloat(v); return isNaN(n) ? null : n }
 
   async function handleFormSubmit(vals: FormValues) {
-    await onSubmit({
+    const payload: Record<string, unknown> = {
       mode:               vals.mode,
       status:             vals.status,
       is_direct_booking:  vals.is_direct_booking,
@@ -246,7 +288,15 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
       max_cbm:            toNum(vals.max_cbm),
       markup_pct:         toNum(vals.markup_pct),
       notes:              vals.notes           || null,
-    })
+    }
+
+    // If locked from an agent, include the agent_carrier_rate_id for server-side snapshot
+    if (lockedFromAgent && carrierRates && vals.carrier_name) {
+      const rate = carrierRates.find(r => r.carrier_name === vals.carrier_name)
+      if (rate) payload.agent_carrier_rate_id = rate.id
+    }
+
+    await onSubmit(payload)
   }
 
   const modeLabels: Record<BookingMode, string> = {
@@ -323,10 +373,11 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
                 }
                 {...register('agent_id')} />
               <Select label={t('bookings.carrier_line')} options={carrierOptions}
-                placeholder={carrierOptionsFromAgent ? (isAr ? 'اختر شركة الشحن...' : 'Select carrier...') : t('bookings.select_carrier')}
-                {...register('carrier_name', {
-                  onChange: (e) => { if (carrierOptionsFromAgent) applyCarrierRate(e.target.value) }
-                })} />
+                  placeholder={carrierOptionsFromAgent ? (isAr ? 'اختر شركة الشحن...' : 'Select carrier...') : t('bookings.select_carrier')}
+                  disabled={lockedFromAgent}
+                  {...register('carrier_name', {
+                    onChange: (e) => { if (carrierOptionsFromAgent) applyCarrierRate(e.target.value) }
+                  })} />
             </FormRow>
           )}
           {isDirect && (
@@ -337,24 +388,20 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
           {mode !== 'AIR' && (
             <FormRow>
               <Select label={t('bookings.container_size')} options={containerSizeOptions}
-                placeholder="—"
-                {...register('container_size', {
-                  onChange: (e) => {
-                    // When size changes, update freight_cost from carrier rate sell price
-                    const size = e.target.value
-                    const watchedCarrier = watch('carrier_name')
-                    const rate = (carrierRates ?? []).find(r => r.carrier_name === watchedCarrier)
-                    if (rate) {
-                      const price = size === '20GP' ? rate.sell_20gp : size === '40GP' ? rate.sell_40ft : size === '40HQ' ? rate.sell_40hq : null
-                      if (price != null) setValue('freight_cost', String(price))
+                  placeholder="—"
+                  disabled={lockedFromAgent}
+                  {...register('container_size', {
+                    onChange: (e) => {
+                      const size = e.target.value
+                      onSizeChange(size)
                     }
-                  }
-                })} />
+                  })} />
               <Input
                 label={isAr ? 'سعة الحاوية (CBM)' : 'Container Capacity (CBM)'}
                 type="number" step="0.5" min="1"
                 placeholder={containerSize ? String(CONTAINER_CBM_DEFAULTS[containerSize] ?? '') : '—'}
-                {...register('max_cbm')}
+                  {...register('max_cbm')}
+                  disabled={lockedFromAgent}
               />
             </FormRow>
           )}
@@ -382,12 +429,14 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
               label={t('bookings.port_loading')}
               options={mode === 'AIR' ? AIR_PORT_OPTIONS : SEA_PORT_OPTIONS}
               placeholder={isAr ? '— اختر ميناء الشحن —' : '— Select loading port —'}
+              disabled={lockedFromAgent}
               {...register('port_of_loading')}
             />
             <Select
               label={t('bookings.port_discharge')}
               options={mode === 'AIR' ? AIR_PORT_OPTIONS : SEA_PORT_OPTIONS}
               placeholder={isAr ? '— اختر ميناء التفريغ —' : '— Select discharge port —'}
+              disabled={lockedFromAgent}
               {...register('port_of_discharge')}
             />
           </FormRow>
@@ -409,6 +458,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
               label={isAr ? 'سعر الوكيل (إجمالي)' : 'Agent Price (Total)'}
               type="number" step="0.01" min="0"
               {...register('freight_cost')}
+              disabled={lockedFromAgent}
             />
             <Input
               label={isAr ? 'نسبة الربح %' : 'Markup %'}

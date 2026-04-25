@@ -106,10 +106,13 @@ class AgentCarrierRate(Base):
     expiry_date    = Column(Date, nullable=True)
     buy_20gp     = Column(Numeric(10, 2), nullable=True)
     sell_20gp    = Column(Numeric(10, 2), nullable=True)
+    cbm_20gp     = Column(Numeric(8, 2), nullable=True)   # container CBM capacity
     buy_40ft     = Column(Numeric(10, 2), nullable=True)
     sell_40ft    = Column(Numeric(10, 2), nullable=True)
+    cbm_40ft     = Column(Numeric(8, 2), nullable=True)
     buy_40hq     = Column(Numeric(10, 2), nullable=True)
     sell_40hq    = Column(Numeric(10, 2), nullable=True)
+    cbm_40hq     = Column(Numeric(8, 2), nullable=True)
     buy_lcl_cbm  = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm = Column(Numeric(10, 2), nullable=True)
     transit_sea_days = Column(Integer, nullable=True)

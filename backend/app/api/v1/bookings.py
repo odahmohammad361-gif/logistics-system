@@ -190,6 +190,8 @@ def _serialize_booking(b: Booking) -> BookingResponse:
         notes=b.notes,
         is_direct_booking=(b.is_direct_booking == "1"),
         carrier_name=b.carrier_name,
+        agent_carrier_rate_id=b.agent_carrier_rate_id,
+        is_agent_snapshot=bool(getattr(b, 'is_agent_snapshot', False)),
         agent=AgentShort(id=b.agent.id, name=b.agent.name) if b.agent else None,
         branch=BranchShort(
             id=b.branch.id, name=b.branch.name,
@@ -332,6 +334,7 @@ def create_booking(
         mode=mode,
         status="draft",
         shipping_agent_id=payload.shipping_agent_id,
+        agent_carrier_rate_id=payload.agent_carrier_rate_id,
         branch_id=payload.branch_id,
         container_size=payload.container_size,
         container_no=payload.container_no or None,
@@ -355,6 +358,9 @@ def create_booking(
         markup_pct=payload.markup_pct,
         destination=_port_to_destination(payload.port_of_discharge),
     )
+    # Mark snapshot if created from an agent carrier rate
+    if payload.agent_carrier_rate_id:
+        booking.is_agent_snapshot = True
     db.add(booking)
     db.flush()
 
@@ -420,6 +426,12 @@ def update_booking(
     # is_direct_booking stored as string "1"/"0"
     if "is_direct_booking" in data:
         data["is_direct_booking"] = "1" if data["is_direct_booking"] else "0"
+    # If this booking was created from an agent snapshot, certain fields are immutable
+    locked_fields = {"carrier_name", "container_size", "max_cbm", "port_of_loading", "port_of_discharge", "freight_cost"}
+    if getattr(b, 'is_agent_snapshot', False):
+        for k in list(data.keys()):
+            if k in locked_fields:
+                data.pop(k, None)
     for field, value in data.items():
         setattr(b, field, value)
     # Auto-update destination when port_of_discharge changes
