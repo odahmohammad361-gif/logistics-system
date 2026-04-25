@@ -317,14 +317,53 @@ export interface AgentListResponse {
 }
 
 // ── Clearance Agent ───────────────────────────────────────────────────────────
+export interface ClearanceAgentRate {
+  id: number
+  service_mode: 'sea' | 'air'
+  country: string | null
+  port: string | null
+  route: string | null
+  buy_clearance_fee: number | null
+  sell_clearance_fee: number | null
+  buy_transportation: number | null
+  sell_transportation: number | null
+  buy_delivery_authorization: number | null
+  sell_delivery_authorization: number | null
+  buy_inspection_ramp: number | null
+  sell_inspection_ramp: number | null
+  buy_port_inspection: number | null
+  sell_port_inspection: number | null
+  buy_import_export_card_pct: number | null
+  sell_import_export_card_pct: number | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ClearanceAgentEditLog {
+  id: number
+  action: string
+  summary: string | null
+  changed_by: string | null
+  changed_at: string
+}
+
 export interface ClearanceAgent {
   id: number
   name: string
+  name_ar: string | null
   country: string | null
   city: string | null
+  address: string | null
+  contact_person: string | null
   phone: string | null
+  whatsapp: string | null
   email: string | null
   license_number: string | null
+  bank_name: string | null
+  bank_account: string | null
+  bank_swift: string | null
   clearance_fee: number | null
   service_fee: number | null
   transport_fee: number | null
@@ -333,6 +372,10 @@ export interface ClearanceAgent {
   total_fixed_fees: number | null
   notes: string | null
   is_active: boolean
+  created_at: string
+  updated_at: string
+  rates?: ClearanceAgentRate[]
+  edit_log?: ClearanceAgentEditLog[]
 }
 
 export interface ClearanceAgentListResponse {

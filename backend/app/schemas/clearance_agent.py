@@ -48,6 +48,69 @@ class ClearanceAgentUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class ClearanceAgentRateBase(BaseModel):
+    service_mode: str = "sea"
+    country: Optional[str] = None
+    port: Optional[str] = None
+    route: Optional[str] = None
+    buy_clearance_fee: Optional[Decimal] = None
+    sell_clearance_fee: Optional[Decimal] = None
+    buy_transportation: Optional[Decimal] = None
+    sell_transportation: Optional[Decimal] = None
+    buy_delivery_authorization: Optional[Decimal] = None
+    sell_delivery_authorization: Optional[Decimal] = None
+    buy_inspection_ramp: Optional[Decimal] = None
+    sell_inspection_ramp: Optional[Decimal] = None
+    buy_port_inspection: Optional[Decimal] = None
+    sell_port_inspection: Optional[Decimal] = None
+    buy_import_export_card_pct: Optional[Decimal] = None
+    sell_import_export_card_pct: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
+class ClearanceAgentRateCreate(ClearanceAgentRateBase):
+    pass
+
+
+class ClearanceAgentRateUpdate(BaseModel):
+    service_mode: Optional[str] = None
+    country: Optional[str] = None
+    port: Optional[str] = None
+    route: Optional[str] = None
+    buy_clearance_fee: Optional[Decimal] = None
+    sell_clearance_fee: Optional[Decimal] = None
+    buy_transportation: Optional[Decimal] = None
+    sell_transportation: Optional[Decimal] = None
+    buy_delivery_authorization: Optional[Decimal] = None
+    sell_delivery_authorization: Optional[Decimal] = None
+    buy_inspection_ramp: Optional[Decimal] = None
+    sell_inspection_ramp: Optional[Decimal] = None
+    buy_port_inspection: Optional[Decimal] = None
+    sell_port_inspection: Optional[Decimal] = None
+    buy_import_export_card_pct: Optional[Decimal] = None
+    sell_import_export_card_pct: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
+class ClearanceAgentRateResponse(ClearanceAgentRateBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClearanceAgentEditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    action: str
+    summary: Optional[str] = None
+    changed_by: Optional[str] = None
+    changed_at: datetime
+
+
 class ClearanceAgentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,18 +139,8 @@ class ClearanceAgentResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-
-    @classmethod
-    def model_validate(cls, obj, **kwargs):
-        instance = super().model_validate(obj, **kwargs)
-        # Compute total fixed fees
-        fees = [
-            obj.clearance_fee, obj.service_fee,
-            obj.transport_fee, obj.handling_fee,
-        ]
-        total = sum(Decimal(str(f)) for f in fees if f is not None)
-        instance.total_fixed_fees = total if total > 0 else None
-        return instance
+    rates: list[ClearanceAgentRateResponse] = []
+    edit_log: list[ClearanceAgentEditLogResponse] = []
 
 
 class ClearanceAgentListResponse(BaseModel):

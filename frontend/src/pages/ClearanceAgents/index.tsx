@@ -1,36 +1,50 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Anchor, BadgeCheck, ExternalLink, Mail, MapPin, Pencil, Phone, Plus, Search, Ship, Trash2, Wind } from 'lucide-react'
 import { getClearanceAgents, createClearanceAgent, updateClearanceAgent, deleteClearanceAgent } from '@/services/agentService'
 import { useAuth } from '@/hooks/useAuth'
-import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
+import { Input, Select, FormRow, FormSection, Textarea } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
 import type { ClearanceAgent } from '@/types'
 
 interface FormValues {
   name: string
+  name_ar: string
+  contact_person: string
   phone: string
+  whatsapp: string
   email: string
   country: string
   city: string
+  address: string
   license_number: string
-  clearance_fee: number
-  service_fee: number
-  transport_fee: number
-  handling_fee: number
+  bank_name: string
+  bank_account: string
+  bank_swift: string
   notes: string
 }
 
-const COUNTRIES = ['jordan', 'iraq', 'china', 'uae', 'saudi_arabia', 'other']
+const COUNTRIES = ['Jordan', 'Iraq', 'China', 'UAE', 'Saudi Arabia', 'Other']
+
+function money(v: number | null | undefined, decimals = 0) {
+  if (v == null) return null
+  return `$${Number(v).toFixed(decimals)}`
+}
+
+function preferred(sell: number | null | undefined, buy: number | null | undefined) {
+  return sell ?? buy ?? null
+}
 
 export default function ClearanceAgentsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   const { isStaff, isAdmin } = useAuth()
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -51,8 +65,25 @@ export default function ClearanceAgentsPage() {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>()
 
   const saveMut = useMutation({
-    mutationFn: (v: FormValues) =>
-      editing ? updateClearanceAgent(editing.id, v) : createClearanceAgent(v),
+    mutationFn: (v: FormValues) => {
+      const payload = {
+        name: v.name,
+        name_ar: v.name_ar || null,
+        contact_person: v.contact_person || null,
+        phone: v.phone || null,
+        whatsapp: v.whatsapp || null,
+        email: v.email || null,
+        country: v.country || null,
+        city: v.city || null,
+        address: v.address || null,
+        license_number: v.license_number || null,
+        bank_name: v.bank_name || null,
+        bank_account: v.bank_account || null,
+        bank_swift: v.bank_swift || null,
+        notes: v.notes || null,
+      }
+      return editing ? updateClearanceAgent(editing.id, payload) : createClearanceAgent(payload)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clearance-agents'] })
       setModalOpen(false)
@@ -71,7 +102,13 @@ export default function ClearanceAgentsPage() {
 
   function openCreate() {
     setEditing(null)
-    reset({ clearance_fee: 0, service_fee: 0, transport_fee: 0, handling_fee: 0 })
+    reset({
+      name: '', name_ar: '', contact_person: '',
+      phone: '', whatsapp: '', email: '',
+      country: '', city: '', address: '',
+      license_number: '', bank_name: '', bank_account: '', bank_swift: '',
+      notes: '',
+    })
     setModalOpen(true)
   }
 
@@ -79,86 +116,22 @@ export default function ClearanceAgentsPage() {
     setEditing(agent)
     reset({
       name: agent.name,
+      name_ar: agent.name_ar ?? '',
+      contact_person: agent.contact_person ?? '',
       phone: agent.phone ?? '',
+      whatsapp: agent.whatsapp ?? '',
       email: agent.email ?? '',
       country: agent.country ?? '',
       city: agent.city ?? '',
+      address: agent.address ?? '',
       license_number: agent.license_number ?? '',
-      clearance_fee: Number(agent.clearance_fee ?? 0),
-      service_fee: Number(agent.service_fee ?? 0),
-      transport_fee: Number(agent.transport_fee ?? 0),
-      handling_fee: Number(agent.handling_fee ?? 0),
+      bank_name: agent.bank_name ?? '',
+      bank_account: agent.bank_account ?? '',
+      bank_swift: agent.bank_swift ?? '',
       notes: agent.notes ?? '',
     })
     setModalOpen(true)
   }
-
-  const columns = [
-    {
-      key: 'name',
-      label: t('agents.name'),
-      render: (a: ClearanceAgent) => (
-        <div>
-          <p className="text-sm text-white font-medium">{a.name}</p>
-          
-        </div>
-      ),
-    },
-    {
-      key: 'location',
-      label: t('common.location'),
-      render: (a: ClearanceAgent) => (
-        <span className="text-sm text-gray-400">
-          {[a.city, a.country].filter(Boolean).join(', ')}
-        </span>
-      ),
-    },
-    {
-      key: 'contact',
-      label: t('common.contact'),
-      render: (a: ClearanceAgent) => (
-        <div>
-          {a.phone && <p className="text-sm text-gray-300">{a.phone}</p>}
-          {a.email && <p className="text-xs text-gray-500">{a.email}</p>}
-        </div>
-      ),
-    },
-    {
-      key: 'fees',
-      label: t('agents.fees'),
-      render: (a: ClearanceAgent) => (
-        <div className="text-xs text-gray-300">
-          {a.clearance_fee != null && <p>Clearance: ${a.clearance_fee}</p>}
-          {(a as any).total_fixed_fees != null && (
-            <p className="text-brand-green font-semibold">Total: ${(a as any).total_fixed_fees}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'actions',
-      label: '',
-      className: 'w-20',
-      render: (a: ClearanceAgent) => isStaff && (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => openEdit(a)}
-            className="p-1.5 rounded hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-          >
-            <Pencil size={14} />
-          </button>
-          {isAdmin && (
-            <button
-              onClick={() => setDeleting(a)}
-              className="p-1.5 rounded hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ]
 
   return (
     <div className="space-y-4">
@@ -191,90 +164,160 @@ export default function ClearanceAgentsPage() {
           className="input-base"
         >
           <option value="">{t('common.all_countries')}</option>
-          {COUNTRIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
+          {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
-      <Table
-        columns={columns}
-        data={data?.results ?? []}
-        total={data?.total ?? 0}
-        page={page}
-        loading={isLoading}
-        onPageChange={setPage}
-        rowKey={(a) => a.id}
-      />
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.02] h-56 animate-pulse" />)}
+        </div>
+      ) : (data?.results ?? []).length === 0 ? (
+        <div className="card py-16 text-center text-gray-500 text-sm">{t('common.no_data')}</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {(data?.results ?? []).map((agent) => (
+            <div key={agent.id} className="rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col overflow-hidden">
+              <div className="px-4 pt-4 pb-3 border-b border-white/5 flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                      <Anchor size={9} /> CLEARANCE
+                    </span>
+                    {agent.country && <span className="text-[10px] text-gray-500">{agent.country}</span>}
+                  </div>
+                  <p className="text-sm font-bold text-white truncate">{agent.name}</p>
+                  {agent.name_ar && <p className="text-xs text-gray-500 truncate">{agent.name_ar}</p>}
+                </div>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <button
+                    onClick={() => navigate(`/clearance-agents/${agent.id}`)}
+                    className="p-1.5 rounded-lg hover:bg-white/8 text-gray-400 hover:text-brand-primary-light transition-colors"
+                    title={isAr ? 'الملف الشخصي' : 'Profile'}
+                  >
+                    <ExternalLink size={13} />
+                  </button>
+                  {isStaff && (
+                    <button onClick={() => openEdit(agent)} className="p-1.5 rounded-lg hover:bg-white/8 text-gray-400 hover:text-white transition-colors">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => setDeleting(agent)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
 
-      {/* Create / Edit */}
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? t('agents.edit') : t('agents.add')}
-        size="lg"
-      >
+              <div className="px-4 py-3 flex flex-col gap-2.5 flex-1">
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {agent.phone && <span className="text-[11px] text-gray-500 flex items-center gap-1"><Phone size={10} />{agent.phone}</span>}
+                  {agent.email && <span className="text-[11px] text-gray-500 flex items-center gap-1"><Mail size={10} />{agent.email}</span>}
+                  {(agent.city || agent.country) && <span className="text-[11px] text-gray-500 flex items-center gap-1"><MapPin size={10} />{[agent.city, agent.country].filter(Boolean).join(', ')}</span>}
+                </div>
+
+                {agent.license_number && (
+                  <span className="self-start text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <BadgeCheck size={10} /> {agent.license_number}
+                  </span>
+                )}
+
+                {(agent.rates ?? []).length > 0 ? (
+                  <div className="space-y-1.5">
+                    {(agent.rates ?? []).slice(0, 3).map((rate) => {
+                      const clearance = preferred(rate.sell_clearance_fee, rate.buy_clearance_fee)
+                      const transport = preferred(rate.sell_transportation, rate.buy_transportation)
+                      const Icon = rate.service_mode === 'air' ? Wind : Ship
+                      return (
+                        <div key={rate.id} className="rounded-xl border border-white/8 bg-white/[0.025] px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-white truncate flex items-center gap-1.5">
+                              <Icon size={10} className={rate.service_mode === 'air' ? 'text-violet-300' : 'text-blue-300'} />
+                              {rate.service_mode.toUpperCase()}
+                            </span>
+                            {(rate.port || rate.route) && (
+                              <span className="text-[9px] text-gray-500 truncate">
+                                {rate.port ?? '—'} {rate.route ? `→ ${rate.route}` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {clearance != null && <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">Clearance {money(clearance)}</span>}
+                            {transport != null && <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full">Transport {money(transport)}</span>}
+                            {rate.sell_import_export_card_pct != null && <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full">Card {rate.sell_import_export_card_pct}%</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {(agent.rates ?? []).length > 3 && (
+                      <button type="button" onClick={() => navigate(`/clearance-agents/${agent.id}`)} className="text-[10px] text-brand-primary-light hover:underline">
+                        +{(agent.rates ?? []).length - 3} {isAr ? 'أسعار أخرى' : 'more rates'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-500">{isAr ? 'لا توجد أسعار تخليص بعد' : 'No clearance rates yet'}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(data?.total ?? 0) > 20 && (
+        <div className="flex justify-center gap-2">
+          <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>{t('common.prev')}</Button>
+          <Button variant="secondary" size="sm" disabled={page * 20 >= (data?.total ?? 0)} onClick={() => setPage(p => p + 1)}>{t('common.next')}</Button>
+        </div>
+      )}
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? t('agents.edit') : t('agents.add')} size="lg">
         <form onSubmit={handleSubmit((v) => saveMut.mutate(v))} className="space-y-5">
           <FormSection title={t('agents.basic_info')}>
             <FormRow>
-              <Input
-                label={t('agents.name')}
-                {...register('name', { required: true })}
-                error={errors.name ? t('common.required') : undefined}
-              />
+              <Input label={t('agents.name')} {...register('name', { required: true })} error={errors.name ? t('common.required') : undefined} />
+              <Input label={isAr ? 'الاسم العربي' : 'Arabic Name'} {...register('name_ar')} />
             </FormRow>
+            <Input label={isAr ? 'الشخص المسؤول' : 'Contact Person'} {...register('contact_person')} />
             <FormRow>
               <Input label={t('common.phone')} {...register('phone')} />
-              <Input type="email" label={t('common.email')} {...register('email')} />
+              <Input label="WhatsApp" {...register('whatsapp')} />
             </FormRow>
+            <Input type="email" label={t('common.email')} {...register('email')} />
             <Input label={t('agents.license_number')} {...register('license_number')} />
           </FormSection>
 
           <FormSection title={t('common.location')}>
             <FormRow>
+              <Select label={t('common.country')} options={[{ value: '', label: '—' }, ...COUNTRIES.map(c => ({ value: c, label: c }))]} {...register('country')} />
               <Input label={t('common.city')} {...register('city')} />
-              <Input label={t('common.country')} {...register('country')} />
+            </FormRow>
+            <Textarea label={isAr ? 'العنوان' : 'Address'} {...register('address')} />
+          </FormSection>
+
+          <FormSection title={isAr ? 'البنك' : 'Bank Details'}>
+            <Input label={isAr ? 'اسم البنك' : 'Bank Name'} {...register('bank_name')} />
+            <FormRow>
+              <Input label={isAr ? 'رقم الحساب' : 'Account'} {...register('bank_account')} />
+              <Input label="SWIFT" {...register('bank_swift')} />
             </FormRow>
           </FormSection>
 
-          <FormSection title={t('agents.fees')}>
-            <FormRow cols={2}>
-              <Input type="number" step="0.01" label={t('agents.clearance_fee')} {...register('clearance_fee', { valueAsNumber: true })} />
-              <Input type="number" step="0.01" label={t('agents.service_fee')} {...register('service_fee', { valueAsNumber: true })} />
-            </FormRow>
-            <FormRow cols={2}>
-              <Input type="number" step="0.01" label={t('agents.transport_fee')} {...register('transport_fee', { valueAsNumber: true })} />
-              <Input type="number" step="0.01" label={t('agents.handling_fee')} {...register('handling_fee', { valueAsNumber: true })} />
-            </FormRow>
-          </FormSection>
-
-          <Input label={t('common.notes')} {...register('notes')} />
+          <Textarea label={t('common.notes')} {...register('notes')} />
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" loading={saveMut.isPending}>
-              {t('common.save')}
-            </Button>
+            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={saveMut.isPending}>{t('common.save')}</Button>
           </div>
         </form>
       </Modal>
 
-      {/* Delete */}
       <Modal open={!!deleting} onClose={() => setDeleting(null)} title={t('common.confirm_delete')} size="sm">
-        <p className="text-sm text-gray-300 mb-5">
-          {t('agents.delete_confirm', { name: deleting?.name })}
-        </p>
+        <p className="text-sm text-gray-300 mb-5">{t('agents.delete_confirm', { name: deleting?.name })}</p>
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDeleting(null)}>{t('common.cancel')}</Button>
-          <Button
-            variant="danger"
-            loading={deleteMut.isPending}
-            onClick={() => deleting && deleteMut.mutate(deleting.id)}
-          >
-            {t('common.delete')}
-          </Button>
+          <Button variant="danger" loading={deleteMut.isPending} onClick={() => deleting && deleteMut.mutate(deleting.id)}>{t('common.delete')}</Button>
         </div>
       </Modal>
     </div>

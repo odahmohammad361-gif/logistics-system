@@ -73,3 +73,12 @@ export const updateClearanceAgent = (id: number, data: unknown) =>
 
 export const deleteClearanceAgent = (id: number) =>
   api.delete(`/clearance-agents/${id}`)
+
+export const createClearanceAgentRate = (agentId: number, data: unknown) =>
+  api.post(`/clearance-agents/${agentId}/rates`, data).then((r) => r.data)
+
+export const updateClearanceAgentRate = (agentId: number, rateId: number, data: unknown) =>
+  api.patch(`/clearance-agents/${agentId}/rates/${rateId}`, data).then((r) => r.data)
+
+export const deleteClearanceAgentRate = (agentId: number, rateId: number) =>
+  api.delete(`/clearance-agents/${agentId}/rates/${rateId}`)

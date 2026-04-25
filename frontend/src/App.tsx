@@ -22,6 +22,7 @@ import InvoiceEdit     from '@/pages/Invoices/edit'
 import ShippingAgents       from '@/pages/ShippingAgents'
 import ShippingAgentProfile from '@/pages/ShippingAgents/profile'
 import ClearanceAgents from '@/pages/ClearanceAgents'
+import ClearanceAgentProfile from '@/pages/ClearanceAgents/profile'
 import Market          from '@/pages/Market'
 import Users           from '@/pages/Users'
 import Company         from '@/pages/Company'
@@ -102,6 +103,7 @@ export default function App() {
             <Route path="/shipping-agents"          element={<AppLayout><ShippingAgents /></AppLayout>} />
             <Route path="/shipping-agents/:id"     element={<AppLayout><ShippingAgentProfile /></AppLayout>} />
             <Route path="/clearance-agents"    element={<AppLayout><ClearanceAgents /></AppLayout>} />
+            <Route path="/clearance-agents/:id" element={<AppLayout><ClearanceAgentProfile /></AppLayout>} />
             <Route path="/market"              element={<AppLayout><Market /></AppLayout>} />
             <Route path="/containers"          element={<AppLayout><Containers /></AppLayout>} />
             <Route path="/containers/:id"      element={<AppLayout><ContainerDetail /></AppLayout>} />
