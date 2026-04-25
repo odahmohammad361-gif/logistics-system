@@ -10,18 +10,41 @@ import { getWarehouses } from '@/services/warehouseService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import Badge from '@/components/ui/Badge'
 import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
 import type { ShippingAgent } from '@/types'
-import { getFlatPortOptions } from '@/constants/logistics'
 import clsx from 'clsx'
 
-const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
-const COMMON_SEA_CARRIERS = [
-  'CMA CGM', 'MSC', 'Evergreen', 'PIL', 'COSCO', 'Yang Ming',
-  'Hapag-Lloyd', 'ONE', 'HMM', 'ZIM', 'OOCL', 'Maersk', 'Wan Hai',
-]
+function fmtCardUsd(value: number | null | undefined, decimals = 0) {
+  if (value == null) return null
+  return `$${Number(value).toFixed(decimals)}`
+}
+
+function preferredPrice(sell: number | null | undefined, buy: number | null | undefined) {
+  return sell ?? buy ?? null
+}
+
+function linePricePills(cr: NonNullable<ShippingAgent['carrier_rates']>[number]) {
+  const fcl = [
+    ['20GP', preferredPrice(cr.sell_20gp, cr.buy_20gp), 0],
+    ['40GP', preferredPrice(cr.sell_40ft, cr.buy_40ft), 0],
+    ['40HQ', preferredPrice(cr.sell_40hq, cr.buy_40hq), 0],
+  ] as const
+  const lcl = [
+    ['LCL 20', preferredPrice(cr.sell_lcl_20gp, cr.buy_lcl_20gp), 2],
+    ['LCL 40', preferredPrice(cr.sell_lcl_40ft, cr.buy_lcl_40ft), 2],
+    ['LCL HQ', preferredPrice(cr.sell_lcl_40hq, cr.buy_lcl_40hq), 2],
+  ] as const
+
+  return {
+    fcl: fcl
+      .map(([label, value, decimals]) => ({ label, value: fmtCardUsd(value, decimals) }))
+      .filter(p => p.value),
+    lcl: lcl
+      .map(([label, value, decimals]) => ({ label, value: fmtCardUsd(value, decimals) }))
+      .filter(p => p.value),
+  }
+}
 
 // ── Static location data ───────────────────────────────────────────────────────
 const AGENT_COUNTRIES = [
@@ -289,16 +312,52 @@ export default function ShippingAgentsPage() {
                   )
                 })()}
 
-                {/* Carrier rates pills */}
-                {(agent as any).carrier_rates?.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {(agent as any).carrier_rates.slice(0, 4).map((cr: any) => (
-                      <span key={cr.id} className="text-[10px] font-mono bg-white/5 text-gray-300 px-2 py-0.5 rounded-full border border-white/8">
-                        {cr.carrier_name}
-                      </span>
-                    ))}
-                    {(agent as any).carrier_rates.length > 4 && (
-                      <span className="text-[10px] text-gray-500">+{(agent as any).carrier_rates.length - 4}</span>
+                {/* Carrier line prices */}
+                {(agent.carrier_rates ?? []).length > 0 ? (
+                  <div className="space-y-1.5">
+                    {(agent.carrier_rates ?? []).slice(0, 3).map((cr) => {
+                      const prices = linePricePills(cr)
+                      return (
+                        <div key={cr.id} className="rounded-xl border border-white/8 bg-white/[0.025] px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-white truncate">{cr.carrier_name}</span>
+                            {(cr.pol || cr.pod) && (
+                              <span className="text-[9px] text-gray-500 truncate">
+                                {cr.pol ?? '—'} → {cr.pod ?? '—'}
+                              </span>
+                            )}
+                          </div>
+                          {prices.fcl.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {prices.fcl.map(p => (
+                                <span key={p.label} className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">
+                                  {p.label} {p.value}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-gray-500 mt-1.5">{isAr ? 'لا توجد أسعار FCL' : 'No FCL prices'}</p>
+                          )}
+                          {prices.lcl.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {prices.lcl.map(p => (
+                                <span key={p.label} className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full">
+                                  {p.label} {p.value}/m³
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {(agent.carrier_rates ?? []).length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/shipping-agents/${agent.id}`)}
+                        className="text-[10px] text-brand-primary-light hover:underline"
+                      >
+                        +{(agent.carrier_rates ?? []).length - 3} {isAr ? 'خطوط أخرى' : 'more lines'}
+                      </button>
                     )}
                   </div>
                 ) : (

@@ -36,6 +36,14 @@ function fmtUSD(n: number | null | undefined, suffix = '') {
   return `$${Number(n).toFixed(2)}${suffix}`
 }
 
+function datePlusDays(dateStr: string, days: number) {
+  if (!dateStr) return ''
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 function margin(buy: number | null, sell: number | null) {
   if (!buy || !sell) return null
   return (((sell - buy) / buy) * 100).toFixed(1)
@@ -236,7 +244,7 @@ function emptyCarrierRow(): CarrierRow {
     buy_lcl_20gp: '', sell_lcl_20gp: '',
     buy_lcl_40ft: '', sell_lcl_40ft: '',
     buy_lcl_40hq: '', sell_lcl_40hq: '',
-    markup_pct: '', transit_sea_days: '',
+    markup_pct: '25', transit_sea_days: '',
     fee_loading: '', fee_bl: '', fee_trucking: '', fee_other: '',
     notes: '',
   }
@@ -269,6 +277,7 @@ export default function AgentProfilePage() {
   const warehouseById = new Map<number, CompanyWarehouse>(loadingWarehouses.map(w => [w.id, w]))
 
   const today = new Date().toISOString().slice(0, 10)
+  const defaultExpiry = datePlusDays(today, 7)
 
   // Price modal state
   const [priceModal, setPriceModal]       = useState(false)
@@ -281,9 +290,17 @@ export default function AgentProfilePage() {
   const [airTransit, setAirTransit]       = useState('')
 
   function openPriceModal() {
-    setEffectiveDate(today); setExpiryDate(''); setUpdateCurrent(true)
+    setEffectiveDate(today); setExpiryDate(defaultExpiry); setUpdateCurrent(true)
     setCarrierRows([emptyCarrierRow()]); setAirBuy(''); setAirSell(''); setAirTransit('')
     setPriceModal(true)
+  }
+
+  function handleEffectiveDateChange(value: string) {
+    const previousDefault = effectiveDate ? datePlusDays(effectiveDate, 7) : ''
+    setEffectiveDate(value)
+    if (!expiryDate || expiryDate === previousDefault) {
+      setExpiryDate(datePlusDays(value, 7))
+    }
   }
 
   function setRow(id: string, field: keyof CarrierRow, value: string) {
@@ -728,7 +745,7 @@ export default function AgentProfilePage() {
 
           {/* Dates + options */}
           <div className="grid grid-cols-2 gap-3">
-            <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} />
+            <Input type="date" label={isAr ? 'تاريخ السريان' : 'Effective Date'} value={effectiveDate} onChange={e => handleEffectiveDateChange(e.target.value)} />
             <Input type="date" label={isAr ? 'تاريخ الانتهاء' : 'Expiry Date'} value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
           </div>
           <label className="flex items-center gap-2 text-sm text-brand-text cursor-pointer">
@@ -957,13 +974,13 @@ export default function AgentProfilePage() {
                   </div>
 
                   <div className="flex items-center gap-2 pt-1 border-t border-brand-border/20 flex-wrap">
-                    <input type="number" step="0.1" min="0" placeholder={isAr ? 'هامش %' : 'Markup %'}
+                    <input type="number" step="0.1" min="0" placeholder={isAr ? 'عمولة %' : 'Commission %'}
                       className="input-base w-24 text-xs" value={row.markup_pct}
                       onChange={e => setRow(row._id, 'markup_pct', e.target.value)}
                     />
                     <button type="button" onClick={() => applyMarkup(row._id)}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
-                      {isAr ? 'تطبيق % على البيع' : 'Apply % to Sell Prices'}
+                      {isAr ? 'تطبيق العمولة' : 'Apply Commission'}
                     </button>
                     <input type="text" placeholder={isAr ? 'ملاحظات...' : 'Notes...'}
                       className="input-base text-xs flex-1 min-w-48" value={row.notes}
