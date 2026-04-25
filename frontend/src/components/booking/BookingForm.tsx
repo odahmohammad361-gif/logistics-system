@@ -7,6 +7,7 @@ import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/F
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import clsx from 'clsx'
+import { Lock, Unlock } from 'lucide-react'
 import type { Booking, BookingMode, BookingStatus, AgentCarrierRate } from '@/types'
 import { getFlatPortOptions } from '@/constants/logistics'
 
@@ -379,20 +380,38 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
           </FormRow>
 
           {!isDirect && (
-            <FormRow>
-              <Select label={t('containers.agent')} options={agentOptions}
-                placeholder={agentOptions.length === 0
-                  ? (mode === 'AIR' ? t('bookings.no_air_agents') : t('bookings.no_sea_agents'))
-                  : '—'
-                }
-                {...register('agent_id')} />
-              <Select label={t('bookings.carrier_line')} options={carrierOptions}
+            <>
+              <FormRow>
+                <Select label={t('containers.agent')} options={agentOptions}
+                  placeholder={agentOptions.length === 0
+                    ? (mode === 'AIR' ? t('bookings.no_air_agents') : t('bookings.no_sea_agents'))
+                    : '—'
+                  }
+                  {...register('agent_id')} />
+                <Select label={t('bookings.carrier_line')} options={carrierOptions}
                   placeholder={carrierOptionsFromAgent ? (isAr ? 'اختر شركة الشحن...' : 'Select carrier...') : t('bookings.select_carrier')}
                   disabled={lockedFromAgent}
                   {...register('carrier_name', {
                     onChange: (e) => { if (carrierOptionsFromAgent) applyCarrierRate(e.target.value) }
                   })} />
-            </FormRow>
+              </FormRow>
+
+              {/* Lock banner — shown when fields are filled from agent */}
+              {lockedFromAgent && (
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/8">
+                  <Lock size={14} className="text-amber-400 flex-shrink-0" />
+                  <p className="text-xs text-amber-400 flex-1">
+                    {isAr
+                      ? 'تم ملء الحقول التالية تلقائياً من بيانات الوكيل (مقفلة): الناقل، الميناء، الحجم، السعة، سعر الشحن'
+                      : 'Carrier, ports, size, capacity and freight cost are auto-filled from agent rates (locked)'}
+                  </p>
+                  <button type="button" onClick={() => setLockedFromAgent(false)}
+                    className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-medium shrink-0">
+                    <Unlock size={12} /> {isAr ? 'تحرير' : 'Unlock'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {isDirect && (
             <Select label={t('bookings.carrier_line')} options={carrierOptions}
