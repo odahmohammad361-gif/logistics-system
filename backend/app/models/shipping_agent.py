@@ -69,6 +69,7 @@ class AgentPriceHistory(Base):
     id             = Column(Integer, primary_key=True, index=True)
     agent_id       = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
     carrier_name   = Column(String(100), nullable=True, index=True)   # e.g. PIL, CMA, Evergreen
+    rate_type      = Column(String(10), default="sea", nullable=False) # sea | air
     pol            = Column(String(150), nullable=True)                # port of loading
     pod            = Column(String(150), nullable=True)                # port of discharge
     effective_date = Column(Date, nullable=False)
@@ -81,6 +82,8 @@ class AgentPriceHistory(Base):
     sell_40hq      = Column(Numeric(10, 2), nullable=True)
     buy_air_kg     = Column(Numeric(10, 2), nullable=True)
     sell_air_kg    = Column(Numeric(10, 2), nullable=True)
+    min_load_kg    = Column(Numeric(10, 2), nullable=True)
+    max_load_kg    = Column(Numeric(10, 2), nullable=True)
     buy_lcl_cbm    = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm   = Column(Numeric(10, 2), nullable=True)
     buy_lcl_20gp   = Column(Numeric(10, 2), nullable=True)
@@ -113,6 +116,7 @@ class AgentCarrierRate(Base):
     id           = Column(Integer, primary_key=True, index=True)
     agent_id     = Column(Integer, ForeignKey("shipping_agents.id", ondelete="CASCADE"), nullable=False, index=True)
     carrier_name = Column(String(100), nullable=False, index=True)
+    rate_type    = Column(String(10), default="sea", nullable=False) # sea | air
     pol          = Column(String(150), nullable=True)
     pod          = Column(String(150), nullable=True)
     effective_date = Column(Date, nullable=True)
@@ -128,6 +132,10 @@ class AgentCarrierRate(Base):
     cbm_40hq     = Column(Numeric(8, 2), nullable=True)
     buy_lcl_cbm  = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm = Column(Numeric(10, 2), nullable=True)
+    buy_air_kg   = Column(Numeric(10, 2), nullable=True)
+    sell_air_kg  = Column(Numeric(10, 2), nullable=True)
+    min_load_kg  = Column(Numeric(10, 2), nullable=True)
+    max_load_kg  = Column(Numeric(10, 2), nullable=True)
     # Per-container-size LCL per-CBM prices
     buy_lcl_20gp   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_20gp  = Column(Numeric(10, 2), nullable=True)
@@ -136,6 +144,7 @@ class AgentCarrierRate(Base):
     buy_lcl_40hq   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40hq  = Column(Numeric(10, 2), nullable=True)
     transit_sea_days     = Column(Integer, nullable=True)
+    transit_air_days     = Column(Integer, nullable=True)
     sealing_day          = Column(Date, nullable=True)      # booking cutoff date
     vessel_day           = Column(Date, nullable=True)      # vessel departure date
     loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)

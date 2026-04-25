@@ -29,6 +29,9 @@ export const addPriceHistory = (id: number, data: unknown) =>
 export const getAgentCarrierRates = (id: number) =>
   api.get(`/shipping-agents/${id}/carrier-rates`).then((r) => r.data)
 
+export const updateAgentCarrierRate = (agentId: number, rateId: number, data: unknown) =>
+  api.patch(`/shipping-agents/${agentId}/carrier-rates/${rateId}`, data).then((r) => r.data)
+
 export const uploadAgentContract = (id: number, form: FormData) =>
   api.post(`/shipping-agents/${id}/contracts`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },

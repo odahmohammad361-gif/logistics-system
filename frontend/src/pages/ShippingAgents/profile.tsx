@@ -11,14 +11,14 @@ import {
 } from 'lucide-react'
 import {
   getAgentProfile, addPriceHistory, uploadAgentContract,
-  deleteAgentContract, getAgentContractDownloadUrl,
+  deleteAgentContract, getAgentContractDownloadUrl, updateAgentCarrierRate,
 } from '@/services/agentService'
 import { getWarehouses } from '@/services/warehouseService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
-import type { ShippingAgent, AgentContract, AgentEditLog, CompanyWarehouse } from '@/types'
+import type { ShippingAgent, AgentCarrierRate, AgentContract, AgentEditLog, CompanyWarehouse } from '@/types'
 import { getFlatPortOptions } from '@/constants/logistics'
 
 const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
@@ -26,6 +26,17 @@ const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
 const COMMON_SEA_CARRIERS = [
   'CMA CGM', 'MSC', 'Evergreen', 'PIL', 'COSCO', 'Yang Ming',
   'Hapag-Lloyd', 'ONE', 'HMM', 'ZIM', 'OOCL', 'Maersk', 'Wan Hai',
+]
+const COMMON_AIR_CARRIERS = [
+  'Emirates SkyCargo', 'Qatar Airways Cargo', 'Etihad Cargo', 'Turkish Cargo',
+  'Saudia Cargo', 'Royal Jordanian Cargo', 'Cathay Cargo', 'DHL Aviation',
+  'FedEx', 'UPS', 'SF Airlines',
+]
+const AIRPORT_OPTIONS = [
+  'CAN - Guangzhou Baiyun', 'SZX - Shenzhen Baoan', 'HKG - Hong Kong',
+  'PVG - Shanghai Pudong', 'NGB - Ningbo Lishe', 'YIW - Yiwu',
+  'AMM - Queen Alia Amman', 'AQJ - Aqaba King Hussein', 'BGW - Baghdad',
+  'EBL - Erbil', 'BSR - Basra',
 ]
 import clsx from 'clsx'
 
@@ -161,11 +172,12 @@ function OfferBanner({ validFrom, validTo, isAr }: { validFrom: string | null; v
 const LOG_COLORS: Record<string, string> = {
   update:           'text-blue-400 bg-blue-400/10',
   price_update:     'text-amber-400 bg-amber-400/10',
+  current_rate_edit:'text-violet-400 bg-violet-400/10',
   contract_upload:  'text-emerald-400 bg-emerald-400/10',
   contract_delete:  'text-red-400 bg-red-400/10',
 }
 const LOG_ICONS: Record<string, React.ElementType> = {
-  update: Pencil, price_update: TrendingUp, contract_upload: Upload, contract_delete: Trash2,
+  update: Pencil, price_update: TrendingUp, current_rate_edit: Pencil, contract_upload: Upload, contract_delete: Trash2,
 }
 function LogItem({ entry, isAr }: { entry: AgentEditLog; isAr: boolean }) {
   const Icon = LOG_ICONS[entry.action] ?? Clock
@@ -232,6 +244,23 @@ interface CarrierRow {
   notes: string
 }
 
+interface AirRow {
+  _id: string
+  carrier_name: string
+  pol: string
+  pod: string
+  loading_warehouse_id: string
+  buy_air_kg: string
+  sell_air_kg: string
+  min_load_kg: string
+  max_load_kg: string
+  transit_air_days: string
+  markup_pct: string
+  notes: string
+}
+
+type RateEditForm = Record<string, string>
+
 function emptyCarrierRow(): CarrierRow {
   return {
     _id: Math.random().toString(36).slice(2),
@@ -246,6 +275,23 @@ function emptyCarrierRow(): CarrierRow {
     buy_lcl_40hq: '', sell_lcl_40hq: '',
     markup_pct: '25', transit_sea_days: '',
     fee_loading: '', fee_bl: '', fee_trucking: '', fee_other: '',
+    notes: '',
+  }
+}
+
+function emptyAirRow(): AirRow {
+  return {
+    _id: Math.random().toString(36).slice(2),
+    carrier_name: '',
+    pol: '',
+    pod: '',
+    loading_warehouse_id: '',
+    buy_air_kg: '',
+    sell_air_kg: '',
+    min_load_kg: '',
+    max_load_kg: '',
+    transit_air_days: '',
+    markup_pct: '25',
     notes: '',
   }
 }
@@ -285,13 +331,16 @@ export default function AgentProfilePage() {
   const [expiryDate, setExpiryDate]       = useState('')
   const [updateCurrent, setUpdateCurrent] = useState(true)
   const [carrierRows, setCarrierRows]     = useState<CarrierRow[]>([emptyCarrierRow()])
+  const [airRows, setAirRows]             = useState<AirRow[]>([emptyAirRow()])
   const [airBuy, setAirBuy]               = useState('')
   const [airSell, setAirSell]             = useState('')
   const [airTransit, setAirTransit]       = useState('')
+  const [editingRate, setEditingRate]     = useState<AgentCarrierRate | null>(null)
+  const [rateEditForm, setRateEditForm]   = useState<RateEditForm>({})
 
   function openPriceModal() {
     setEffectiveDate(today); setExpiryDate(defaultExpiry); setUpdateCurrent(true)
-    setCarrierRows([emptyCarrierRow()]); setAirBuy(''); setAirSell(''); setAirTransit('')
+    setCarrierRows([emptyCarrierRow()]); setAirRows([emptyAirRow()]); setAirBuy(''); setAirSell(''); setAirTransit('')
     setPriceModal(true)
   }
 
@@ -307,6 +356,54 @@ export default function AgentProfilePage() {
     setCarrierRows(rows => rows.map(r => r._id === id ? { ...r, [field]: value } : r))
   }
 
+  function setAirRow(id: string, field: keyof AirRow, value: string) {
+    setAirRows(rows => rows.map(r => r._id === id ? { ...r, [field]: value } : r))
+  }
+
+  function openEditRate(rate: AgentCarrierRate) {
+    setEditingRate(rate)
+    setRateEditForm({
+      carrier_name: rate.carrier_name ?? '',
+      pol: rate.pol ?? '',
+      pod: rate.pod ?? '',
+      effective_date: rate.effective_date ?? '',
+      expiry_date: rate.expiry_date ?? '',
+      buy_20gp: rate.buy_20gp?.toString() ?? '',
+      sell_20gp: rate.sell_20gp?.toString() ?? '',
+      cbm_20gp: rate.cbm_20gp?.toString() ?? DEFAULT_CBM['20gp'],
+      buy_40ft: rate.buy_40ft?.toString() ?? '',
+      sell_40ft: rate.sell_40ft?.toString() ?? '',
+      cbm_40ft: rate.cbm_40ft?.toString() ?? DEFAULT_CBM['40ft'],
+      buy_40hq: rate.buy_40hq?.toString() ?? '',
+      sell_40hq: rate.sell_40hq?.toString() ?? '',
+      cbm_40hq: rate.cbm_40hq?.toString() ?? DEFAULT_CBM['40hq'],
+      buy_lcl_20gp: rate.buy_lcl_20gp?.toString() ?? '',
+      sell_lcl_20gp: rate.sell_lcl_20gp?.toString() ?? '',
+      buy_lcl_40ft: rate.buy_lcl_40ft?.toString() ?? '',
+      sell_lcl_40ft: rate.sell_lcl_40ft?.toString() ?? '',
+      buy_lcl_40hq: rate.buy_lcl_40hq?.toString() ?? '',
+      sell_lcl_40hq: rate.sell_lcl_40hq?.toString() ?? '',
+      buy_air_kg: rate.buy_air_kg?.toString() ?? '',
+      sell_air_kg: rate.sell_air_kg?.toString() ?? '',
+      min_load_kg: rate.min_load_kg?.toString() ?? '',
+      max_load_kg: rate.max_load_kg?.toString() ?? '',
+      transit_sea_days: rate.transit_sea_days?.toString() ?? '',
+      transit_air_days: rate.transit_air_days?.toString() ?? '',
+      sealing_day: rate.sealing_day ?? '',
+      vessel_day: rate.vessel_day ?? '',
+      loading_warehouse_id: rate.loading_warehouse_id?.toString() ?? '',
+      fee_loading: rate.fee_loading?.toString() ?? '',
+      fee_bl: rate.fee_bl?.toString() ?? '',
+      fee_trucking: rate.fee_trucking?.toString() ?? '',
+      fee_other: rate.fee_other?.toString() ?? '',
+      notes: rate.notes ?? '',
+    })
+  }
+
+  function setRateEdit(field: string, value: string) {
+    setRateEditForm(f => ({ ...f, [field]: value }))
+  }
+
   function applyMarkup(id: string) {
     setCarrierRows(rows => rows.map(r => {
       if (r._id !== id) return r
@@ -319,6 +416,16 @@ export default function AgentProfilePage() {
         sell_lcl_cbm: m(r.buy_lcl_cbm),
         sell_lcl_20gp: m(r.buy_lcl_20gp), sell_lcl_40ft: m(r.buy_lcl_40ft), sell_lcl_40hq: m(r.buy_lcl_40hq),
       }
+    }))
+  }
+
+  function applyAirMarkup(id: string) {
+    setAirRows(rows => rows.map(r => {
+      if (r._id !== id) return r
+      const pct = parseFloat(r.markup_pct)
+      const buy = parseFloat(r.buy_air_kg)
+      if (!pct || !buy) return r
+      return { ...r, sell_air_kg: (buy * (1 + pct / 100)).toFixed(2) }
     }))
   }
 
@@ -354,9 +461,73 @@ export default function AgentProfilePage() {
             fee_other: n(r.fee_other),
             notes: r.notes || null,
           })),
+        air_carriers: airRows
+          .filter(r => r.carrier_name.trim())
+          .map(r => ({
+            carrier_name: r.carrier_name.trim(),
+            pol: r.pol || null,
+            pod: r.pod || null,
+            loading_warehouse_id: ni(r.loading_warehouse_id),
+            buy_air_kg: n(r.buy_air_kg),
+            sell_air_kg: n(r.sell_air_kg),
+            min_load_kg: n(r.min_load_kg),
+            max_load_kg: n(r.max_load_kg),
+            transit_air_days: ni(r.transit_air_days),
+            notes: r.notes || null,
+          })),
       })
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['agent-profile', agentId] }); setPriceModal(false) },
+  })
+
+  const updateRateMut = useMutation({
+    mutationFn: () => {
+      if (!editingRate) throw new Error('No rate selected')
+      const n = (s?: string) => s ? parseFloat(s) : null
+      const ni = (s?: string) => s ? parseInt(s) : null
+      const payload = editingRate.rate_type === 'air'
+        ? {
+            carrier_name: rateEditForm.carrier_name || null,
+            pol: rateEditForm.pol || null,
+            pod: rateEditForm.pod || null,
+            effective_date: rateEditForm.effective_date || null,
+            expiry_date: rateEditForm.expiry_date || null,
+            loading_warehouse_id: ni(rateEditForm.loading_warehouse_id),
+            buy_air_kg: n(rateEditForm.buy_air_kg),
+            sell_air_kg: n(rateEditForm.sell_air_kg),
+            min_load_kg: n(rateEditForm.min_load_kg),
+            max_load_kg: n(rateEditForm.max_load_kg),
+            transit_air_days: ni(rateEditForm.transit_air_days),
+            notes: rateEditForm.notes || null,
+          }
+        : {
+            carrier_name: rateEditForm.carrier_name || null,
+            pol: rateEditForm.pol || null,
+            pod: rateEditForm.pod || null,
+            effective_date: rateEditForm.effective_date || null,
+            expiry_date: rateEditForm.expiry_date || null,
+            buy_20gp: n(rateEditForm.buy_20gp), sell_20gp: n(rateEditForm.sell_20gp), cbm_20gp: n(rateEditForm.cbm_20gp),
+            buy_40ft: n(rateEditForm.buy_40ft), sell_40ft: n(rateEditForm.sell_40ft), cbm_40ft: n(rateEditForm.cbm_40ft),
+            buy_40hq: n(rateEditForm.buy_40hq), sell_40hq: n(rateEditForm.sell_40hq), cbm_40hq: n(rateEditForm.cbm_40hq),
+            buy_lcl_20gp: n(rateEditForm.buy_lcl_20gp), sell_lcl_20gp: n(rateEditForm.sell_lcl_20gp),
+            buy_lcl_40ft: n(rateEditForm.buy_lcl_40ft), sell_lcl_40ft: n(rateEditForm.sell_lcl_40ft),
+            buy_lcl_40hq: n(rateEditForm.buy_lcl_40hq), sell_lcl_40hq: n(rateEditForm.sell_lcl_40hq),
+            transit_sea_days: ni(rateEditForm.transit_sea_days),
+            sealing_day: rateEditForm.sealing_day || null,
+            vessel_day: rateEditForm.vessel_day || null,
+            loading_warehouse_id: ni(rateEditForm.loading_warehouse_id),
+            fee_loading: n(rateEditForm.fee_loading),
+            fee_bl: n(rateEditForm.fee_bl),
+            fee_trucking: n(rateEditForm.fee_trucking),
+            fee_other: n(rateEditForm.fee_other),
+            notes: rateEditForm.notes || null,
+          }
+      return updateAgentCarrierRate(agentId, editingRate.id, payload)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agent-profile', agentId] })
+      setEditingRate(null)
+    },
   })
 
   // Contract modal state
@@ -415,6 +586,13 @@ export default function AgentProfilePage() {
   const history   = agent.price_history ?? []
   const contracts = agent.contracts   ?? []
   const editLog   = agent.edit_log    ?? []
+  const isExpiredOffer = (expiry?: string | null) => {
+    if (!expiry) return false
+    const end = new Date(`${expiry}T23:59:59`)
+    return end.getTime() < Date.now()
+  }
+  const currentRates = (agent.carrier_rates ?? []).filter(r => !isExpiredOffer(r.expiry_date))
+  const expiredHistory = history.filter(ph => isExpiredOffer(ph.expiry_date))
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-8">
@@ -532,7 +710,7 @@ export default function AgentProfilePage() {
               <h3 className="text-sm font-semibold text-brand-text flex items-center gap-2">
                 <TrendingUp size={14} className="text-emerald-400" />
                 {isAr ? 'الأسعار الحالية (لكل شركة شحن)' : 'Current Rates (per Carrier)'}
-                <span className="text-xs text-brand-text-muted">({(agent.carrier_rates ?? []).length})</span>
+                <span className="text-xs text-brand-text-muted">({currentRates.length})</span>
               </h3>
               {isStaff && (
                 <Button size="sm" onClick={openPriceModal}>
@@ -541,17 +719,17 @@ export default function AgentProfilePage() {
               )}
             </div>
 
-            {(agent.carrier_rates ?? []).length === 0 ? (
+            {currentRates.length === 0 ? (
               <p className="text-sm text-brand-text-muted text-center py-4">
                 {isAr ? 'لا توجد أسعار بعد — أضف تحديث أسعار لإضافة شركات الشحن' : 'No rates yet — add a price update to define carriers'}
               </p>
             ) : (
               <div className="space-y-3">
-                {(agent.carrier_rates ?? []).map(cr => (
+                {currentRates.map(cr => (
                   <div key={cr.id} className="rounded-xl border border-brand-border/60 bg-brand-surface overflow-hidden">
                     {/* Carrier header */}
                     <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.03] border-b border-brand-border/40">
-                      <Ship size={13} className="text-blue-400 flex-shrink-0" />
+                      {cr.rate_type === 'air' ? <Plane size={13} className="text-violet-400 flex-shrink-0" /> : <Ship size={13} className="text-blue-400 flex-shrink-0" />}
                       <span className="text-sm font-bold text-brand-text">{cr.carrier_name}</span>
                       {(cr.pol || cr.pod) && (
                         <span className="text-xs text-brand-text-muted">
@@ -563,6 +741,16 @@ export default function AgentProfilePage() {
                           new Date(cr.expiry_date) < new Date() ? 'text-red-400' : 'text-amber-400')}>
                           <Timer size={10} /> {cr.expiry_date}
                         </span>
+                      )}
+                      {isStaff && (
+                        <button
+                          type="button"
+                          onClick={() => openEditRate(cr)}
+                          className="btn-icon p-1.5 ms-1 text-brand-text-muted hover:text-brand-primary-light"
+                          title={isAr ? 'تعديل السعر الحالي' : 'Edit current rate'}
+                        >
+                          <Pencil size={13} />
+                        </button>
                       )}
                     </div>
                     {(cr.loading_warehouse_id || cr.sealing_day || cr.vessel_day) && (
@@ -591,9 +779,20 @@ export default function AgentProfilePage() {
                       {cr.buy_lcl_20gp != null && <PriceRow label="LCL 20/m³" buy={cr.buy_lcl_20gp} sell={cr.sell_lcl_20gp} />}
                       {cr.buy_lcl_40ft != null && <PriceRow label="LCL 40/m³" buy={cr.buy_lcl_40ft} sell={cr.sell_lcl_40ft} />}
                       {cr.buy_lcl_40hq != null && <PriceRow label="LCL 40HQ/m³" buy={cr.buy_lcl_40hq} sell={cr.sell_lcl_40hq} />}
+                      {cr.buy_air_kg != null && <PriceRow label="Air/kg" buy={cr.buy_air_kg} sell={cr.sell_air_kg} />}
+                      {(cr.min_load_kg != null || cr.max_load_kg != null) && (
+                        <p className="text-[11px] text-brand-text-muted mt-1.5">
+                          {isAr ? 'الحمولة:' : 'Load:'} {cr.min_load_kg ?? '—'}-{cr.max_load_kg ?? '—'} kg
+                        </p>
+                      )}
                       {cr.transit_sea_days != null && (
                         <p className="text-[11px] text-brand-text-muted mt-1.5">
                           <Ship size={10} className="inline me-1" />{cr.transit_sea_days} {isAr ? 'يوم' : 'days'}
+                        </p>
+                      )}
+                      {cr.transit_air_days != null && (
+                        <p className="text-[11px] text-brand-text-muted mt-1.5">
+                          <Plane size={10} className="inline me-1" />{cr.transit_air_days} {isAr ? 'يوم' : 'days'}
                         </p>
                       )}
                       {[cr.fee_loading, cr.fee_bl, cr.fee_trucking, cr.fee_other].some(v => v != null) && (
@@ -628,17 +827,20 @@ export default function AgentProfilePage() {
           <div className="card">
             <h3 className="text-sm font-semibold text-brand-text mb-4 flex items-center gap-2">
               <Clock size={14} className="text-amber-400" />
-              {isAr ? 'سجل الأسعار الأسبوعي' : 'Weekly Price History'}
-              <span className="text-xs text-brand-text-muted">({history.length})</span>
+              {isAr ? 'العروض المنتهية' : 'Expired Weekly Offers'}
+              <span className="text-xs text-brand-text-muted">({expiredHistory.length})</span>
             </h3>
-            {history.length === 0
-              ? <p className="text-sm text-brand-text-muted text-center py-4">{isAr ? 'لا يوجد سجل أسعار' : 'No price history yet'}</p>
+            {expiredHistory.length === 0
+              ? <p className="text-sm text-brand-text-muted text-center py-4">{isAr ? 'لا توجد عروض منتهية' : 'No expired offers yet'}</p>
               : <div className="space-y-3">
-                  {history.map(ph => (
+                  {expiredHistory.map(ph => (
                     <div key={ph.id} className="rounded-xl border border-brand-border/50 bg-brand-surface overflow-hidden">
                       <div className="flex items-center justify-between px-4 py-2 bg-white/[0.02] border-b border-brand-border/40 flex-wrap gap-2">
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-semibold text-brand-text font-mono">{ph.effective_date}</span>
+                          <span className={clsx('text-[10px] px-2 py-0.5 rounded-full', ph.rate_type === 'air' ? 'bg-violet-500/10 text-violet-300' : 'bg-blue-500/10 text-blue-300')}>
+                            {ph.rate_type === 'air' ? (isAr ? 'جوي' : 'Air') : (isAr ? 'بحري' : 'Sea')}
+                          </span>
                           {ph.expiry_date && (
                             <span className="text-[11px] text-amber-400 flex items-center gap-1">
                               <Timer size={10} /> {isAr ? 'ينتهي:' : 'Exp:'} {ph.expiry_date}
@@ -652,6 +854,8 @@ export default function AgentProfilePage() {
                         {ph.buy_40ft    != null && <span className="text-brand-text-muted">40GP: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40ft)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40ft)}</b> <MarginBadge buy={ph.buy_40ft} sell={ph.sell_40ft} /></span>}
                         {ph.buy_40hq    != null && <span className="text-brand-text-muted">40HQ: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40hq)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40hq)}</b> <MarginBadge buy={ph.buy_40hq} sell={ph.sell_40hq} /></span>}
                         {ph.buy_air_kg  != null && <span className="text-brand-text-muted">Air/kg: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_air_kg)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_air_kg)}</b> <MarginBadge buy={ph.buy_air_kg} sell={ph.sell_air_kg} /></span>}
+                        {ph.min_load_kg != null && <span className="text-brand-text-muted">Min: <b className="text-brand-text font-mono">{ph.min_load_kg}kg</b></span>}
+                        {ph.max_load_kg != null && <span className="text-brand-text-muted">Max: <b className="text-brand-text font-mono">{ph.max_load_kg}kg</b></span>}
                         {ph.buy_lcl_cbm != null && <span className="text-brand-text-muted">LCL/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_cbm)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_cbm)}</b> <MarginBadge buy={ph.buy_lcl_cbm} sell={ph.sell_lcl_cbm} /></span>}
                         {ph.buy_lcl_20gp != null && <span className="text-brand-text-muted">LCL 20/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_20gp)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_20gp)}</b> <MarginBadge buy={ph.buy_lcl_20gp} sell={ph.sell_lcl_20gp} /></span>}
                         {ph.buy_lcl_40ft != null && <span className="text-brand-text-muted">LCL 40/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_40ft)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_40ft)}</b> <MarginBadge buy={ph.buy_lcl_40ft} sell={ph.sell_lcl_40ft} /></span>}
@@ -992,21 +1196,302 @@ export default function AgentProfilePage() {
             </div>
           )}
 
-          {/* Air prices */}
+          {/* Air carrier prices */}
           {agent.serves_air && (
-            <FormSection title={isAr ? 'أسعار جوية (USD/كغ)' : 'Air Prices (USD/kg)'}>
-              <div className="grid grid-cols-[1fr_1fr_60px] gap-3 items-end">
-                <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" placeholder="0.00"
-                  value={airBuy} onChange={e => setAirBuy(e.target.value)} />
-                <Input label={isAr ? 'بيع/كغ' : 'Sell/kg'} type="number" step="0.01" min="0" placeholder="0.00"
-                  value={airSell} onChange={e => setAirSell(e.target.value)} />
-                <div className="pb-2 text-center"><LiveMargin buy={airBuy} sell={airSell} /></div>
+            <FormSection title={isAr ? 'أسعار الشحن الجوي (لكل شركة)' : 'Air Cargo Prices (per Carrier)'}>
+              <div className="flex justify-end">
+                <button type="button" onClick={() => setAirRows(r => [...r, emptyAirRow()])}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 text-xs font-semibold hover:bg-violet-500/25 transition-colors">
+                  <Plus size={11} /> {isAr ? 'إضافة شركة جوية' : 'Add Air Carrier'}
+                </button>
               </div>
-              <Input label={isAr ? 'أيام العبور الجوي' : 'Air Transit Days'} type="number"
-                value={airTransit} onChange={e => setAirTransit(e.target.value)} />
+              {airRows.map((row, idx) => (
+                <div key={row._id} className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-violet-500/15 text-violet-300 text-xs font-bold flex items-center justify-center">{idx + 1}</span>
+                    <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex-1">{isAr ? 'عرض شركة جوية' : 'Air Carrier Offer'}</p>
+                    {airRows.length > 1 && (
+                      <button type="button" onClick={() => setAirRows(r => r.filter(x => x._id !== row._id))}
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">{isAr ? 'شركة الطيران' : 'Air Carrier'}</label>
+                      <input list={`air-carriers-${row._id}`} className="input-base w-full text-sm font-semibold" value={row.carrier_name}
+                        placeholder="Emirates, Qatar, DHL..."
+                        onChange={e => setAirRow(row._id, 'carrier_name', e.target.value)} />
+                      <datalist id={`air-carriers-${row._id}`}>{COMMON_AIR_CARRIERS.map(c => <option key={c} value={c} />)}</datalist>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">{isAr ? 'من مطار' : 'From Airport'}</label>
+                      <input list={`airports-from-${row._id}`} className="input-base w-full text-sm" value={row.pol}
+                        onChange={e => setAirRow(row._id, 'pol', e.target.value)} />
+                      <datalist id={`airports-from-${row._id}`}>{AIRPORT_OPTIONS.map(p => <option key={p} value={p} />)}</datalist>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">{isAr ? 'إلى مطار' : 'To Airport'}</label>
+                      <input list={`airports-to-${row._id}`} className="input-base w-full text-sm" value={row.pod}
+                        onChange={e => setAirRow(row._id, 'pod', e.target.value)} />
+                      <datalist id={`airports-to-${row._id}`}>{AIRPORT_OPTIONS.map(p => <option key={p} value={p} />)}</datalist>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">{isAr ? 'مستودع الإرسال' : 'Sending Warehouse'}</label>
+                      <select className="input-base w-full text-sm" value={row.loading_warehouse_id}
+                        onChange={e => setAirRow(row._id, 'loading_warehouse_id', e.target.value)}>
+                        <option value="">—</option>
+                        {loadingWarehouses.map(w => <option key={w.id} value={w.id}>{w.name}{w.city ? ` — ${w.city}` : ''}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_80px_1fr_1fr_1fr] gap-3 items-end">
+                    <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" value={row.buy_air_kg} onChange={e => setAirRow(row._id, 'buy_air_kg', e.target.value)} />
+                    <Input label={isAr ? 'بيع/كغ' : 'Sell/kg'} type="number" step="0.01" min="0" value={row.sell_air_kg} onChange={e => setAirRow(row._id, 'sell_air_kg', e.target.value)} />
+                    <div className="pb-2 text-center"><LiveMargin buy={row.buy_air_kg} sell={row.sell_air_kg} /></div>
+                    <Input label={isAr ? 'أقل كغ' : 'Min kg'} type="number" step="0.01" min="0" value={row.min_load_kg} onChange={e => setAirRow(row._id, 'min_load_kg', e.target.value)} />
+                    <Input label={isAr ? 'أعلى كغ' : 'Max kg'} type="number" step="0.01" min="0" value={row.max_load_kg} onChange={e => setAirRow(row._id, 'max_load_kg', e.target.value)} />
+                    <Input label={isAr ? 'أيام' : 'Days'} type="number" min="0" value={row.transit_air_days} onChange={e => setAirRow(row._id, 'transit_air_days', e.target.value)} />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input type="number" step="0.1" min="0" placeholder={isAr ? 'عمولة %' : 'Commission %'} className="input-base w-24 text-xs"
+                      value={row.markup_pct} onChange={e => setAirRow(row._id, 'markup_pct', e.target.value)} />
+                    <button type="button" onClick={() => applyAirMarkup(row._id)}
+                      className="px-2.5 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 text-[11px] font-semibold hover:bg-violet-500/25 transition-colors">
+                      {isAr ? 'تطبيق العمولة' : 'Apply Commission'}
+                    </button>
+                    <input type="text" placeholder={isAr ? 'ملاحظات...' : 'Notes...'} className="input-base text-xs flex-1 min-w-48"
+                      value={row.notes} onChange={e => setAirRow(row._id, 'notes', e.target.value)} />
+                  </div>
+                </div>
+              ))}
             </FormSection>
           )}
         </div>
+      </Modal>
+
+      {/* ── Edit Current Rate Modal ── */}
+      <Modal open={!!editingRate} onClose={() => setEditingRate(null)}
+        title={editingRate?.rate_type === 'air'
+          ? (isAr ? 'تعديل سعر الشحن الجوي الحالي' : 'Edit Current Air Rate')
+          : (isAr ? 'تعديل سعر الشحن البحري الحالي' : 'Edit Current Sea Rate')}
+        size="xl"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditingRate(null)}>{isAr ? 'إلغاء' : 'Cancel'}</Button>
+            <Button loading={updateRateMut.isPending} onClick={() => updateRateMut.mutate()}>
+              <AlertTriangle size={14} /> {isAr ? 'تأكيد التعديل' : 'Confirm Edit'}
+            </Button>
+          </>
+        }>
+        {editingRate && (
+          <div className="space-y-5">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 flex gap-2">
+              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+              <p>
+                {isAr
+                  ? 'تنبيه: هذا التعديل يغيّر السعر الحالي الظاهر على بطاقة الوكيل مباشرة. سجل العروض الأسبوعية يبقى للعروض المنتهية ولا يتم إنشاء عرض أسبوعي جديد من هذا التعديل.'
+                  : 'Warning: this changes the current price shown on the agent card immediately. Weekly history stays for expired offers and this edit does not create a new weekly offer row.'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                  {editingRate.rate_type === 'air' ? (isAr ? 'شركة الطيران' : 'Air Carrier') : (isAr ? 'شركة الشحن' : 'Carrier')}
+                </label>
+                <input
+                  list={editingRate.rate_type === 'air' ? 'edit-air-carriers' : 'edit-sea-carriers'}
+                  className="input-base w-full text-sm font-semibold"
+                  value={rateEditForm.carrier_name ?? ''}
+                  onChange={e => setRateEdit('carrier_name', e.target.value)}
+                />
+                <datalist id="edit-sea-carriers">
+                  {COMMON_SEA_CARRIERS.map(c => <option key={c} value={c} />)}
+                </datalist>
+                <datalist id="edit-air-carriers">
+                  {COMMON_AIR_CARRIERS.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+
+              <Input
+                type="date"
+                label={isAr ? 'تاريخ السريان' : 'Effective Date'}
+                value={rateEditForm.effective_date ?? ''}
+                onChange={e => setRateEdit('effective_date', e.target.value)}
+              />
+              <Input
+                type="date"
+                label={isAr ? 'تاريخ الانتهاء' : 'Expiry Date'}
+                value={rateEditForm.expiry_date ?? ''}
+                onChange={e => setRateEdit('expiry_date', e.target.value)}
+              />
+              <div>
+                <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                  {editingRate.rate_type === 'air' ? (isAr ? 'مستودع الإرسال' : 'Sending Warehouse') : (isAr ? 'مستودع التحميل' : 'Loading Warehouse')}
+                </label>
+                <select
+                  className="input-base w-full text-sm"
+                  value={rateEditForm.loading_warehouse_id ?? ''}
+                  onChange={e => setRateEdit('loading_warehouse_id', e.target.value)}
+                >
+                  <option value="">—</option>
+                  {loadingWarehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}{w.city ? ` — ${w.city}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {editingRate.rate_type === 'air' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                      {isAr ? 'من مطار' : 'From Airport'}
+                    </label>
+                    <input
+                      list="edit-airports-from"
+                      className="input-base w-full text-sm"
+                      value={rateEditForm.pol ?? ''}
+                      onChange={e => setRateEdit('pol', e.target.value)}
+                    />
+                    <datalist id="edit-airports-from">
+                      {AIRPORT_OPTIONS.map(p => <option key={p} value={p} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                      {isAr ? 'إلى مطار' : 'To Airport'}
+                    </label>
+                    <input
+                      list="edit-airports-to"
+                      className="input-base w-full text-sm"
+                      value={rateEditForm.pod ?? ''}
+                      onChange={e => setRateEdit('pod', e.target.value)}
+                    />
+                    <datalist id="edit-airports-to">
+                      {AIRPORT_OPTIONS.map(p => <option key={p} value={p} />)}
+                    </datalist>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_80px_1fr_1fr_1fr] gap-3 items-end">
+                  <Input label={isAr ? 'شراء/كغ' : 'Buy/kg'} type="number" step="0.01" min="0" value={rateEditForm.buy_air_kg ?? ''} onChange={e => setRateEdit('buy_air_kg', e.target.value)} />
+                  <Input label={isAr ? 'بيع/كغ' : 'Sell/kg'} type="number" step="0.01" min="0" value={rateEditForm.sell_air_kg ?? ''} onChange={e => setRateEdit('sell_air_kg', e.target.value)} />
+                  <div className="pb-2 text-center"><LiveMargin buy={rateEditForm.buy_air_kg ?? ''} sell={rateEditForm.sell_air_kg ?? ''} /></div>
+                  <Input label={isAr ? 'أقل كغ' : 'Min kg'} type="number" step="0.01" min="0" value={rateEditForm.min_load_kg ?? ''} onChange={e => setRateEdit('min_load_kg', e.target.value)} />
+                  <Input label={isAr ? 'أعلى كغ' : 'Max kg'} type="number" step="0.01" min="0" value={rateEditForm.max_load_kg ?? ''} onChange={e => setRateEdit('max_load_kg', e.target.value)} />
+                  <Input label={isAr ? 'أيام' : 'Days'} type="number" min="0" value={rateEditForm.transit_air_days ?? ''} onChange={e => setRateEdit('transit_air_days', e.target.value)} />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                      {isAr ? 'ميناء التحميل' : 'Port of Loading'}
+                    </label>
+                    <select value={rateEditForm.pol ?? ''} onChange={e => setRateEdit('pol', e.target.value)} className="input-base w-full text-sm">
+                      <option value="">—</option>
+                      {SEA_PORT_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.value}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                      {isAr ? 'ميناء التفريغ' : 'Port of Discharge'}
+                    </label>
+                    <select value={rateEditForm.pod ?? ''} onChange={e => setRateEdit('pod', e.target.value)} className="input-base w-full text-sm">
+                      <option value="">—</option>
+                      {SEA_PORT_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.value}</option>)}
+                    </select>
+                  </div>
+                  <Input type="date" label={isAr ? 'تاريخ الإغلاق' : 'Sealing Date'} value={rateEditForm.sealing_day ?? ''} onChange={e => setRateEdit('sealing_day', e.target.value)} />
+                  <Input type="date" label={isAr ? 'تاريخ مغادرة السفينة' : 'Vessel Departure Date'} value={rateEditForm.vessel_day ?? ''} onChange={e => setRateEdit('vessel_day', e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
+                    {isAr ? 'FCL - سعر الحاوية الكامل' : 'FCL - Full Container Prices'}
+                  </p>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[620px] space-y-1">
+                      <div className="grid grid-cols-[64px_90px_1fr_1fr_76px] gap-2 px-1">
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'الحجم' : 'Size'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء / حاوية' : 'Buy / container'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع / حاوية' : 'Sell / container'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                      </div>
+                      {CONTAINER_SIZES.map(({ k, label }) => {
+                        const buyKey = `buy_${k}`
+                        const sellKey = `sell_${k}`
+                        const cbmKey = `cbm_${k}`
+                        return (
+                          <div key={k} className="grid grid-cols-[64px_90px_1fr_1fr_76px] gap-2 items-center">
+                            <span className="text-xs font-mono text-brand-text-muted">{label}</span>
+                            <input type="number" step="0.1" min="1" className="input-base text-xs text-amber-300" value={rateEditForm[cbmKey] ?? ''} onChange={e => setRateEdit(cbmKey, e.target.value)} />
+                            <input type="number" step="0.01" min="0" className="input-base text-xs" value={rateEditForm[buyKey] ?? ''} onChange={e => setRateEdit(buyKey, e.target.value)} />
+                            <input type="number" step="0.01" min="0" className="input-base text-xs" value={rateEditForm[sellKey] ?? ''} onChange={e => setRateEdit(sellKey, e.target.value)} />
+                            <div className="text-center"><LiveMargin buy={rateEditForm[buyKey] ?? ''} sell={rateEditForm[sellKey] ?? ''} /></div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+                    {isAr ? 'LCL - سعر المتر المكعب حسب حجم الحاوية' : 'LCL - CBM Price Per Container Size'}
+                  </p>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[520px] space-y-1">
+                      <div className="grid grid-cols-[64px_1fr_1fr_76px] gap-2 px-1">
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'الحجم' : 'Size'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء / م³' : 'Buy / m³'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع / م³' : 'Sell / m³'}</span>
+                        <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                      </div>
+                      {CONTAINER_SIZES.map(({ k, label }) => {
+                        const buyKey = `buy_lcl_${k}`
+                        const sellKey = `sell_lcl_${k}`
+                        return (
+                          <div key={k} className="grid grid-cols-[64px_1fr_1fr_76px] gap-2 items-center">
+                            <span className="text-xs font-mono text-brand-text-muted">{label}</span>
+                            <input type="number" step="0.01" min="0" className="input-base text-xs" value={rateEditForm[buyKey] ?? ''} onChange={e => setRateEdit(buyKey, e.target.value)} />
+                            <input type="number" step="0.01" min="0" className="input-base text-xs" value={rateEditForm[sellKey] ?? ''} onChange={e => setRateEdit(sellKey, e.target.value)} />
+                            <div className="text-center"><LiveMargin buy={rateEditForm[buyKey] ?? ''} sell={rateEditForm[sellKey] ?? ''} /></div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-lg border border-brand-border/50 bg-white/[0.02] p-3">
+                  <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+                    {isAr ? 'رسوم المنشأ: المستودع ← ميناء التحميل ← العقبة' : 'Origin Fees: Warehouse → Loading Port → Aqaba'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <Input type="number" min="0" label={isAr ? 'أيام العبور' : 'Transit Days'} value={rateEditForm.transit_sea_days ?? ''} onChange={e => setRateEdit('transit_sea_days', e.target.value)} />
+                    <Input type="number" step="0.01" min="0" label={isAr ? 'عمال / تحميل' : 'Loading Workers'} value={rateEditForm.fee_loading ?? ''} onChange={e => setRateEdit('fee_loading', e.target.value)} />
+                    <Input type="number" step="0.01" min="0" label={isAr ? 'رسوم B/L' : 'B/L Fee'} value={rateEditForm.fee_bl ?? ''} onChange={e => setRateEdit('fee_bl', e.target.value)} />
+                    <Input type="number" step="0.01" min="0" label={isAr ? 'نقل للميناء' : 'Trucking'} value={rateEditForm.fee_trucking ?? ''} onChange={e => setRateEdit('fee_trucking', e.target.value)} />
+                    <Input type="number" step="0.01" min="0" label={isAr ? 'رسوم أخرى' : 'Other Fees'} value={rateEditForm.fee_other ?? ''} onChange={e => setRateEdit('fee_other', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <Input
+              label={isAr ? 'ملاحظات' : 'Notes'}
+              value={rateEditForm.notes ?? ''}
+              onChange={e => setRateEdit('notes', e.target.value)}
+            />
+          </div>
+        )}
       </Modal>
 
       {/* ── Upload Contract Modal ── */}

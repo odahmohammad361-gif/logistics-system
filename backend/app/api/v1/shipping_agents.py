@@ -303,6 +303,7 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
     return {
         "id": p.id,
         "carrier_name": p.carrier_name,
+        "rate_type": getattr(p, "rate_type", "sea") or "sea",
         "pol": p.pol, "pod": p.pod,
         "effective_date": str(p.effective_date),
         "expiry_date": str(p.expiry_date) if p.expiry_date else None,
@@ -310,6 +311,7 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
         "buy_40ft": f(p.buy_40ft), "sell_40ft": f(p.sell_40ft),
         "buy_40hq": f(p.buy_40hq), "sell_40hq": f(p.sell_40hq),
         "buy_air_kg": f(p.buy_air_kg), "sell_air_kg": f(p.sell_air_kg),
+        "min_load_kg": f(getattr(p, "min_load_kg", None)), "max_load_kg": f(getattr(p, "max_load_kg", None)),
         "buy_lcl_cbm": f(p.buy_lcl_cbm), "sell_lcl_cbm": f(p.sell_lcl_cbm),
         "buy_lcl_20gp": f(getattr(p, 'buy_lcl_20gp', None)), "sell_lcl_20gp": f(getattr(p, 'sell_lcl_20gp', None)),
         "buy_lcl_40ft": f(getattr(p, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(p, 'sell_lcl_40ft', None)),
@@ -331,6 +333,7 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
     return {
         "id": r.id,
         "carrier_name": r.carrier_name,
+        "rate_type": getattr(r, "rate_type", "sea") or "sea",
         "pol": r.pol, "pod": r.pod,
         "effective_date": str(r.effective_date) if r.effective_date else None,
         "expiry_date": str(r.expiry_date) if r.expiry_date else None,
@@ -338,6 +341,8 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft), "cbm_40ft": f(r.cbm_40ft),
         "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq), "cbm_40hq": f(r.cbm_40hq),
         "buy_lcl_cbm": f(r.buy_lcl_cbm), "sell_lcl_cbm": f(r.sell_lcl_cbm),
+        "buy_air_kg": f(r.buy_air_kg), "sell_air_kg": f(r.sell_air_kg),
+        "min_load_kg": f(r.min_load_kg), "max_load_kg": f(r.max_load_kg),
         "buy_lcl_20gp": f(r.buy_lcl_20gp), "sell_lcl_20gp": f(r.sell_lcl_20gp),
         "buy_lcl_40ft": f(r.buy_lcl_40ft), "sell_lcl_40ft": f(r.sell_lcl_40ft),
         "buy_lcl_40hq": f(r.buy_lcl_40hq), "sell_lcl_40hq": f(r.sell_lcl_40hq),
@@ -347,6 +352,7 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "fee_loading": f(r.fee_loading), "fee_bl": f(r.fee_bl),
         "fee_trucking": f(r.fee_trucking), "fee_other": f(r.fee_other),
         "transit_sea_days": r.transit_sea_days,
+        "transit_air_days": r.transit_air_days,
         "notes": r.notes, "is_active": r.is_active,
     }
 
@@ -419,6 +425,19 @@ class CarrierRowCreate(BaseModel):
     notes:                Optional[str]   = None
 
 
+class AirCarrierRowCreate(BaseModel):
+    carrier_name:         str
+    pol:                  Optional[str]       = None
+    pod:                  Optional[str]       = None
+    loading_warehouse_id: Optional[int]       = None
+    buy_air_kg:           Optional[float]     = None
+    sell_air_kg:          Optional[float]     = None
+    min_load_kg:          Optional[float]     = None
+    max_load_kg:          Optional[float]     = None
+    transit_air_days:     Optional[int]       = None
+    notes:                Optional[str]       = None
+
+
 class PriceUpdateCreate(BaseModel):
     effective_date:   str
     expiry_date:      Optional[str]        = None
@@ -426,6 +445,7 @@ class PriceUpdateCreate(BaseModel):
     sell_air_kg:      Optional[float]      = None
     transit_air_days: Optional[int]        = None
     carriers:         list[CarrierRowCreate] = []
+    air_carriers:     list[AirCarrierRowCreate] = []
     update_current:   bool                 = True
 
 
@@ -447,6 +467,7 @@ def add_price_history(
         ph = AgentPriceHistory(
             agent_id=agent_id,
             carrier_name=row.carrier_name,
+            rate_type="sea",
             pol=row.pol, pod=row.pod,
             effective_date=payload.effective_date,
             expiry_date=payload.expiry_date or None,
@@ -474,9 +495,11 @@ def add_price_history(
         # Upsert into agent_carrier_rates (current rates table)
         existing = db.query(AgentCarrierRate).filter(
             AgentCarrierRate.agent_id == agent_id,
+            AgentCarrierRate.rate_type == "sea",
             AgentCarrierRate.carrier_name == row.carrier_name,
         ).first()
         rate_fields = dict(
+            rate_type="sea",
             pol=row.pol, pod=row.pod,
             effective_date=payload.effective_date, expiry_date=payload.expiry_date or None,
             buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp, cbm_20gp=row.cbm_20gp,
@@ -500,6 +523,51 @@ def add_price_history(
         else:
             db.add(AgentCarrierRate(agent_id=agent_id, carrier_name=row.carrier_name, **rate_fields))
 
+    for row in payload.air_carriers:
+        ph = AgentPriceHistory(
+            agent_id=agent_id,
+            carrier_name=row.carrier_name,
+            rate_type="air",
+            pol=row.pol, pod=row.pod,
+            effective_date=payload.effective_date,
+            expiry_date=payload.expiry_date or None,
+            buy_air_kg=row.buy_air_kg,
+            sell_air_kg=row.sell_air_kg,
+            min_load_kg=row.min_load_kg,
+            max_load_kg=row.max_load_kg,
+            transit_air_days=row.transit_air_days,
+            loading_warehouse_id=row.loading_warehouse_id,
+            notes=row.notes,
+            created_by_id=current_user.id,
+        )
+        db.add(ph)
+        created.append(ph)
+        carrier_names.append(f"air:{row.carrier_name}")
+
+        existing = db.query(AgentCarrierRate).filter(
+            AgentCarrierRate.agent_id == agent_id,
+            AgentCarrierRate.rate_type == "air",
+            AgentCarrierRate.carrier_name == row.carrier_name,
+        ).first()
+        rate_fields = dict(
+            rate_type="air",
+            pol=row.pol, pod=row.pod,
+            effective_date=payload.effective_date, expiry_date=payload.expiry_date or None,
+            buy_air_kg=row.buy_air_kg,
+            sell_air_kg=row.sell_air_kg,
+            min_load_kg=row.min_load_kg,
+            max_load_kg=row.max_load_kg,
+            transit_air_days=row.transit_air_days,
+            loading_warehouse_id=row.loading_warehouse_id,
+            notes=row.notes,
+        )
+        if existing:
+            for k, v in rate_fields.items():
+                setattr(existing, k, v)
+            existing.is_active = True
+        else:
+            db.add(AgentCarrierRate(agent_id=agent_id, carrier_name=row.carrier_name, **rate_fields))
+
     # Update agent offer dates
     if payload.update_current:
         if payload.expiry_date:   a.offer_valid_to   = payload.expiry_date
@@ -507,6 +575,13 @@ def add_price_history(
         if payload.buy_air_kg  is not None: a.price_air_kg     = payload.buy_air_kg
         if payload.sell_air_kg is not None: a.sell_price_air_kg = payload.sell_air_kg
         if payload.transit_air_days is not None: a.transit_air_days = payload.transit_air_days
+
+        if payload.air_carriers:
+            first_air = next((r for r in payload.air_carriers if r.buy_air_kg is not None or r.sell_air_kg is not None), None)
+            if first_air:
+                if first_air.buy_air_kg is not None: a.price_air_kg = first_air.buy_air_kg
+                if first_air.sell_air_kg is not None: a.sell_price_air_kg = first_air.sell_air_kg
+                if first_air.transit_air_days is not None: a.transit_air_days = first_air.transit_air_days
 
     summary = f"Price update {payload.effective_date}: carriers={','.join(carrier_names)}"
     db.add(AgentEditLog(agent_id=agent_id, action="price_update", summary=summary, changed_by_id=current_user.id))
@@ -529,6 +604,79 @@ def get_carrier_rates(
         AgentCarrierRate.is_active == True,
     ).order_by(AgentCarrierRate.carrier_name).all()
     return [_serialize_carrier_rate(r) for r in rates]
+
+
+class CarrierRateUpdate(BaseModel):
+    carrier_name:         Optional[str]       = None
+    pol:                  Optional[str]       = None
+    pod:                  Optional[str]       = None
+    effective_date:       Optional[date_type] = None
+    expiry_date:          Optional[date_type] = None
+    buy_20gp:             Optional[float]     = None
+    sell_20gp:            Optional[float]     = None
+    cbm_20gp:             Optional[float]     = None
+    buy_40ft:             Optional[float]     = None
+    sell_40ft:            Optional[float]     = None
+    cbm_40ft:             Optional[float]     = None
+    buy_40hq:             Optional[float]     = None
+    sell_40hq:            Optional[float]     = None
+    cbm_40hq:             Optional[float]     = None
+    buy_lcl_20gp:         Optional[float]     = None
+    sell_lcl_20gp:        Optional[float]     = None
+    buy_lcl_40ft:         Optional[float]     = None
+    sell_lcl_40ft:        Optional[float]     = None
+    buy_lcl_40hq:         Optional[float]     = None
+    sell_lcl_40hq:        Optional[float]     = None
+    buy_air_kg:           Optional[float]     = None
+    sell_air_kg:          Optional[float]     = None
+    min_load_kg:          Optional[float]     = None
+    max_load_kg:          Optional[float]     = None
+    transit_sea_days:     Optional[int]       = None
+    transit_air_days:     Optional[int]       = None
+    sealing_day:          Optional[date_type] = None
+    vessel_day:           Optional[date_type] = None
+    loading_warehouse_id: Optional[int]       = None
+    fee_loading:          Optional[float]     = None
+    fee_bl:               Optional[float]     = None
+    fee_trucking:         Optional[float]     = None
+    fee_other:            Optional[float]     = None
+    notes:                Optional[str]       = None
+
+
+@router.patch("/{agent_id}/carrier-rates/{rate_id}")
+def update_carrier_rate(
+    agent_id: int,
+    rate_id: int,
+    payload: CarrierRateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    rate = db.query(AgentCarrierRate).filter(
+        AgentCarrierRate.id == rate_id,
+        AgentCarrierRate.agent_id == agent_id,
+        AgentCarrierRate.is_active == True,
+    ).first()
+    if not rate:
+        raise HTTPException(404, "Carrier rate not found")
+
+    changes = []
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        old = getattr(rate, field, None)
+        if str(old) != str(value):
+            changes.append(f"{field}: {old} → {value}")
+            setattr(rate, field, value)
+
+    if changes:
+        db.add(AgentEditLog(
+            agent_id=agent_id,
+            action="current_rate_edit",
+            summary=f"{rate.carrier_name}: " + "; ".join(changes[:12]),
+            changed_by_id=current_user.id,
+        ))
+
+    db.commit()
+    db.refresh(rate)
+    return _serialize_carrier_rate(rate)
 
 
 # ── Contracts ─────────────────────────────────────────────────────────────────
