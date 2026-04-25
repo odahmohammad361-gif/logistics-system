@@ -25,11 +25,11 @@ const COUNTRY_PORTS: Record<string, { sea: string[]; air: string[] }> = {
 }
 
 const PRICE_FIELDS = [
-  ['clearance_fee', 'Clearance Fees'],
-  ['transportation', 'Transportation'],
-  ['delivery_authorization', 'Delivery Authorization'],
-  ['inspection_ramp', 'Inspection Ramp'],
-  ['port_inspection', 'Port Inspection'],
+  ['clearance_fee', 'Clearance Fees', 'تكاليف التخليص'],
+  ['transportation', 'Transportation', 'رسوم نقل'],
+  ['delivery_authorization', 'Delivery Authorization', 'اذن تسليم'],
+  ['inspection_ramp', 'Inspection Ramp', 'رمبة ميناء'],
+  ['port_inspection', 'Port Inspection', 'معاينه بضاعه'],
 ] as const
 
 type PriceKey = typeof PRICE_FIELDS[number][0]
@@ -332,11 +332,11 @@ export default function ClearanceAgentProfilePage() {
                   <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
                   <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
                 </div>
-                {PRICE_FIELDS.filter(([key]) => form.service_mode === 'sea' || !['inspection_ramp', 'port_inspection'].includes(key)).map(([key, label]) => (
-                  <PriceInputRow key={key} field={key} label={label} form={form} setField={setField} />
+                {PRICE_FIELDS.filter(([key]) => form.service_mode === 'sea' || !['inspection_ramp', 'port_inspection'].includes(key)).map(([key, labelEn, labelAr]) => (
+                  <PriceInputRow key={key} field={key} label={isAr ? labelAr : labelEn} form={form} setField={setField} />
                 ))}
                 <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 items-center">
-                  <span className="text-xs text-brand-text-muted">{isAr ? 'بطاقة الاستيراد والتصدير %' : 'Import / Export Card %'}</span>
+                  <span className="text-xs text-brand-text-muted">{isAr ? 'بطاقة مستورد %' : 'Import and Export Card %'}</span>
                   <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.buy_import_export_card_pct} onChange={e => setField('buy_import_export_card_pct', e.target.value)} />
                   <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.sell_import_export_card_pct} onChange={e => setField('sell_import_export_card_pct', e.target.value)} />
                   <div className="text-xs text-center text-brand-text-muted">{margin(form.buy_import_export_card_pct, form.sell_import_export_card_pct)}</div>
@@ -416,13 +416,13 @@ function RateCard({ rate, isAr, canEdit, onEdit, onDelete }: { rate: ClearanceAg
             <span key={i} className="text-[10px] text-brand-text-muted uppercase tracking-wider text-center first:text-start">{h}</span>
           ))}
         </div>
-        {row(isAr ? 'رسوم التخليص' : 'Clearance', rate.buy_clearance_fee, rate.sell_clearance_fee)}
-        {row(isAr ? 'النقل' : 'Transportation', rate.buy_transportation, rate.sell_transportation)}
-        {row(isAr ? 'إذن التسليم' : 'Delivery Auth.', rate.buy_delivery_authorization, rate.sell_delivery_authorization)}
-        {rate.service_mode === 'sea' && row(isAr ? 'رامب التفتيش' : 'Inspection Ramp', rate.buy_inspection_ramp, rate.sell_inspection_ramp)}
-        {rate.service_mode === 'sea' && row(isAr ? 'تفتيش الميناء' : 'Port Inspection', rate.buy_port_inspection, rate.sell_port_inspection)}
+        {row(isAr ? 'تكاليف التخليص' : 'Clearance Fees', rate.buy_clearance_fee, rate.sell_clearance_fee)}
+        {row(isAr ? 'رسوم نقل' : 'Transportation', rate.buy_transportation, rate.sell_transportation)}
+        {row(isAr ? 'اذن تسليم' : 'Delivery Authorization', rate.buy_delivery_authorization, rate.sell_delivery_authorization)}
+        {rate.service_mode === 'sea' && row(isAr ? 'رمبة ميناء' : 'Inspection Ramp', rate.buy_inspection_ramp, rate.sell_inspection_ramp)}
+        {rate.service_mode === 'sea' && row(isAr ? 'معاينه بضاعه' : 'Port Inspection', rate.buy_port_inspection, rate.sell_port_inspection)}
         <div className="grid grid-cols-4 gap-2 py-2 text-sm">
-          <span className="text-brand-text-muted text-xs">{isAr ? 'بطاقة استيراد/تصدير' : 'Import/Export Card'}</span>
+          <span className="text-brand-text-muted text-xs">{isAr ? 'بطاقة مستورد' : 'Import and Export Card'}</span>
           <span className="font-mono text-brand-text text-center">{rate.buy_import_export_card_pct ?? '—'}%</span>
           <span className="font-mono text-emerald-400 text-center">{rate.sell_import_export_card_pct ?? '—'}%</span>
           <span className="text-xs text-brand-text-muted text-center">{margin(rate.buy_import_export_card_pct, rate.sell_import_export_card_pct)}</span>
