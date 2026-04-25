@@ -920,13 +920,12 @@ export default function AgentProfilePage() {
                     ) : <span />}
                   </div>
 
-                  {/* FCL price grid — columns: Size | Capacity(CBM) | Rate/m³ | Buy total | Sell total | Margin */}
-                  <div className="grid grid-cols-[36px_60px_70px_1fr_1fr_52px] gap-1.5 px-1 mb-0.5">
+                  {/* FCL price grid — columns: Size | Capacity (CBM) | Buy (per container) | Sell (per container) | Margin */}
+                  <div className="grid grid-cols-[36px_60px_70px_1fr_52px] gap-1.5 px-1 mb-0.5">
                     <span />
                     <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
-                    <span className="text-[10px] text-blue-400 uppercase">{isAr ? 'سعر/م³' : 'Rate/m³'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء' : 'Buy'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
+                    <span className="text-[10px] text-blue-400 uppercase">{isAr ? 'سعر الحاوية' : 'Buy (per container)'}</span>
+                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell (per container)'}</span>
                     <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
                   </div>
                   {([
@@ -934,7 +933,7 @@ export default function AgentProfilePage() {
                     { k: '40ft' as const, l: '40GP' },
                     { k: '40hq' as const, l: '40HQ' },
                   ]).map(({ k, l }) => (
-                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_1fr_52px] gap-1.5 items-center">
+                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_52px] gap-1.5 items-center">
                       <span className="text-xs font-mono text-brand-text-muted">{l}</span>
                       {/* CBM capacity (editable, stored in DB) */}
                       <input type="number" step="0.1" min="1" placeholder={DEFAULT_CBM[k]}
@@ -943,24 +942,21 @@ export default function AgentProfilePage() {
                         value={(row as any)[`cbm_${k}`]}
                         onChange={e => setRow(row._id, `cbm_${k}` as keyof CarrierRow, e.target.value)}
                       />
-                      {/* Rate per m³ — auto-calculates buy total */}
+
+                      {/* Buy per container (explicit) */}
                       <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs text-blue-300"
-                        title={isAr ? 'سعر الشراء لكل م³' : 'Buy rate per m³'}
-                        value={(row as any)[`rate_${k}`]}
-                        onChange={e => {
-                          setRow(row._id, `rate_${k}` as keyof CarrierRow, e.target.value)
-                          applyCbmRate(row._id, k, e.target.value)
-                        }}
-                      />
-                      <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs" value={(row as any)[`buy_${k}`]}
+                        className="input-base text-xs"
+                        title={isAr ? 'سعر الشراء للحاوية' : 'Buy (per container)'}
+                        value={(row as any)[`buy_${k}`]}
                         onChange={e => setRow(row._id, `buy_${k}` as keyof CarrierRow, e.target.value)}
                       />
+
+                      {/* Sell per container */}
                       <input type="number" step="0.01" min="0" placeholder="0.00"
                         className="input-base text-xs" value={(row as any)[`sell_${k}`]}
                         onChange={e => setRow(row._id, `sell_${k}` as keyof CarrierRow, e.target.value)}
                       />
+
                       <div className="text-center">
                         <LiveMargin buy={(row as any)[`buy_${k}`]} sell={(row as any)[`sell_${k}`]} />
                       </div>
