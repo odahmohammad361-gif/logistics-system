@@ -18,6 +18,14 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection, Textarea } from '@/components/ui/Form'
 import type { ShippingAgent, AgentCarrierRate, AgentPriceHistory, AgentContract, AgentEditLog, AgentQuoteSummary } from '@/types'
+import { getFlatPortOptions } from '@/constants/logistics'
+
+const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
+
+const COMMON_SEA_CARRIERS = [
+  'CMA CGM', 'MSC', 'Evergreen', 'PIL', 'COSCO', 'Yang Ming',
+  'Hapag-Lloyd', 'ONE', 'HMM', 'ZIM', 'OOCL', 'Maersk', 'Wan Hai',
+]
 import clsx from 'clsx'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -841,27 +849,67 @@ export default function AgentProfilePage() {
               {carrierRows.map((row, idx) => (
                 <div key={row._id} className="rounded-xl border border-brand-border bg-brand-surface p-3 space-y-2.5">
                   {/* Row header */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-brand-text-muted font-semibold w-4">{idx + 1}</span>
-                    <input type="text" placeholder={isAr ? 'اسم الشركة (PIL, CMA...)' : 'Carrier name (PIL, CMA...)'}
-                      value={row.carrier_name}
-                      onChange={e => setRow(row._id, 'carrier_name', e.target.value)}
-                      className="input-base flex-1 text-sm font-semibold"
-                    />
-                    <input type="text" placeholder={isAr ? 'ميناء التحميل' : 'Port of Loading'}
-                      value={row.pol} onChange={e => setRow(row._id, 'pol', e.target.value)}
-                      className="input-base flex-1 text-sm"
-                    />
-                    <input type="text" placeholder={isAr ? 'ميناء التفريغ' : 'Port of Discharge'}
-                      value={row.pod} onChange={e => setRow(row._id, 'pod', e.target.value)}
-                      className="input-base flex-1 text-sm"
-                    />
-                    {carrierRows.length > 1 && (
+                  <div className="grid grid-cols-[24px_1fr_1fr_1fr_32px] gap-2 items-end">
+                    <span className="text-[10px] text-brand-text-muted font-semibold pb-2">{idx + 1}</span>
+
+                    {/* Carrier name with datalist of common carriers */}
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                        {isAr ? 'شركة الشحن' : 'Carrier'}
+                      </label>
+                      <input
+                        list={`carriers-list-${row._id}`}
+                        type="text"
+                        placeholder={isAr ? 'PIL, CMA, MSC...' : 'PIL, CMA, MSC...'}
+                        value={row.carrier_name}
+                        onChange={e => setRow(row._id, 'carrier_name', e.target.value)}
+                        className="input-base w-full text-sm font-semibold"
+                      />
+                      <datalist id={`carriers-list-${row._id}`}>
+                        {COMMON_SEA_CARRIERS.map(c => <option key={c} value={c} />)}
+                      </datalist>
+                    </div>
+
+                    {/* Port of Loading dropdown */}
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                        {isAr ? 'ميناء التحميل' : 'Port of Loading'}
+                      </label>
+                      <select
+                        value={row.pol}
+                        onChange={e => setRow(row._id, 'pol', e.target.value)}
+                        className="input-base w-full text-sm"
+                      >
+                        <option value="">—</option>
+                        {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
+                          <option key={o.value} value={o.value}>{o.value}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Port of Discharge dropdown */}
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                        {isAr ? 'ميناء التفريغ' : 'Port of Discharge'}
+                      </label>
+                      <select
+                        value={row.pod}
+                        onChange={e => setRow(row._id, 'pod', e.target.value)}
+                        className="input-base w-full text-sm"
+                      >
+                        <option value="">—</option>
+                        {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
+                          <option key={o.value} value={o.value}>{o.value}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {carrierRows.length > 1 ? (
                       <button type="button" onClick={() => setCarrierRows(r => r.filter(x => x._id !== row._id))}
-                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors flex-shrink-0">
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors mb-0.5">
                         <Trash2 size={13} />
                       </button>
-                    )}
+                    ) : <span />}
                   </div>
 
                   {/* FCL price grid */}

@@ -15,7 +15,14 @@ import Badge from '@/components/ui/Badge'
 import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
 import type { ShippingAgent } from '@/types'
+import { getFlatPortOptions } from '@/constants/logistics'
 import clsx from 'clsx'
+
+const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
+const COMMON_SEA_CARRIERS = [
+  'CMA CGM', 'MSC', 'Evergreen', 'PIL', 'COSCO', 'Yang Ming',
+  'Hapag-Lloyd', 'ONE', 'HMM', 'ZIM', 'OOCL', 'Maersk', 'Wan Hai',
+]
 
 // ── Static location data ───────────────────────────────────────────────────────
 const AGENT_COUNTRIES = [
@@ -710,14 +717,40 @@ export default function ShippingAgentsPage() {
               />
             </FormRow>
             {/* Carrier / shipping line */}
-            <Input
-              label={t('bookings.carrier_line')}
-              placeholder={isAir ? 'Emirates SkyCargo, Turkish Cargo…' : 'CMA CGM, MSC, PIL, Evergreen…'}
-              {...quoteForm.register('carrier')}
-            />
+            <div>
+              <label className="block text-xs text-brand-text-muted mb-1">{t('bookings.carrier_line')}</label>
+              <input
+                list="carriers-datalist"
+                type="text"
+                placeholder={isAir ? 'Emirates SkyCargo, Turkish Cargo…' : 'CMA CGM, MSC, PIL, Evergreen…'}
+                className="input-base w-full"
+                {...quoteForm.register('carrier')}
+              />
+              {!isAir && (
+                <datalist id="carriers-datalist">
+                  {COMMON_SEA_CARRIERS.map(c => <option key={c} value={c} />)}
+                </datalist>
+              )}
+            </div>
             <FormRow>
-              <Input label={t('containers.origin_port')} {...quoteForm.register('port_of_loading')} />
-              <Input label={t('containers.destination_port')} {...quoteForm.register('port_of_discharge')} />
+              <div>
+                <label className="block text-xs text-brand-text-muted mb-1">{t('containers.origin_port')}</label>
+                <select className="input-base w-full" {...quoteForm.register('port_of_loading')}>
+                  <option value="">—</option>
+                  {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
+                    <option key={o.value} value={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-brand-text-muted mb-1">{t('containers.destination_port')}</label>
+                <select className="input-base w-full" {...quoteForm.register('port_of_discharge')}>
+                  <option value="">—</option>
+                  {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
+                    <option key={o.value} value={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </div>
             </FormRow>
             <FormRow>
               <Select
