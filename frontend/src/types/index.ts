@@ -153,8 +153,8 @@ export interface AgentCarrierRate {
   pod: string | null
   effective_date: string | null
   expiry_date: string | null
-  sealing_day: number | null
-  vessel_day: number | null
+  sealing_day: string | null
+  vessel_day: string | null
   loading_warehouse_id: number | null
   // FCL prices
   buy_20gp: number | null;  sell_20gp: number | null;  cbm_20gp: number | null
@@ -192,8 +192,8 @@ export interface AgentPriceHistory {
   buy_lcl_40hq: number | null; sell_lcl_40hq: number | null
   transit_sea_days: number | null
   transit_air_days: number | null
-  sealing_day: number | null
-  vessel_day: number | null
+  sealing_day: string | null
+  vessel_day: string | null
   loading_warehouse_id: number | null
   fee_loading: number | null
   fee_bl: number | null

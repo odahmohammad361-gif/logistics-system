@@ -315,7 +315,8 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
         "buy_lcl_40ft": f(getattr(p, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(p, 'sell_lcl_40ft', None)),
         "buy_lcl_40hq": f(getattr(p, 'buy_lcl_40hq', None)), "sell_lcl_40hq": f(getattr(p, 'sell_lcl_40hq', None)),
         "transit_sea_days": p.transit_sea_days, "transit_air_days": p.transit_air_days,
-        "sealing_day": p.sealing_day, "vessel_day": p.vessel_day,
+        "sealing_day": str(p.sealing_day) if p.sealing_day else None,
+        "vessel_day": str(p.vessel_day) if p.vessel_day else None,
         "loading_warehouse_id": p.loading_warehouse_id,
         "fee_loading": f(p.fee_loading), "fee_bl": f(p.fee_bl),
         "fee_trucking": f(p.fee_trucking), "fee_other": f(p.fee_other),
@@ -340,7 +341,8 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "buy_lcl_20gp": f(r.buy_lcl_20gp), "sell_lcl_20gp": f(r.sell_lcl_20gp),
         "buy_lcl_40ft": f(r.buy_lcl_40ft), "sell_lcl_40ft": f(r.sell_lcl_40ft),
         "buy_lcl_40hq": f(r.buy_lcl_40hq), "sell_lcl_40hq": f(r.sell_lcl_40hq),
-        "sealing_day": r.sealing_day, "vessel_day": r.vessel_day,
+        "sealing_day": str(r.sealing_day) if r.sealing_day else None,
+        "vessel_day": str(r.vessel_day) if r.vessel_day else None,
         "loading_warehouse_id": r.loading_warehouse_id,
         "fee_loading": f(r.fee_loading), "fee_bl": f(r.fee_bl),
         "fee_trucking": f(r.fee_trucking), "fee_other": f(r.fee_other),
@@ -407,8 +409,8 @@ class CarrierRowCreate(BaseModel):
     buy_lcl_40hq:     Optional[float] = None
     sell_lcl_40hq:    Optional[float] = None
     transit_sea_days:     Optional[int]   = None
-    sealing_day:          Optional[int]   = None
-    vessel_day:           Optional[int]   = None
+    sealing_day:          Optional[date_type] = None
+    vessel_day:           Optional[date_type] = None
     loading_warehouse_id: Optional[int]   = None
     fee_loading:          Optional[float] = None
     fee_bl:               Optional[float] = None

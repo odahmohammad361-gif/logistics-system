@@ -91,8 +91,8 @@ class AgentPriceHistory(Base):
     sell_lcl_40hq  = Column(Numeric(10, 2), nullable=True)
     transit_sea_days     = Column(Integer, nullable=True)
     transit_air_days     = Column(Integer, nullable=True)
-    sealing_day          = Column(Integer, nullable=True)
-    vessel_day           = Column(Integer, nullable=True)
+    sealing_day          = Column(Date, nullable=True)
+    vessel_day           = Column(Date, nullable=True)
     loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)
     fee_loading  = Column(Numeric(10, 2), nullable=True)
     fee_bl       = Column(Numeric(10, 2), nullable=True)
@@ -136,8 +136,8 @@ class AgentCarrierRate(Base):
     buy_lcl_40hq   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40hq  = Column(Numeric(10, 2), nullable=True)
     transit_sea_days     = Column(Integer, nullable=True)
-    sealing_day          = Column(Integer, nullable=True)   # day of month (e.g. 30)
-    vessel_day           = Column(Integer, nullable=True)   # day vessel departs
+    sealing_day          = Column(Date, nullable=True)      # booking cutoff date
+    vessel_day           = Column(Date, nullable=True)      # vessel departure date
     loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)
     # Origin fees (warehouse → loading port)
     fee_loading  = Column(Numeric(10, 2), nullable=True)   # stuffing / loading workers

@@ -328,8 +328,8 @@ export default function AgentProfilePage() {
             buy_lcl_40ft: n(r.buy_lcl_40ft), sell_lcl_40ft: n(r.sell_lcl_40ft),
             buy_lcl_40hq: n(r.buy_lcl_40hq), sell_lcl_40hq: n(r.sell_lcl_40hq),
             transit_sea_days: ni(r.transit_sea_days),
-            sealing_day: ni(r.sealing_day),
-            vessel_day: ni(r.vessel_day),
+            sealing_day: r.sealing_day || null,
+            vessel_day: r.vessel_day || null,
             loading_warehouse_id: ni(r.loading_warehouse_id),
             fee_loading: n(r.fee_loading),
             fee_bl: n(r.fee_bl),
@@ -556,8 +556,8 @@ export default function AgentProfilePage() {
                             {warehouseById.get(cr.loading_warehouse_id)?.name}
                           </span>
                         )}
-                        {cr.sealing_day && <span>{isAr ? 'الإغلاق:' : 'Sealing:'} <b className="text-brand-text">{cr.sealing_day}</b></span>}
-                        {cr.vessel_day && <span>{isAr ? 'السفينة:' : 'Vessel:'} <b className="text-brand-text">{cr.vessel_day}</b></span>}
+                        {cr.sealing_day && <span>{isAr ? 'تاريخ الإغلاق:' : 'Sealing Date:'} <b className="text-brand-text">{cr.sealing_day}</b></span>}
+                        {cr.vessel_day && <span>{isAr ? 'مغادرة السفينة:' : 'Vessel Departure:'} <b className="text-brand-text">{cr.vessel_day}</b></span>}
                       </div>
                     )}
                     {/* Prices grid */}
@@ -643,8 +643,8 @@ export default function AgentProfilePage() {
                       {(ph.loading_warehouse_id || ph.sealing_day || ph.vessel_day || [ph.fee_loading, ph.fee_bl, ph.fee_trucking, ph.fee_other].some(v => v != null)) && (
                         <div className="px-4 pb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-brand-text-muted">
                           {ph.loading_warehouse_id && warehouseById.get(ph.loading_warehouse_id) && <span>{warehouseById.get(ph.loading_warehouse_id)?.name}</span>}
-                          {ph.sealing_day && <span>{isAr ? 'الإغلاق:' : 'Sealing:'} <b className="text-brand-text">{ph.sealing_day}</b></span>}
-                          {ph.vessel_day && <span>{isAr ? 'السفينة:' : 'Vessel:'} <b className="text-brand-text">{ph.vessel_day}</b></span>}
+                          {ph.sealing_day && <span>{isAr ? 'تاريخ الإغلاق:' : 'Sealing Date:'} <b className="text-brand-text">{ph.sealing_day}</b></span>}
+                          {ph.vessel_day && <span>{isAr ? 'مغادرة السفينة:' : 'Vessel Departure:'} <b className="text-brand-text">{ph.vessel_day}</b></span>}
                           {ph.fee_loading != null && <span>{isAr ? 'تحميل:' : 'Loading:'} <b className="text-brand-text font-mono">{fmtUSD(ph.fee_loading)}</b></span>}
                           {ph.fee_bl != null && <span>B/L: <b className="text-brand-text font-mono">{fmtUSD(ph.fee_bl)}</b></span>}
                           {ph.fee_trucking != null && <span>{isAr ? 'نقل:' : 'Trucking:'} <b className="text-brand-text font-mono">{fmtUSD(ph.fee_trucking)}</b></span>}
@@ -830,20 +830,14 @@ export default function AgentProfilePage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Input
-                      type="number"
-                      min="1"
-                      max="31"
-                      label={isAr ? 'يوم الإغلاق' : 'Sealing Day'}
-                      placeholder={isAr ? 'مثال 30' : 'e.g. 30'}
+                      type="date"
+                      label={isAr ? 'تاريخ الإغلاق' : 'Sealing Date'}
                       value={row.sealing_day}
                       onChange={e => setRow(row._id, 'sealing_day', e.target.value)}
                     />
                     <Input
-                      type="number"
-                      min="1"
-                      max="31"
-                      label={isAr ? 'يوم السفينة' : 'Vessel Day'}
-                      placeholder={isAr ? 'مثال 2' : 'e.g. 2'}
+                      type="date"
+                      label={isAr ? 'تاريخ مغادرة السفينة' : 'Vessel Departure Date'}
                       value={row.vessel_day}
                       onChange={e => setRow(row._id, 'vessel_day', e.target.value)}
                     />
