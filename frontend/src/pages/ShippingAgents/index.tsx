@@ -72,22 +72,6 @@ interface AgentForm {
   serves_air: boolean
   offer_valid_from: string
   offer_valid_to: string
-  // Buy prices (from agent)
-  price_20gp:   number | ''
-  price_40ft:   number | ''
-  price_40hq:   number | ''
-  price_air_kg: number | ''
-  buy_lcl_cbm:  number | ''
-  // Sell prices (to clients)
-  sell_price_20gp:   number | ''
-  sell_price_40ft:   number | ''
-  sell_price_40hq:   number | ''
-  sell_price_air_kg: number | ''
-  sell_lcl_cbm:      number | ''
-  // Calculator helpers — not sent to server
-  markup_sea: number | ''
-  markup_air: number | ''
-  cbm_rate_buy: number | ''
   transit_sea_days: number | ''
   transit_air_days: number | ''
   notes: string
@@ -138,42 +122,16 @@ export default function ShippingAgentsPage() {
     })),
   ]
 
-  const CBM_CAP = { '20gp': 28, '40ft': 67, '40hq': 76 }
-
-  // Watch buy prices and markup to auto-fill sell prices
-  const [buy20, buy40ft, buy40hq, buyAir, buyLcl, markupSea, markupAir] = agentForm.watch([
-    'price_20gp', 'price_40ft', 'price_40hq', 'price_air_kg', 'buy_lcl_cbm', 'markup_sea', 'markup_air',
-  ])
-  function applyMarkupSea() {
-    const pct = parseFloat(String(markupSea))
-    if (!pct) return
-    if (buy20)   agentForm.setValue('sell_price_20gp', Number((Number(buy20)   * (1 + pct / 100)).toFixed(2)))
-    if (buy40ft) agentForm.setValue('sell_price_40ft', Number((Number(buy40ft) * (1 + pct / 100)).toFixed(2)))
-    if (buy40hq) agentForm.setValue('sell_price_40hq', Number((Number(buy40hq) * (1 + pct / 100)).toFixed(2)))
-    if (buyLcl)  agentForm.setValue('sell_lcl_cbm',    Number((Number(buyLcl)  * (1 + pct / 100)).toFixed(2)))
-  }
-  function applyMarkupAir() {
-    const pct = parseFloat(String(markupAir))
-    if (!pct || !buyAir) return
-    agentForm.setValue('sell_price_air_kg', Number((Number(buyAir) * (1 + pct / 100)).toFixed(2)))
-  }
-
   const saveAgentMut = useMutation({
     mutationFn: (v: AgentForm) => {
-      const n = (x: number | '') => (x !== '' ? Number(x) : null)
       const payload = {
         name: v.name, phone: v.phone, email: v.email, wechat_id: v.wechat_id,
         country: v.country, warehouse_city: v.warehouse_city, warehouse_address: v.warehouse_address,
         serves_sea: v.serves_sea, serves_air: v.serves_air,
         offer_valid_from: v.offer_valid_from || null,
         offer_valid_to:   v.offer_valid_to   || null,
-        price_20gp: n(v.price_20gp),   price_40ft: n(v.price_40ft),
-        price_40hq: n(v.price_40hq),   price_air_kg: n(v.price_air_kg),
-        buy_lcl_cbm: n(v.buy_lcl_cbm),
-        sell_price_20gp: n(v.sell_price_20gp),   sell_price_40ft: n(v.sell_price_40ft),
-        sell_price_40hq: n(v.sell_price_40hq),   sell_price_air_kg: n(v.sell_price_air_kg),
-        sell_lcl_cbm: n(v.sell_lcl_cbm),
-        transit_sea_days: n(v.transit_sea_days),  transit_air_days: n(v.transit_air_days),
+        transit_sea_days: v.transit_sea_days || null,
+        transit_air_days: v.transit_air_days || null,
         notes: v.notes,
       }
       return editingAgent ? updateAgent(editingAgent.id, payload) : createAgent(payload)
@@ -201,15 +159,10 @@ export default function ShippingAgentsPage() {
       warehouse_city: '', warehouse_address: '',
       serves_sea: true, serves_air: false,
       offer_valid_from: '', offer_valid_to: '',
-      price_20gp: '', price_40ft: '', price_40hq: '', price_air_kg: '', buy_lcl_cbm: '',
-      sell_price_20gp: '', sell_price_40ft: '', sell_price_40hq: '', sell_price_air_kg: '', sell_lcl_cbm: '',
-      markup_sea: '', markup_air: '', cbm_rate_buy: '',
       transit_sea_days: '', transit_air_days: '', notes: '',
     })
     setAgentModal(true)
   }
-
-  const n = (x: unknown) => (x != null && x !== '' ? Number(x) : '')
 
   function openEditAgent(agent: ShippingAgent) {
     setEditingAgent(agent)
@@ -221,19 +174,8 @@ export default function ShippingAgentsPage() {
       country: agent.country ?? '',
       warehouse_city: agent.warehouse_city ?? '',
       warehouse_address: (agent as any).warehouse_address ?? '',
-      price_20gp:   n(agent.price_20gp),
-      price_40ft:   n(agent.price_40ft),
-      price_40hq:   n(agent.price_40hq),
-      price_air_kg: n(agent.price_air_kg),
-      buy_lcl_cbm:       n(agent.buy_lcl_cbm),
-      sell_price_20gp:   n(agent.sell_price_20gp),
-      sell_price_40ft:   n(agent.sell_price_40ft),
-      sell_price_40hq:   n(agent.sell_price_40hq),
-      sell_price_air_kg: n(agent.sell_price_air_kg),
-      sell_lcl_cbm:      n(agent.sell_lcl_cbm),
       offer_valid_from: agent.offer_valid_from ?? '',
       offer_valid_to:   agent.offer_valid_to   ?? '',
-      markup_sea: '', markup_air: '',
       transit_sea_days: agent.transit_sea_days ?? '',
       transit_air_days: agent.transit_air_days ?? '',
       serves_sea: agent.serves_sea ?? true,
@@ -506,106 +448,11 @@ export default function ShippingAgentsPage() {
             </div>
           </FormSection>
 
-          {/* Buy / Sell prices */}
-          <FormSection title={t('agents.prices_title')}>
-            {/* Sea */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                  🚢 {isAr ? 'أسعار الشحن البحري (USD)' : 'Sea Freight (USD)'}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number" step="0.1" min="0" placeholder="%"
-                    className="input-base w-20 text-xs py-1.5"
-                    {...agentForm.register('markup_sea')}
-                  />
-                  <button type="button" onClick={applyMarkupSea}
-                    className="px-2 py-1.5 rounded-lg bg-brand-primary/15 text-brand-primary-light text-[11px] font-medium hover:bg-brand-primary/25 transition-colors whitespace-nowrap">
-                    {isAr ? 'تطبيق %' : 'Apply %'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Column headers */}
-              <div className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 px-1 mb-1">
-                <span />
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'لكل م³' : 'Per m³'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'شراء (إجمالي)' : 'Buy (total)'}</span>
-                <span className="text-[10px] text-brand-text-muted uppercase tracking-wider">{isAr ? 'بيع (إجمالي)' : 'Sell (total)'}</span>
-              </div>
-              {[
-                { label: '20GP', cap: CBM_CAP['20gp'], buyKey: 'price_20gp' as const, sellKey: 'sell_price_20gp' as const, rateKey: 'cbm_rate_buy' as const },
-                { label: '40GP', cap: CBM_CAP['40ft'], buyKey: 'price_40ft' as const, sellKey: 'sell_price_40ft' as const, rateKey: 'cbm_rate_buy' as const },
-                { label: '40HQ', cap: CBM_CAP['40hq'], buyKey: 'price_40hq' as const, sellKey: 'sell_price_40hq' as const, rateKey: 'cbm_rate_buy' as const },
-              ].map(({ label, cap, buyKey, sellKey }) => (
-                <div key={label} className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 items-end">
-                  <div className="text-sm font-mono text-brand-text-muted pb-2.5">{label}</div>
-                  {/* Per m³ → auto-fills buy total */}
-                  <input type="number" step="0.01" min="0" placeholder="0.00"
-                    className="input-base text-sm text-blue-300"
-                    title={`×${cap} m³`}
-                    onChange={(e) => {
-                      const rate = parseFloat(e.target.value)
-                      if (rate > 0) agentForm.setValue(buyKey, Number((rate * cap).toFixed(2)))
-                      else if (e.target.value === '') agentForm.setValue(buyKey, '')
-                    }}
-                  />
-                  <Input type="number" step="0.01" min="0" placeholder="0.00"
-                    {...agentForm.register(buyKey)} />
-                  <Input type="number" step="0.01" min="0" placeholder="0.00"
-                    {...agentForm.register(sellKey)} />
-                </div>
-              ))}
-              {/* LCL per CBM */}
-              <div className="grid grid-cols-[44px_1fr_1fr_1fr] gap-2 items-end pt-1 border-t border-brand-border/30">
-                <div className="text-sm font-mono text-brand-text-muted pb-2.5">LCL</div>
-                <span /> {/* LCL is already per m³ */}
-                <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'شراء/م³' : 'Buy/m³'}
-                  {...agentForm.register('buy_lcl_cbm')} />
-                <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'بيع/م³' : 'Sell/m³'}
-                  {...agentForm.register('sell_lcl_cbm')} />
-              </div>
-              <Input type="number" min="0"
-                label={isAr ? 'مدة العبور البحري (أيام)' : 'Sea Transit (days)'}
-                {...agentForm.register('transit_sea_days')} />
-            </div>
-
-            <div className="border-t border-brand-border/50 my-2" />
-
-            {/* Air */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                  ✈ {isAr ? 'أسعار الشحن الجوي (USD/كغ)' : 'Air Freight (USD/kg)'}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number" step="0.1" min="0" placeholder="%"
-                    className="input-base w-20 text-xs py-1.5"
-                    {...agentForm.register('markup_air')}
-                  />
-                  <button type="button" onClick={applyMarkupAir}
-                    className="px-2 py-1.5 rounded-lg bg-brand-primary/15 text-brand-primary-light text-[11px] font-medium hover:bg-brand-primary/25 transition-colors whitespace-nowrap">
-                    {isAr ? 'تطبيق %' : 'Apply %'}
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 items-end">
-                <div className="text-sm font-mono text-brand-text-muted pb-2.5">Air /kg</div>
-                <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'شراء' : 'Buy'}
-                  {...agentForm.register('price_air_kg')} />
-                <Input type="number" step="0.01" min="0" placeholder="0.00"
-                  label={isAr ? 'بيع' : 'Sell'}
-                  {...agentForm.register('sell_price_air_kg')} />
-              </div>
-              <Input type="number" min="0"
-                label={isAr ? 'مدة العبور الجوي (أيام)' : 'Air Transit (days)'}
-                {...agentForm.register('transit_air_days')} />
-            </div>
+          <FormSection title={isAr ? 'أيام العبور' : 'Transit Times'}>
+            <FormRow>
+              <Input type="number" min="0" label={isAr ? 'عبور بحري (أيام)' : 'Sea Transit (days)'} {...agentForm.register('transit_sea_days')} />
+              <Input type="number" min="0" label={isAr ? 'عبور جوي (أيام)' : 'Air Transit (days)'} {...agentForm.register('transit_air_days')} />
+            </FormRow>
           </FormSection>
 
           <Input label={t('common.notes')} {...agentForm.register('notes')} />
