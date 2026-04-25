@@ -13,11 +13,12 @@ import {
   getAgentProfile, addPriceHistory, uploadAgentContract,
   deleteAgentContract, getAgentContractDownloadUrl,
 } from '@/services/agentService'
+import { getWarehouses } from '@/services/warehouseService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { Input, FormRow, FormSection, Textarea } from '@/components/ui/Form'
-import type { ShippingAgent, AgentCarrierRate, AgentPriceHistory, AgentContract, AgentEditLog } from '@/types'
+import { Input, FormRow, FormSection } from '@/components/ui/Form'
+import type { ShippingAgent, AgentContract, AgentEditLog, CompanyWarehouse } from '@/types'
 import { getFlatPortOptions } from '@/constants/logistics'
 
 const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
@@ -186,17 +187,25 @@ function LiveMargin({ buy, sell }: { buy: string; sell: string }) {
 }
 
 // ── Multi-carrier price form helpers ──────────────────────────────────────────
-const CBM_CAPACITY = { '20gp': 28, '40ft': 67, '40hq': 76 } as const
-
 // Standard CBM defaults (editable per row)
 const DEFAULT_CBM = { '20gp': '28', '40ft': '67', '40hq': '76' }
+const CONTAINER_SIZES = [
+  { k: '20gp' as const, label: '20GP' },
+  { k: '40ft' as const, label: '40GP' },
+  { k: '40hq' as const, label: '40HQ' },
+]
+
+function fieldFor(size: (typeof CONTAINER_SIZES)[number]['k'], prefix: 'buy' | 'sell' | 'cbm' | 'buy_lcl' | 'sell_lcl') {
+  return `${prefix}_${size}` as keyof CarrierRow
+}
 
 interface CarrierRow {
   _id: string
   carrier_name: string
   pol: string; pod: string
-  // per-CBM rate helpers (for auto-calculating buy total)
-  rate_20gp: string; rate_40ft: string; rate_40hq: string
+  sealing_day: string
+  vessel_day: string
+  loading_warehouse_id: string
   // prices
   buy_20gp: string; sell_20gp: string; cbm_20gp: string
   buy_40ft: string; sell_40ft: string; cbm_40ft: string
@@ -208,6 +217,10 @@ interface CarrierRow {
   buy_lcl_40hq: string; sell_lcl_40hq: string
   markup_pct: string
   transit_sea_days: string
+  fee_loading: string
+  fee_bl: string
+  fee_trucking: string
+  fee_other: string
   notes: string
 }
 
@@ -215,15 +228,17 @@ function emptyCarrierRow(): CarrierRow {
   return {
     _id: Math.random().toString(36).slice(2),
     carrier_name: '', pol: '', pod: '',
-    rate_20gp: '', rate_40ft: '', rate_40hq: '',
+    sealing_day: '', vessel_day: '', loading_warehouse_id: '',
     buy_20gp: '', sell_20gp: '', cbm_20gp: DEFAULT_CBM['20gp'],
     buy_40ft: '', sell_40ft: '', cbm_40ft: DEFAULT_CBM['40ft'],
     buy_40hq: '', sell_40hq: '', cbm_40hq: DEFAULT_CBM['40hq'],
-      buy_lcl_cbm: '', sell_lcl_cbm: '',
-      buy_lcl_20gp: '', sell_lcl_20gp: '',
-      buy_lcl_40ft: '', sell_lcl_40ft: '',
-      buy_lcl_40hq: '', sell_lcl_40hq: '',
-    markup_pct: '', transit_sea_days: '', notes: '',
+    buy_lcl_cbm: '', sell_lcl_cbm: '',
+    buy_lcl_20gp: '', sell_lcl_20gp: '',
+    buy_lcl_40ft: '', sell_lcl_40ft: '',
+    buy_lcl_40hq: '', sell_lcl_40hq: '',
+    markup_pct: '', transit_sea_days: '',
+    fee_loading: '', fee_bl: '', fee_trucking: '', fee_other: '',
+    notes: '',
   }
 }
 
@@ -244,6 +259,14 @@ export default function AgentProfilePage() {
     queryFn:  () => getAgentProfile(agentId),
     enabled:  !isNaN(agentId),
   })
+
+  const { data: warehouseData } = useQuery({
+    queryKey: ['warehouses', 'loading'],
+    queryFn:  () => getWarehouses({ warehouse_type: 'loading', page_size: 100 }),
+  })
+
+  const loadingWarehouses = (warehouseData?.results ?? []).filter(w => w.is_active)
+  const warehouseById = new Map<number, CompanyWarehouse>(loadingWarehouses.map(w => [w.id, w]))
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -267,16 +290,6 @@ export default function AgentProfilePage() {
     setCarrierRows(rows => rows.map(r => r._id === id ? { ...r, [field]: value } : r))
   }
 
-  function applyCbmRate(id: string, size: '20gp' | '40ft' | '40hq', rateStr: string) {
-    const rate = parseFloat(rateStr)
-    const row = carrierRows.find(r => r._id === id)
-    if (!row) return
-    const cap = parseFloat((row as any)[`cbm_${size}`]) || CBM_CAPACITY[size]
-    const buyField = `buy_${size}` as keyof CarrierRow
-    if (rate > 0) setRow(id, buyField, (rate * cap).toFixed(2))
-    else setRow(id, buyField, '')
-  }
-
   function applyMarkup(id: string) {
     setCarrierRows(rows => rows.map(r => {
       if (r._id !== id) return r
@@ -287,7 +300,7 @@ export default function AgentProfilePage() {
         sell_20gp: m(r.buy_20gp), sell_40ft: m(r.buy_40ft),
         sell_40hq: m(r.buy_40hq),
         sell_lcl_cbm: m(r.buy_lcl_cbm),
-        sell_lcl_20gp: m((r as any).buy_lcl_20gp), sell_lcl_40ft: m((r as any).buy_lcl_40ft), sell_lcl_40hq: m((r as any).buy_lcl_40hq),
+        sell_lcl_20gp: m(r.buy_lcl_20gp), sell_lcl_40ft: m(r.buy_lcl_40ft), sell_lcl_40hq: m(r.buy_lcl_40hq),
       }
     }))
   }
@@ -311,10 +324,17 @@ export default function AgentProfilePage() {
             buy_40ft: n(r.buy_40ft), sell_40ft: n(r.sell_40ft), cbm_40ft: n(r.cbm_40ft),
             buy_40hq: n(r.buy_40hq), sell_40hq: n(r.sell_40hq), cbm_40hq: n(r.cbm_40hq),
             buy_lcl_cbm: n(r.buy_lcl_cbm), sell_lcl_cbm: n(r.sell_lcl_cbm),
-            buy_lcl_20gp: n((r as any).buy_lcl_20gp), sell_lcl_20gp: n((r as any).sell_lcl_20gp),
-            buy_lcl_40ft: n((r as any).buy_lcl_40ft), sell_lcl_40ft: n((r as any).sell_lcl_40ft),
-            buy_lcl_40hq: n((r as any).buy_lcl_40hq), sell_lcl_40hq: n((r as any).sell_lcl_40hq),
+            buy_lcl_20gp: n(r.buy_lcl_20gp), sell_lcl_20gp: n(r.sell_lcl_20gp),
+            buy_lcl_40ft: n(r.buy_lcl_40ft), sell_lcl_40ft: n(r.sell_lcl_40ft),
+            buy_lcl_40hq: n(r.buy_lcl_40hq), sell_lcl_40hq: n(r.sell_lcl_40hq),
             transit_sea_days: ni(r.transit_sea_days),
+            sealing_day: ni(r.sealing_day),
+            vessel_day: ni(r.vessel_day),
+            loading_warehouse_id: ni(r.loading_warehouse_id),
+            fee_loading: n(r.fee_loading),
+            fee_bl: n(r.fee_bl),
+            fee_trucking: n(r.fee_trucking),
+            fee_other: n(r.fee_other),
             notes: r.notes || null,
           })),
       })
@@ -528,6 +548,18 @@ export default function AgentProfilePage() {
                         </span>
                       )}
                     </div>
+                    {(cr.loading_warehouse_id || cr.sealing_day || cr.vessel_day) && (
+                      <div className="px-4 py-2 border-b border-brand-border/30 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-brand-text-muted">
+                        {cr.loading_warehouse_id && warehouseById.get(cr.loading_warehouse_id) && (
+                          <span>
+                            <Warehouse size={10} className="inline me-1" />
+                            {warehouseById.get(cr.loading_warehouse_id)?.name}
+                          </span>
+                        )}
+                        {cr.sealing_day && <span>{isAr ? 'الإغلاق:' : 'Sealing:'} <b className="text-brand-text">{cr.sealing_day}</b></span>}
+                        {cr.vessel_day && <span>{isAr ? 'السفينة:' : 'Vessel:'} <b className="text-brand-text">{cr.vessel_day}</b></span>}
+                      </div>
+                    )}
                     {/* Prices grid */}
                     <div className="px-4 py-2.5">
                       <div className="grid grid-cols-4 gap-2 mb-1">
@@ -539,10 +571,21 @@ export default function AgentProfilePage() {
                       {cr.buy_40ft  != null && <PriceRow label="40GP"    buy={cr.buy_40ft}   sell={cr.sell_40ft} />}
                       {cr.buy_40hq  != null && <PriceRow label="40HQ"    buy={cr.buy_40hq}   sell={cr.sell_40hq} />}
                       {cr.buy_lcl_cbm != null && <PriceRow label="LCL/m³" buy={cr.buy_lcl_cbm} sell={cr.sell_lcl_cbm} />}
+                      {cr.buy_lcl_20gp != null && <PriceRow label="LCL 20/m³" buy={cr.buy_lcl_20gp} sell={cr.sell_lcl_20gp} />}
+                      {cr.buy_lcl_40ft != null && <PriceRow label="LCL 40/m³" buy={cr.buy_lcl_40ft} sell={cr.sell_lcl_40ft} />}
+                      {cr.buy_lcl_40hq != null && <PriceRow label="LCL 40HQ/m³" buy={cr.buy_lcl_40hq} sell={cr.sell_lcl_40hq} />}
                       {cr.transit_sea_days != null && (
                         <p className="text-[11px] text-brand-text-muted mt-1.5">
                           <Ship size={10} className="inline me-1" />{cr.transit_sea_days} {isAr ? 'يوم' : 'days'}
                         </p>
+                      )}
+                      {[cr.fee_loading, cr.fee_bl, cr.fee_trucking, cr.fee_other].some(v => v != null) && (
+                        <div className="mt-2 pt-2 border-t border-brand-border/30 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-brand-text-muted">
+                          {cr.fee_loading != null && <span>{isAr ? 'تحميل:' : 'Loading:'} <b className="text-brand-text font-mono">{fmtUSD(cr.fee_loading)}</b></span>}
+                          {cr.fee_bl != null && <span>B/L: <b className="text-brand-text font-mono">{fmtUSD(cr.fee_bl)}</b></span>}
+                          {cr.fee_trucking != null && <span>{isAr ? 'نقل:' : 'Trucking:'} <b className="text-brand-text font-mono">{fmtUSD(cr.fee_trucking)}</b></span>}
+                          {cr.fee_other != null && <span>{isAr ? 'أخرى:' : 'Other:'} <b className="text-brand-text font-mono">{fmtUSD(cr.fee_other)}</b></span>}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -593,7 +636,21 @@ export default function AgentProfilePage() {
                         {ph.buy_40hq    != null && <span className="text-brand-text-muted">40HQ: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_40hq)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_40hq)}</b> <MarginBadge buy={ph.buy_40hq} sell={ph.sell_40hq} /></span>}
                         {ph.buy_air_kg  != null && <span className="text-brand-text-muted">Air/kg: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_air_kg)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_air_kg)}</b> <MarginBadge buy={ph.buy_air_kg} sell={ph.sell_air_kg} /></span>}
                         {ph.buy_lcl_cbm != null && <span className="text-brand-text-muted">LCL/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_cbm)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_cbm)}</b> <MarginBadge buy={ph.buy_lcl_cbm} sell={ph.sell_lcl_cbm} /></span>}
+                        {ph.buy_lcl_20gp != null && <span className="text-brand-text-muted">LCL 20/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_20gp)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_20gp)}</b> <MarginBadge buy={ph.buy_lcl_20gp} sell={ph.sell_lcl_20gp} /></span>}
+                        {ph.buy_lcl_40ft != null && <span className="text-brand-text-muted">LCL 40/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_40ft)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_40ft)}</b> <MarginBadge buy={ph.buy_lcl_40ft} sell={ph.sell_lcl_40ft} /></span>}
+                        {ph.buy_lcl_40hq != null && <span className="text-brand-text-muted">LCL 40HQ/m³: <b className="text-brand-text font-mono">{fmtUSD(ph.buy_lcl_40hq)}</b> → <b className="text-emerald-400 font-mono">{fmtUSD(ph.sell_lcl_40hq)}</b> <MarginBadge buy={ph.buy_lcl_40hq} sell={ph.sell_lcl_40hq} /></span>}
                       </div>
+                      {(ph.loading_warehouse_id || ph.sealing_day || ph.vessel_day || [ph.fee_loading, ph.fee_bl, ph.fee_trucking, ph.fee_other].some(v => v != null)) && (
+                        <div className="px-4 pb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-brand-text-muted">
+                          {ph.loading_warehouse_id && warehouseById.get(ph.loading_warehouse_id) && <span>{warehouseById.get(ph.loading_warehouse_id)?.name}</span>}
+                          {ph.sealing_day && <span>{isAr ? 'الإغلاق:' : 'Sealing:'} <b className="text-brand-text">{ph.sealing_day}</b></span>}
+                          {ph.vessel_day && <span>{isAr ? 'السفينة:' : 'Vessel:'} <b className="text-brand-text">{ph.vessel_day}</b></span>}
+                          {ph.fee_loading != null && <span>{isAr ? 'تحميل:' : 'Loading:'} <b className="text-brand-text font-mono">{fmtUSD(ph.fee_loading)}</b></span>}
+                          {ph.fee_bl != null && <span>B/L: <b className="text-brand-text font-mono">{fmtUSD(ph.fee_bl)}</b></span>}
+                          {ph.fee_trucking != null && <span>{isAr ? 'نقل:' : 'Trucking:'} <b className="text-brand-text font-mono">{fmtUSD(ph.fee_trucking)}</b></span>}
+                          {ph.fee_other != null && <span>{isAr ? 'أخرى:' : 'Other:'} <b className="text-brand-text font-mono">{fmtUSD(ph.fee_other)}</b></span>}
+                        </div>
+                      )}
                       {ph.notes && <p className="px-4 pb-2 text-[11px] text-brand-text-muted">{ph.notes}</p>}
                     </div>
                   ))}
@@ -693,12 +750,24 @@ export default function AgentProfilePage() {
               </div>
 
               {carrierRows.map((row, idx) => (
-                <div key={row._id} className="rounded-xl border border-brand-border bg-brand-surface p-3 space-y-2.5">
-                  {/* Row header */}
-                  <div className="grid grid-cols-[24px_1fr_1fr_1fr_32px] gap-2 items-end">
-                    <span className="text-[10px] text-brand-text-muted font-semibold pb-2">{idx + 1}</span>
+                <div key={row._id} className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-brand-primary/15 text-brand-primary-light text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex-1">
+                      {isAr ? 'بيانات شركة الشحن والعرض' : 'Carrier & Offer Details'}
+                    </p>
+                    {carrierRows.length > 1 && (
+                      <button type="button" onClick={() => setCarrierRows(r => r.filter(x => x._id !== row._id))}
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors"
+                        title={isAr ? 'حذف' : 'Delete'}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
 
-                    {/* Carrier name with datalist of common carriers */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
                         {isAr ? 'شركة الشحن' : 'Carrier'}
@@ -716,16 +785,11 @@ export default function AgentProfilePage() {
                       </datalist>
                     </div>
 
-                    {/* Port of Loading dropdown */}
                     <div>
                       <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
                         {isAr ? 'ميناء التحميل' : 'Port of Loading'}
                       </label>
-                      <select
-                        value={row.pol}
-                        onChange={e => setRow(row._id, 'pol', e.target.value)}
-                        className="input-base w-full text-sm"
-                      >
+                      <select value={row.pol} onChange={e => setRow(row._id, 'pol', e.target.value)} className="input-base w-full text-sm">
                         <option value="">—</option>
                         {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
                           <option key={o.value} value={o.value}>{o.value}</option>
@@ -733,16 +797,11 @@ export default function AgentProfilePage() {
                       </select>
                     </div>
 
-                    {/* Port of Discharge dropdown */}
                     <div>
                       <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
                         {isAr ? 'ميناء التفريغ' : 'Port of Discharge'}
                       </label>
-                      <select
-                        value={row.pod}
-                        onChange={e => setRow(row._id, 'pod', e.target.value)}
-                        className="input-base w-full text-sm"
-                      >
+                      <select value={row.pod} onChange={e => setRow(row._id, 'pod', e.target.value)} className="input-base w-full text-sm">
                         <option value="">—</option>
                         {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
                           <option key={o.value} value={o.value}>{o.value}</option>
@@ -750,74 +809,159 @@ export default function AgentProfilePage() {
                       </select>
                     </div>
 
-                    {carrierRows.length > 1 ? (
-                      <button type="button" onClick={() => setCarrierRows(r => r.filter(x => x._id !== row._id))}
-                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors mb-0.5">
-                        <Trash2 size={13} />
-                      </button>
-                    ) : <span />}
+                    <div>
+                      <label className="block text-[10px] text-brand-text-muted uppercase tracking-wider mb-1">
+                        {isAr ? 'مستودع التحميل' : 'Loading Warehouse'}
+                      </label>
+                      <select
+                        value={row.loading_warehouse_id}
+                        onChange={e => setRow(row._id, 'loading_warehouse_id', e.target.value)}
+                        className="input-base w-full text-sm"
+                      >
+                        <option value="">—</option>
+                        {loadingWarehouses.map(w => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}{w.city ? ` — ${w.city}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* FCL price grid — columns: Size | Capacity (CBM) | Buy (per container) | Sell (per container) | LCL Buy/m3 | LCL Sell/m3 | Margin */}
-                  <div className="grid grid-cols-[36px_60px_70px_1fr_96px_96px_52px] gap-1.5 px-1 mb-0.5">
-                    <span />
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
-                    <span className="text-[10px] text-blue-400 uppercase">{isAr ? 'سعر الحاوية' : 'Buy (per container)'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell (per container)'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'LCL شراء/م³' : 'LCL Buy/m³'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'LCL بيع/م³' : 'LCL Sell/m³'}</span>
-                    <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      label={isAr ? 'يوم الإغلاق' : 'Sealing Day'}
+                      placeholder={isAr ? 'مثال 30' : 'e.g. 30'}
+                      value={row.sealing_day}
+                      onChange={e => setRow(row._id, 'sealing_day', e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      label={isAr ? 'يوم السفينة' : 'Vessel Day'}
+                      placeholder={isAr ? 'مثال 2' : 'e.g. 2'}
+                      value={row.vessel_day}
+                      onChange={e => setRow(row._id, 'vessel_day', e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      label={isAr ? 'أيام العبور' : 'Transit Days'}
+                      value={row.transit_sea_days}
+                      onChange={e => setRow(row._id, 'transit_sea_days', e.target.value)}
+                    />
                   </div>
-                  {([
-                    { k: '20gp' as const, l: '20GP' },
-                    { k: '40ft' as const, l: '40GP' },
-                    { k: '40hq' as const, l: '40HQ' },
-                  ]).map(({ k, l }) => (
-                    <div key={k} className="grid grid-cols-[36px_60px_70px_1fr_96px_96px_52px] gap-1.5 items-center">
-                      <span className="text-xs font-mono text-brand-text-muted">{l}</span>
-                      {/* CBM capacity (editable, stored in DB) */}
-                      <input type="number" step="0.1" min="1" placeholder={DEFAULT_CBM[k]}
-                        className="input-base text-xs text-amber-300"
-                        title={isAr ? 'سعة الحاوية بالمتر المكعب' : 'Container CBM capacity'}
-                        value={(row as any)[`cbm_${k}`]}
-                        onChange={e => setRow(row._id, `cbm_${k}` as keyof CarrierRow, e.target.value)}
-                      />
 
-                      {/* Buy per container (explicit) */}
-                      <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs"
-                        title={isAr ? 'سعر الشراء للحاوية' : 'Buy (per container)'}
-                        value={(row as any)[`buy_${k}`]}
-                        onChange={e => setRow(row._id, `buy_${k}` as keyof CarrierRow, e.target.value)}
-                      />
-
-                      {/* Sell per container */}
-                      <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs" value={(row as any)[`sell_${k}`]}
-                        onChange={e => setRow(row._id, `sell_${k}` as keyof CarrierRow, e.target.value)}
-                      />
-
-                      {/* LCL per-CBM buy for this size */}
-                      <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs" value={(row as any)[`buy_lcl_${k}`]}
-                        onChange={e => setRow(row._id, `buy_lcl_${k}` as keyof CarrierRow, e.target.value)}
-                        title={isAr ? 'LCL سعر شراء/م³' : 'LCL Buy per m³'}
-                      />
-
-                      {/* LCL per-CBM sell for this size */}
-                      <input type="number" step="0.01" min="0" placeholder="0.00"
-                        className="input-base text-xs" value={(row as any)[`sell_lcl_${k}`]}
-                        onChange={e => setRow(row._id, `sell_lcl_${k}` as keyof CarrierRow, e.target.value)}
-                        title={isAr ? 'LCL سعر بيع/م³' : 'LCL Sell per m³'}
-                      />
-
-                      <div className="text-center">
-                        <LiveMargin buy={(row as any)[`buy_${k}`]} sell={(row as any)[`sell_${k}`]} />
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
+                      {isAr ? 'FCL - سعر الحاوية الكامل' : 'FCL - Full Container Prices'}
+                    </p>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[620px] space-y-1">
+                        <div className="grid grid-cols-[64px_90px_1fr_1fr_76px] gap-2 px-1">
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'الحجم' : 'Size'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'سعة م³' : 'CBM cap'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء / حاوية' : 'Buy / container'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع / حاوية' : 'Sell / container'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                        </div>
+                        {CONTAINER_SIZES.map(({ k, label }) => (
+                          <div key={k} className="grid grid-cols-[64px_90px_1fr_1fr_76px] gap-2 items-center">
+                            <span className="text-xs font-mono text-brand-text-muted">{label}</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="1"
+                              placeholder={DEFAULT_CBM[k]}
+                              className="input-base text-xs text-amber-300"
+                              value={row[fieldFor(k, 'cbm')]}
+                              onChange={e => setRow(row._id, fieldFor(k, 'cbm'), e.target.value)}
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              className="input-base text-xs"
+                              value={row[fieldFor(k, 'buy')]}
+                              onChange={e => setRow(row._id, fieldFor(k, 'buy'), e.target.value)}
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              className="input-base text-xs"
+                              value={row[fieldFor(k, 'sell')]}
+                              onChange={e => setRow(row._id, fieldFor(k, 'sell'), e.target.value)}
+                            />
+                            <div className="text-center">
+                              <LiveMargin buy={row[fieldFor(k, 'buy')]} sell={row[fieldFor(k, 'sell')]} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  </div>
 
-                  {/* Markup + transit */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+                      {isAr ? 'LCL - سعر المتر المكعب حسب حجم الحاوية' : 'LCL - CBM Price Per Container Size'}
+                    </p>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[520px] space-y-1">
+                        <div className="grid grid-cols-[64px_1fr_1fr_76px] gap-2 px-1">
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'الحجم' : 'Size'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء / م³' : 'Buy / m³'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع / م³' : 'Sell / m³'}</span>
+                          <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+                        </div>
+                        {CONTAINER_SIZES.map(({ k, label }) => (
+                          <div key={k} className="grid grid-cols-[64px_1fr_1fr_76px] gap-2 items-center">
+                            <span className="text-xs font-mono text-brand-text-muted">{label}</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              className="input-base text-xs"
+                              value={row[fieldFor(k, 'buy_lcl')]}
+                              onChange={e => setRow(row._id, fieldFor(k, 'buy_lcl'), e.target.value)}
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              className="input-base text-xs"
+                              value={row[fieldFor(k, 'sell_lcl')]}
+                              onChange={e => setRow(row._id, fieldFor(k, 'sell_lcl'), e.target.value)}
+                            />
+                            <div className="text-center">
+                              <LiveMargin buy={row[fieldFor(k, 'buy_lcl')]} sell={row[fieldFor(k, 'sell_lcl')]} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border border-brand-border/50 bg-white/[0.02] p-3">
+                    <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+                      {isAr ? 'رسوم المنشأ: المستودع ← ميناء التحميل ← العقبة' : 'Origin Fees: Warehouse → Loading Port → Aqaba'}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <Input type="number" step="0.01" min="0" label={isAr ? 'عمال / تحميل' : 'Loading Workers'} value={row.fee_loading} onChange={e => setRow(row._id, 'fee_loading', e.target.value)} />
+                      <Input type="number" step="0.01" min="0" label={isAr ? 'رسوم B/L' : 'B/L Fee'} value={row.fee_bl} onChange={e => setRow(row._id, 'fee_bl', e.target.value)} />
+                      <Input type="number" step="0.01" min="0" label={isAr ? 'نقل للميناء' : 'Trucking'} value={row.fee_trucking} onChange={e => setRow(row._id, 'fee_trucking', e.target.value)} />
+                      <Input type="number" step="0.01" min="0" label={isAr ? 'رسوم أخرى' : 'Other Fees'} value={row.fee_other} onChange={e => setRow(row._id, 'fee_other', e.target.value)} />
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2 pt-1 border-t border-brand-border/20 flex-wrap">
                     <input type="number" step="0.1" min="0" placeholder={isAr ? 'هامش %' : 'Markup %'}
                       className="input-base w-24 text-xs" value={row.markup_pct}
@@ -825,17 +969,10 @@ export default function AgentProfilePage() {
                     />
                     <button type="button" onClick={() => applyMarkup(row._id)}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
-                      {isAr ? 'تطبيق % على البيع' : 'Apply % to Sells'}
+                      {isAr ? 'تطبيق % على البيع' : 'Apply % to Sell Prices'}
                     </button>
-                    <div className="flex items-center gap-1 ms-auto">
-                      <Clock size={11} className="text-brand-text-muted" />
-                      <input type="number" min="0" placeholder={isAr ? 'أيام العبور' : 'Transit days'}
-                        className="input-base w-28 text-xs" value={row.transit_sea_days}
-                        onChange={e => setRow(row._id, 'transit_sea_days', e.target.value)}
-                      />
-                    </div>
                     <input type="text" placeholder={isAr ? 'ملاحظات...' : 'Notes...'}
-                      className="input-base text-xs flex-1 min-w-32" value={row.notes}
+                      className="input-base text-xs flex-1 min-w-48" value={row.notes}
                       onChange={e => setRow(row._id, 'notes', e.target.value)}
                     />
                   </div>

@@ -315,6 +315,10 @@ def _serialize_ph(p: AgentPriceHistory) -> dict:
         "buy_lcl_40ft": f(getattr(p, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(p, 'sell_lcl_40ft', None)),
         "buy_lcl_40hq": f(getattr(p, 'buy_lcl_40hq', None)), "sell_lcl_40hq": f(getattr(p, 'sell_lcl_40hq', None)),
         "transit_sea_days": p.transit_sea_days, "transit_air_days": p.transit_air_days,
+        "sealing_day": p.sealing_day, "vessel_day": p.vessel_day,
+        "loading_warehouse_id": p.loading_warehouse_id,
+        "fee_loading": f(p.fee_loading), "fee_bl": f(p.fee_bl),
+        "fee_trucking": f(p.fee_trucking), "fee_other": f(p.fee_other),
         "notes": p.notes,
         "created_by": p.created_by.full_name if p.created_by else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -333,9 +337,13 @@ def _serialize_carrier_rate(r: AgentCarrierRate) -> dict:
         "buy_40ft": f(r.buy_40ft), "sell_40ft": f(r.sell_40ft), "cbm_40ft": f(r.cbm_40ft),
         "buy_40hq": f(r.buy_40hq), "sell_40hq": f(r.sell_40hq), "cbm_40hq": f(r.cbm_40hq),
         "buy_lcl_cbm": f(r.buy_lcl_cbm), "sell_lcl_cbm": f(r.sell_lcl_cbm),
-        "buy_lcl_20gp": f(getattr(r, 'buy_lcl_20gp', None)), "sell_lcl_20gp": f(getattr(r, 'sell_lcl_20gp', None)),
-        "buy_lcl_40ft": f(getattr(r, 'buy_lcl_40ft', None)), "sell_lcl_40ft": f(getattr(r, 'sell_lcl_40ft', None)),
-        "buy_lcl_40hq": f(getattr(r, 'buy_lcl_40hq', None)), "sell_lcl_40hq": f(getattr(r, 'sell_lcl_40hq', None)),
+        "buy_lcl_20gp": f(r.buy_lcl_20gp), "sell_lcl_20gp": f(r.sell_lcl_20gp),
+        "buy_lcl_40ft": f(r.buy_lcl_40ft), "sell_lcl_40ft": f(r.sell_lcl_40ft),
+        "buy_lcl_40hq": f(r.buy_lcl_40hq), "sell_lcl_40hq": f(r.sell_lcl_40hq),
+        "sealing_day": r.sealing_day, "vessel_day": r.vessel_day,
+        "loading_warehouse_id": r.loading_warehouse_id,
+        "fee_loading": f(r.fee_loading), "fee_bl": f(r.fee_bl),
+        "fee_trucking": f(r.fee_trucking), "fee_other": f(r.fee_other),
         "transit_sea_days": r.transit_sea_days,
         "notes": r.notes, "is_active": r.is_active,
     }
@@ -398,8 +406,15 @@ class CarrierRowCreate(BaseModel):
     sell_lcl_40ft:    Optional[float] = None
     buy_lcl_40hq:     Optional[float] = None
     sell_lcl_40hq:    Optional[float] = None
-    transit_sea_days: Optional[int]   = None
-    notes:            Optional[str]   = None
+    transit_sea_days:     Optional[int]   = None
+    sealing_day:          Optional[int]   = None
+    vessel_day:           Optional[int]   = None
+    loading_warehouse_id: Optional[int]   = None
+    fee_loading:          Optional[float] = None
+    fee_bl:               Optional[float] = None
+    fee_trucking:         Optional[float] = None
+    fee_other:            Optional[float] = None
+    notes:                Optional[str]   = None
 
 
 class PriceUpdateCreate(BaseModel):
@@ -443,6 +458,10 @@ def add_price_history(
             buy_lcl_40hq=row.buy_lcl_40hq, sell_lcl_40hq=row.sell_lcl_40hq,
             transit_sea_days=row.transit_sea_days,
             transit_air_days=payload.transit_air_days,
+            sealing_day=row.sealing_day, vessel_day=row.vessel_day,
+            loading_warehouse_id=row.loading_warehouse_id,
+            fee_loading=row.fee_loading, fee_bl=row.fee_bl,
+            fee_trucking=row.fee_trucking, fee_other=row.fee_other,
             notes=row.notes,
             created_by_id=current_user.id,
         )
@@ -455,35 +474,29 @@ def add_price_history(
             AgentCarrierRate.agent_id == agent_id,
             AgentCarrierRate.carrier_name == row.carrier_name,
         ).first()
+        rate_fields = dict(
+            pol=row.pol, pod=row.pod,
+            effective_date=payload.effective_date, expiry_date=payload.expiry_date or None,
+            buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp, cbm_20gp=row.cbm_20gp,
+            buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft, cbm_40ft=row.cbm_40ft,
+            buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq, cbm_40hq=row.cbm_40hq,
+            buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
+            buy_lcl_20gp=row.buy_lcl_20gp, sell_lcl_20gp=row.sell_lcl_20gp,
+            buy_lcl_40ft=row.buy_lcl_40ft, sell_lcl_40ft=row.sell_lcl_40ft,
+            buy_lcl_40hq=row.buy_lcl_40hq, sell_lcl_40hq=row.sell_lcl_40hq,
+            transit_sea_days=row.transit_sea_days,
+            sealing_day=row.sealing_day, vessel_day=row.vessel_day,
+            loading_warehouse_id=row.loading_warehouse_id,
+            fee_loading=row.fee_loading, fee_bl=row.fee_bl,
+            fee_trucking=row.fee_trucking, fee_other=row.fee_other,
+            notes=row.notes,
+        )
         if existing:
-            existing.pol = row.pol; existing.pod = row.pod
-            existing.effective_date = payload.effective_date
-            existing.expiry_date = payload.expiry_date or None
-            existing.buy_20gp = row.buy_20gp; existing.sell_20gp = row.sell_20gp; existing.cbm_20gp = row.cbm_20gp
-            existing.buy_40ft = row.buy_40ft; existing.sell_40ft = row.sell_40ft; existing.cbm_40ft = row.cbm_40ft
-            existing.buy_40hq = row.buy_40hq; existing.sell_40hq = row.sell_40hq; existing.cbm_40hq = row.cbm_40hq
-            existing.buy_lcl_cbm = row.buy_lcl_cbm; existing.sell_lcl_cbm = row.sell_lcl_cbm
-            existing.buy_lcl_20gp = row.buy_lcl_20gp; existing.sell_lcl_20gp = row.sell_lcl_20gp
-            existing.buy_lcl_40ft = row.buy_lcl_40ft; existing.sell_lcl_40ft = row.sell_lcl_40ft
-            existing.buy_lcl_40hq = row.buy_lcl_40hq; existing.sell_lcl_40hq = row.sell_lcl_40hq
-            existing.transit_sea_days = row.transit_sea_days
-            existing.notes = row.notes; existing.is_active = True
+            for k, v in rate_fields.items():
+                setattr(existing, k, v)
+            existing.is_active = True
         else:
-            db.add(AgentCarrierRate(
-                agent_id=agent_id, carrier_name=row.carrier_name,
-                pol=row.pol, pod=row.pod,
-                effective_date=payload.effective_date,
-                expiry_date=payload.expiry_date or None,
-                buy_20gp=row.buy_20gp, sell_20gp=row.sell_20gp, cbm_20gp=row.cbm_20gp,
-                buy_40ft=row.buy_40ft, sell_40ft=row.sell_40ft, cbm_40ft=row.cbm_40ft,
-                buy_40hq=row.buy_40hq, sell_40hq=row.sell_40hq, cbm_40hq=row.cbm_40hq,
-                buy_lcl_cbm=row.buy_lcl_cbm, sell_lcl_cbm=row.sell_lcl_cbm,
-                buy_lcl_20gp=row.buy_lcl_20gp, sell_lcl_20gp=row.sell_lcl_20gp,
-                buy_lcl_40ft=row.buy_lcl_40ft, sell_lcl_40ft=row.sell_lcl_40ft,
-                buy_lcl_40hq=row.buy_lcl_40hq, sell_lcl_40hq=row.sell_lcl_40hq,
-                transit_sea_days=row.transit_sea_days,
-                notes=row.notes,
-            ))
+            db.add(AgentCarrierRate(agent_id=agent_id, carrier_name=row.carrier_name, **rate_fields))
 
     # Update agent offer dates
     if payload.update_current:

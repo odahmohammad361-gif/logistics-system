@@ -153,13 +153,23 @@ export interface AgentCarrierRate {
   pod: string | null
   effective_date: string | null
   expiry_date: string | null
+  sealing_day: number | null
+  vessel_day: number | null
+  loading_warehouse_id: number | null
+  // FCL prices
   buy_20gp: number | null;  sell_20gp: number | null;  cbm_20gp: number | null
   buy_40ft: number | null;  sell_40ft: number | null;  cbm_40ft: number | null
   buy_40hq: number | null;  sell_40hq: number | null;  cbm_40hq: number | null
+  // LCL per CBM — per container size
   buy_lcl_cbm: number | null; sell_lcl_cbm: number | null
   buy_lcl_20gp: number | null; sell_lcl_20gp: number | null
   buy_lcl_40ft: number | null; sell_lcl_40ft: number | null
   buy_lcl_40hq: number | null; sell_lcl_40hq: number | null
+  // Origin fees (warehouse → loading port)
+  fee_loading: number | null
+  fee_bl: number | null
+  fee_trucking: number | null
+  fee_other: number | null
   transit_sea_days: number | null
   notes: string | null
   is_active: boolean
@@ -182,6 +192,13 @@ export interface AgentPriceHistory {
   buy_lcl_40hq: number | null; sell_lcl_40hq: number | null
   transit_sea_days: number | null
   transit_air_days: number | null
+  sealing_day: number | null
+  vessel_day: number | null
+  loading_warehouse_id: number | null
+  fee_loading: number | null
+  fee_bl: number | null
+  fee_trucking: number | null
+  fee_other: number | null
   notes: string | null
   created_by: string | null
   created_at: string

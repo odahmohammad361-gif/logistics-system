@@ -83,15 +83,21 @@ class AgentPriceHistory(Base):
     sell_air_kg    = Column(Numeric(10, 2), nullable=True)
     buy_lcl_cbm    = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm   = Column(Numeric(10, 2), nullable=True)
-    # Per-container-size LCL prices (per CBM) — optional
     buy_lcl_20gp   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_20gp  = Column(Numeric(10, 2), nullable=True)
     buy_lcl_40ft   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40ft  = Column(Numeric(10, 2), nullable=True)
     buy_lcl_40hq   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40hq  = Column(Numeric(10, 2), nullable=True)
-    transit_sea_days = Column(Integer, nullable=True)
-    transit_air_days = Column(Integer, nullable=True)
+    transit_sea_days     = Column(Integer, nullable=True)
+    transit_air_days     = Column(Integer, nullable=True)
+    sealing_day          = Column(Integer, nullable=True)
+    vessel_day           = Column(Integer, nullable=True)
+    loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)
+    fee_loading  = Column(Numeric(10, 2), nullable=True)
+    fee_bl       = Column(Numeric(10, 2), nullable=True)
+    fee_trucking = Column(Numeric(10, 2), nullable=True)
+    fee_other    = Column(Numeric(10, 2), nullable=True)
     notes          = Column(Text, nullable=True)
     created_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at     = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -122,14 +128,22 @@ class AgentCarrierRate(Base):
     cbm_40hq     = Column(Numeric(8, 2), nullable=True)
     buy_lcl_cbm  = Column(Numeric(10, 2), nullable=True)
     sell_lcl_cbm = Column(Numeric(10, 2), nullable=True)
-    # Per-container-size LCL per-CBM fields
+    # Per-container-size LCL per-CBM prices
     buy_lcl_20gp   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_20gp  = Column(Numeric(10, 2), nullable=True)
     buy_lcl_40ft   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40ft  = Column(Numeric(10, 2), nullable=True)
     buy_lcl_40hq   = Column(Numeric(10, 2), nullable=True)
     sell_lcl_40hq  = Column(Numeric(10, 2), nullable=True)
-    transit_sea_days = Column(Integer, nullable=True)
+    transit_sea_days     = Column(Integer, nullable=True)
+    sealing_day          = Column(Integer, nullable=True)   # day of month (e.g. 30)
+    vessel_day           = Column(Integer, nullable=True)   # day vessel departs
+    loading_warehouse_id = Column(Integer, ForeignKey("company_warehouses.id"), nullable=True)
+    # Origin fees (warehouse → loading port)
+    fee_loading  = Column(Numeric(10, 2), nullable=True)   # stuffing / loading workers
+    fee_bl       = Column(Numeric(10, 2), nullable=True)   # B/L fee
+    fee_trucking = Column(Numeric(10, 2), nullable=True)   # trucking to port
+    fee_other    = Column(Numeric(10, 2), nullable=True)   # other origin fees
     notes        = Column(Text, nullable=True)
     is_active    = Column(Boolean, default=True, nullable=False)
     updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
