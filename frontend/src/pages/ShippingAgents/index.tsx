@@ -2,10 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Pencil, Trash2, ChevronDown, ChevronUp, Ship, Wind, ExternalLink } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, Ship, Wind, ExternalLink } from 'lucide-react'
 import {
   getAgents, createAgent, updateAgent, deleteAgent,
-  getAgentQuotes, createQuote, deleteQuote,
 } from '@/services/agentService'
 import { getWarehouses } from '@/services/warehouseService'
 import { useAuth } from '@/hooks/useAuth'
@@ -94,37 +93,6 @@ interface AgentForm {
   notes: string
 }
 
-interface QuoteForm {
-  service_mode: string
-  carrier: string
-  container_type: string
-  incoterm: string
-  port_of_loading: string
-  port_of_discharge: string
-  // SEA charges
-  ocean_freight: number | ''
-  thc_origin: number | ''
-  bl_fee: number | ''
-  doc_fee: number | ''
-  sealing_fee: number | ''
-  thc_destination: number | ''
-  // AIR charges
-  air_freight_per_kg: number | ''
-  min_chargeable_weight_kg: number | ''
-  // Timing
-  transit_days: number | ''
-  free_days_origin: number | ''
-  free_days_destination: number | ''
-  valid_from: string
-  valid_to: string
-  status: string
-  notes: string
-}
-
-const SERVICE_MODES = ['SEA_FCL', 'AIR', 'LCL']
-const CONTAINER_TYPES = ['20GP', '40FT', '40HQ']
-const INCOTERMS = ['FOB', 'CIF', 'CFR', 'EXW', 'DAP', 'DDP']
-const QUOTE_STATUSES = ['DRAFT', 'ACTIVE', 'EXPIRED']
 
 export default function ShippingAgentsPage() {
   const { t, i18n } = useTranslation()
@@ -145,19 +113,12 @@ export default function ShippingAgentsPage() {
   const [agentModal, setAgentModal] = useState(false)
   const [editingAgent, setEditingAgent] = useState<ShippingAgent | null>(null)
   const [deletingAgent, setDeletingAgent] = useState<ShippingAgent | null>(null)
-  const [expandedAgent, setExpandedAgent] = useState<number | null>(null)
-  const [quoteModal, setQuoteModal] = useState<{ agentId: number; agentName: string } | null>(null)
-
   const { data, isLoading } = useQuery({
     queryKey: ['agents', { page, search }],
     queryFn: () => getAgents({ page, page_size: 20, search: search || undefined }),
   })
 
   const agentForm = useForm<AgentForm>()
-  const quoteForm = useForm<QuoteForm>({ defaultValues: { service_mode: 'SEA_FCL', incoterm: 'FOB', status: 'ACTIVE', container_type: '40FT' } })
-
-  const watchServiceMode = quoteForm.watch('service_mode')
-  const isAir = watchServiceMode === 'AIR'
 
   // Watch country to update city options
   const watchCountry = agentForm.watch('country')
@@ -230,44 +191,6 @@ export default function ShippingAgentsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agents'] })
       setDeletingAgent(null)
-    },
-  })
-
-  const saveQuoteMut = useMutation({
-    mutationFn: ({ agentId, data }: { agentId: number; data: QuoteForm }) => {
-      const payload: Record<string, unknown> = {
-        service_mode: data.service_mode,
-        carrier: data.carrier || null,
-        incoterm: data.incoterm || null,
-        port_of_loading: data.port_of_loading || null,
-        port_of_discharge: data.port_of_discharge || null,
-        status: data.status,
-        notes: data.notes || null,
-        validity_from: data.valid_from || null,
-        validity_to: data.valid_to || null,
-        transit_days: data.transit_days !== '' ? Number(data.transit_days) : null,
-        free_days_origin: data.free_days_origin !== '' ? Number(data.free_days_origin) : null,
-        free_days_destination: data.free_days_destination !== '' ? Number(data.free_days_destination) : null,
-      }
-      if (data.service_mode === 'AIR') {
-        payload.air_freight_per_kg = data.air_freight_per_kg !== '' ? Number(data.air_freight_per_kg) : null
-        payload.min_chargeable_weight_kg = data.min_chargeable_weight_kg !== '' ? Number(data.min_chargeable_weight_kg) : null
-      } else {
-        payload.container_type = data.container_type || null
-        payload.ocean_freight = data.ocean_freight !== '' ? Number(data.ocean_freight) : null
-        payload.thc_origin = data.thc_origin !== '' ? Number(data.thc_origin) : null
-        payload.bl_fee = data.bl_fee !== '' ? Number(data.bl_fee) : null
-        payload.doc_fee = data.doc_fee !== '' ? Number(data.doc_fee) : null
-        payload.sealing_fee = data.sealing_fee !== '' ? Number(data.sealing_fee) : null
-        payload.thc_destination = data.thc_destination !== '' ? Number(data.thc_destination) : null
-      }
-      return createQuote(agentId, payload)
-    },
-    onSuccess: (_, { agentId }) => {
-      qc.invalidateQueries({ queryKey: ['agent-quotes', agentId] })
-      qc.invalidateQueries({ queryKey: ['board'] })
-      setQuoteModal(null)
-      quoteForm.reset({ service_mode: 'SEA_FCL', incoterm: 'FOB', status: 'ACTIVE', container_type: '40FT' })
     },
   })
 
@@ -470,26 +393,6 @@ export default function ShippingAgentsPage() {
                 )}
               </div>
 
-              {/* Quotes toggle footer */}
-              <div className="border-t border-white/5">
-                <button
-                  onClick={() => setExpandedAgent(expandedAgent === agent.id ? null : agent.id)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] transition-colors"
-                >
-                  <span>{isAr ? 'عروض الأسعار' : 'Shipping Quotes'}</span>
-                  {expandedAgent === agent.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-                {expandedAgent === agent.id && (
-                  <AgentQuotesPanel
-                    agentId={agent.id}
-                    canEdit={isStaff ?? false}
-                    onAddQuote={() => {
-                      setQuoteModal({ agentId: agent.id, agentName: agent.name })
-                      quoteForm.reset({ service_mode: 'SEA_FCL', incoterm: 'FOB', status: 'ACTIVE', container_type: '40FT' })
-                    }}
-                  />
-                )}
-              </div>
             </div>
           ))}
         </div>
@@ -718,135 +621,6 @@ export default function ShippingAgentsPage() {
         </form>
       </Modal>
 
-      {/* ── Quote Modal ─────────────────────────────────────────────────────── */}
-      <Modal
-        open={quoteModal !== null}
-        onClose={() => setQuoteModal(null)}
-        title={`${t('agents.add_quote')} — ${quoteModal?.agentName ?? ''}`}
-        size="xl"
-      >
-        <form
-          onSubmit={quoteForm.handleSubmit((v) =>
-            quoteModal && saveQuoteMut.mutate({ agentId: quoteModal.agentId, data: v })
-          )}
-          className="space-y-5"
-        >
-          <FormSection title={t('agents.quote_details')}>
-            <FormRow cols={3}>
-              <Select
-                label={t('agents.service_mode')}
-                options={SERVICE_MODES.map((v) => ({ value: v, label: v }))}
-                {...quoteForm.register('service_mode')}
-              />
-              {!isAir && (
-                <Select
-                  label={t('containers.type')}
-                  options={CONTAINER_TYPES.map((v) => ({ value: v, label: v }))}
-                  {...quoteForm.register('container_type')}
-                />
-              )}
-              <Select
-                label={t('agents.incoterm')}
-                options={INCOTERMS.map((v) => ({ value: v, label: v }))}
-                {...quoteForm.register('incoterm')}
-              />
-            </FormRow>
-            {/* Carrier / shipping line */}
-            <div>
-              <label className="block text-xs text-brand-text-muted mb-1">{t('bookings.carrier_line')}</label>
-              <input
-                list="carriers-datalist"
-                type="text"
-                placeholder={isAir ? 'Emirates SkyCargo, Turkish Cargo…' : 'CMA CGM, MSC, PIL, Evergreen…'}
-                className="input-base w-full"
-                {...quoteForm.register('carrier')}
-              />
-              {!isAir && (
-                <datalist id="carriers-datalist">
-                  {COMMON_SEA_CARRIERS.map(c => <option key={c} value={c} />)}
-                </datalist>
-              )}
-            </div>
-            <FormRow>
-              <div>
-                <label className="block text-xs text-brand-text-muted mb-1">{t('containers.origin_port')}</label>
-                <select className="input-base w-full" {...quoteForm.register('port_of_loading')}>
-                  <option value="">—</option>
-                  {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
-                    <option key={o.value} value={o.value}>{o.value}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-brand-text-muted mb-1">{t('containers.destination_port')}</label>
-                <select className="input-base w-full" {...quoteForm.register('port_of_discharge')}>
-                  <option value="">—</option>
-                  {SEA_PORT_OPTIONS.filter(o => o.value).map(o => (
-                    <option key={o.value} value={o.value}>{o.value}</option>
-                  ))}
-                </select>
-              </div>
-            </FormRow>
-            <FormRow>
-              <Select
-                label={t('common.status')}
-                options={QUOTE_STATUSES.map((v) => ({ value: v, label: v }))}
-                {...quoteForm.register('status')}
-              />
-            </FormRow>
-          </FormSection>
-
-          {/* SEA charges */}
-          {!isAir && (
-            <FormSection title={t('agents.freight_charges')}>
-              <FormRow cols={3}>
-                <Input type="number" step="0.01" label={t('agents.ocean_freight')} {...quoteForm.register('ocean_freight')} />
-                <Input type="number" step="0.01" label="THC Origin" {...quoteForm.register('thc_origin')} />
-                <Input type="number" step="0.01" label="BL Fee" {...quoteForm.register('bl_fee')} />
-              </FormRow>
-              <FormRow cols={3}>
-                <Input type="number" step="0.01" label="Doc Fee" {...quoteForm.register('doc_fee')} />
-                <Input type="number" step="0.01" label="Sealing Fee" {...quoteForm.register('sealing_fee')} />
-                <Input type="number" step="0.01" label="THC Dest." {...quoteForm.register('thc_destination')} />
-              </FormRow>
-            </FormSection>
-          )}
-
-          {/* AIR charges */}
-          {isAir && (
-            <FormSection title={t('agents.air_charges')}>
-              <FormRow>
-                <Input type="number" step="0.01" label={t('agents.air_rate_per_kg')} {...quoteForm.register('air_freight_per_kg')} />
-                <Input type="number" step="0.01" label={t('agents.min_chargeable_kg')} {...quoteForm.register('min_chargeable_weight_kg')} />
-              </FormRow>
-            </FormSection>
-          )}
-
-          <FormSection title={t('agents.timing')}>
-            <FormRow cols={3}>
-              <Input type="number" label="Transit Days" {...quoteForm.register('transit_days')} />
-              <Input type="number" label="Free Days (Origin)" {...quoteForm.register('free_days_origin')} />
-              <Input type="number" label="Free Days (Dest)" {...quoteForm.register('free_days_destination')} />
-            </FormRow>
-            <FormRow>
-              <Input type="date" label={t('common.valid_from')} {...quoteForm.register('valid_from')} />
-              <Input type="date" label={t('common.valid_to')} {...quoteForm.register('valid_to')} />
-            </FormRow>
-          </FormSection>
-
-          <Input label={t('common.notes')} {...quoteForm.register('notes')} />
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setQuoteModal(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" loading={saveQuoteMut.isPending}>
-              {t('common.save')}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
       {/* ── Delete Agent ────────────────────────────────────────────────────── */}
       <Modal open={!!deletingAgent} onClose={() => setDeletingAgent(null)} title={t('common.confirm_delete')} size="sm">
         <p className="text-sm text-gray-300 mb-5">
@@ -867,89 +641,3 @@ export default function ShippingAgentsPage() {
   )
 }
 
-// ─── Agent Quotes Panel ────────────────────────────────────────────────────────
-function AgentQuotesPanel({ agentId, canEdit, onAddQuote }: {
-  agentId: number
-  canEdit: boolean
-  onAddQuote: () => void
-}) {
-  const { t } = useTranslation()
-  const qc = useQueryClient()
-
-  const { data: quotes, isLoading } = useQuery({
-    queryKey: ['agent-quotes', agentId],
-    queryFn: () => getAgentQuotes(agentId),
-  })
-
-  const deleteQuoteMut = useMutation({
-    mutationFn: ({ agentId, quoteId }: { agentId: number; quoteId: number }) =>
-      deleteQuote(agentId, quoteId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['agent-quotes', agentId] })
-      qc.invalidateQueries({ queryKey: ['board'] })
-    },
-  })
-
-  return (
-    <div className="border-t border-brand-border bg-brand-surface/40 px-4 py-3">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('agents.quotes')}</span>
-        {canEdit && (
-          <Button size="sm" variant="secondary" onClick={onAddQuote}>
-            <Plus size={12} />
-            {t('agents.add_quote')}
-          </Button>
-        )}
-      </div>
-      {isLoading ? (
-        <p className="text-xs text-gray-500">{t('common.loading')}</p>
-      ) : ((quotes as any)?.results ?? []).length === 0 ? (
-        <p className="text-xs text-gray-500 py-2">{t('agents.no_quotes')}</p>
-      ) : (
-        <div className="space-y-1.5">
-          {((quotes as any)?.results ?? []).map((q: any) => (
-            <div key={q.id} className="flex items-center gap-3 text-xs bg-brand-card rounded-lg px-3 py-2.5">
-              <Badge value={q.status?.toLowerCase()} label={q.status} />
-              <span className="text-brand-green font-semibold text-[11px]">{q.service_mode}</span>
-              {q.container_type && (
-                <span className="text-gray-500">{q.container_type}</span>
-              )}
-              <span className="text-gray-400">{q.incoterm ?? '—'}</span>
-              <span className="text-gray-300">
-                {q.port_of_loading || '?'} → {q.port_of_discharge || '?'}
-              </span>
-              {q.transit_days && (
-                <span className="text-gray-500">{q.transit_days}d</span>
-              )}
-              {q.valid_to && (
-                <span className={clsx(
-                  'text-[10px]',
-                  new Date(q.valid_to) < new Date() ? 'text-red-400' : 'text-gray-600'
-                )}>
-                  exp. {q.valid_to?.slice(0, 10)}
-                </span>
-              )}
-              <span className="text-brand-green font-bold ms-auto">
-                {q.total_all != null
-                  ? `$${Number(q.total_all).toFixed(2)}`
-                  : q.ocean_freight != null
-                    ? `$${Number(q.ocean_freight).toFixed(2)}`
-                    : q.air_freight_per_kg != null
-                      ? `$${Number(q.air_freight_per_kg).toFixed(2)}/kg`
-                      : '—'}
-              </span>
-              {canEdit && (
-                <button
-                  onClick={() => deleteQuoteMut.mutate({ agentId, quoteId: q.id })}
-                  className="text-gray-600 hover:text-red-400 transition-colors ms-1"
-                >
-                  <Trash2 size={12} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

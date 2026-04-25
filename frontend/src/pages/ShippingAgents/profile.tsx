@@ -7,7 +7,7 @@ import {
   Warehouse, CreditCard, Plus, Trash2, Download, FileText,
   TrendingUp, TrendingDown, Minus, Upload, Clock,
   User, X, CheckCircle2, AlertTriangle, Pencil, Globe,
-  MapPin, Boxes, Calendar, Timer, Anchor, Container,
+  MapPin, Calendar, Timer,
 } from 'lucide-react'
 import {
   getAgentProfile, addPriceHistory, uploadAgentContract,
@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection, Textarea } from '@/components/ui/Form'
-import type { ShippingAgent, AgentCarrierRate, AgentPriceHistory, AgentContract, AgentEditLog, AgentQuoteSummary } from '@/types'
+import type { ShippingAgent, AgentCarrierRate, AgentPriceHistory, AgentContract, AgentEditLog } from '@/types'
 import { getFlatPortOptions } from '@/constants/logistics'
 
 const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
@@ -148,152 +148,6 @@ function OfferBanner({ validFrom, validTo, isAr }: { validFrom: string | null; v
 }
 
 // ── Quote card ─────────────────────────────────────────────────────────────────
-const STATUS_STYLE: Record<string, string> = {
-  active:   'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-  draft:    'text-gray-400    bg-gray-400/10    border-gray-400/20',
-  expired:  'text-red-400     bg-red-400/10     border-red-400/20',
-  rejected: 'text-red-400     bg-red-400/10     border-red-400/20',
-}
-const MODE_ICON: Record<string, React.ElementType> = {
-  SEA_FCL: Container, LCL: Boxes, AIR: Plane,
-}
-
-function QuoteCard({ q, isAr }: { q: AgentQuoteSummary; isAr: boolean }) {
-  const [expanded, setExpanded] = useState(false)
-  const ModeIcon = MODE_ICON[q.service_mode ?? ''] ?? Ship
-  const statusStyle = STATUS_STYLE[q.status ?? ''] ?? STATUS_STYLE.draft
-  const isExpired = q.validity_to ? new Date(q.validity_to) < new Date() : false
-
-  return (
-    <div className="rounded-xl border border-brand-border bg-brand-surface overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white/[0.02] border-b border-brand-border/50">
-        <ModeIcon size={14} className="text-brand-primary-light flex-shrink-0" />
-        <span className="font-mono text-sm font-semibold text-brand-text">{q.quote_number}</span>
-        {q.container_type && (
-          <span className="px-2 py-0.5 rounded-md bg-white/10 text-[11px] text-gray-300">{q.container_type}</span>
-        )}
-        {q.carrier && <span className="text-xs text-brand-text-muted">{q.carrier}</span>}
-        <span className={clsx('ms-auto inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium', statusStyle)}>
-          {q.status}
-        </span>
-        <button onClick={() => setExpanded(p => !p)} className="btn-icon p-1">
-          {expanded ? <ArrowLeft size={12} className="rotate-90" /> : <ArrowLeft size={12} className="-rotate-90" />}
-        </button>
-      </div>
-
-      {/* Summary row */}
-      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div>
-          <p className="text-brand-text-muted mb-0.5">{isAr ? 'المسار' : 'Route'}</p>
-          <p className="text-brand-text font-medium">
-            {q.port_of_loading ?? '—'} → {q.port_of_discharge ?? '—'}
-          </p>
-        </div>
-        <div>
-          <p className="text-brand-text-muted mb-0.5">{isAr ? 'الإجمالي' : 'Total'}</p>
-          <p className="text-emerald-400 font-bold text-sm">
-            {q.service_mode === 'AIR'
-              ? fmtUSD(q.air_freight_per_kg, '/kg')
-              : fmtUSD(q.total_all)}
-          </p>
-        </div>
-        <div>
-          <p className="text-brand-text-muted mb-0.5">{isAr ? 'الشروط' : 'Incoterm'}</p>
-          <p className="text-brand-text">{q.incoterm_point || q.incoterm || '—'}</p>
-        </div>
-        <div>
-          <p className="text-brand-text-muted mb-0.5">{isAr ? 'الصلاحية' : 'Validity'}</p>
-          <p className={clsx('font-medium', isExpired ? 'text-red-400' : 'text-brand-text')}>
-            {q.validity_to ? q.validity_to.slice(0, 10) : '—'}
-            {q.transit_days && <span className="text-brand-text-muted"> · {q.transit_days}d</span>}
-          </p>
-        </div>
-      </div>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-brand-border/40 pt-3">
-          {/* Freight */}
-          <div>
-            <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider mb-2">
-              {isAr ? 'تفاصيل الأسعار' : 'Freight Details'}
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-              {q.ocean_freight      != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'شحن بحري' : 'Ocean Freight'}</span><span className="font-mono text-brand-text">{fmtUSD(q.ocean_freight)}</span></div>}
-              {q.air_freight_per_kg != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'شحن جوي/كغ' : 'Air Freight/kg'}</span><span className="font-mono text-brand-text">{fmtUSD(q.air_freight_per_kg)}</span></div>}
-              {q.baf                != null && <div className="flex justify-between"><span className="text-brand-text-muted">BAF</span><span className="font-mono text-brand-text">{fmtUSD(q.baf)}</span></div>}
-              {q.eca_surcharge      != null && <div className="flex justify-between"><span className="text-brand-text-muted">ECA</span><span className="font-mono text-brand-text">{fmtUSD(q.eca_surcharge)}</span></div>}
-              {q.war_risk_surcharge != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'مخاطر حرب' : 'War Risk'}</span><span className="font-mono text-brand-text">{fmtUSD(q.war_risk_surcharge)}</span></div>}
-            </div>
-          </div>
-
-          {/* Origin charges */}
-          {(q.thc_origin || q.bl_fee || q.doc_fee || q.stuffing_fee || q.trucking_origin) && (
-            <div>
-              <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider mb-2">
-                {isAr ? 'رسوم المنشأ (الصين)' : 'Origin Charges (China)'}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                {q.thc_origin      != null && <div className="flex justify-between"><span className="text-brand-text-muted">THC Origin</span><span className="font-mono text-brand-text">{fmtUSD(q.thc_origin)}</span></div>}
-                {q.bl_fee          != null && <div className="flex justify-between"><span className="text-brand-text-muted">B/L Fee</span><span className="font-mono text-brand-text">{fmtUSD(q.bl_fee)}</span></div>}
-                {q.doc_fee         != null && <div className="flex justify-between"><span className="text-brand-text-muted">Doc Fee</span><span className="font-mono text-brand-text">{fmtUSD(q.doc_fee)}</span></div>}
-                {q.stuffing_fee    != null && <div className="flex justify-between"><span className="text-brand-text-muted">Stuffing</span><span className="font-mono text-brand-text">{fmtUSD(q.stuffing_fee)}</span></div>}
-                {q.trucking_origin != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'شحن داخلي' : 'Trucking'}</span><span className="font-mono text-brand-text">{fmtUSD(q.trucking_origin)}</span></div>}
-              </div>
-              {q.total_origin != null && (
-                <div className="flex justify-between mt-1.5 pt-1.5 border-t border-brand-border/40 text-xs">
-                  <span className="font-semibold text-brand-text-muted">{isAr ? 'إجمالي المنشأ' : 'Total Origin'}</span>
-                  <span className="font-bold font-mono text-amber-400">{fmtUSD(q.total_origin)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Destination charges */}
-          {(q.thc_destination || q.customs_destination || q.trucking_destination) && (
-            <div>
-              <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider mb-2">
-                {isAr ? 'رسوم الوجهة' : 'Destination Charges'}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                {q.thc_destination      != null && <div className="flex justify-between"><span className="text-brand-text-muted">THC Dest.</span><span className="font-mono text-brand-text">{fmtUSD(q.thc_destination)}</span></div>}
-                {q.customs_destination  != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'جمارك' : 'Customs'}</span><span className="font-mono text-brand-text">{fmtUSD(q.customs_destination)}</span></div>}
-                {q.trucking_destination != null && <div className="flex justify-between"><span className="text-brand-text-muted">{isAr ? 'نقل' : 'Trucking'}</span><span className="font-mono text-brand-text">{fmtUSD(q.trucking_destination)}</span></div>}
-              </div>
-              {q.total_destination != null && (
-                <div className="flex justify-between mt-1.5 pt-1.5 border-t border-brand-border/40 text-xs">
-                  <span className="font-semibold text-brand-text-muted">{isAr ? 'إجمالي الوجهة' : 'Total Destination'}</span>
-                  <span className="font-bold font-mono text-amber-400">{fmtUSD(q.total_destination)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Timing */}
-          {(q.free_days_origin || q.free_days_destination || q.cut_off_days) && (
-            <div className="flex flex-wrap gap-4 text-xs text-brand-text-muted">
-              {q.free_days_origin      != null && <span>Free days origin: <b className="text-brand-text">{q.free_days_origin}</b></span>}
-              {q.free_days_destination != null && <span>Free days dest.: <b className="text-brand-text">{q.free_days_destination}</b></span>}
-              {q.cut_off_days          != null && <span>Cut-off: <b className="text-brand-text">{q.cut_off_days}d</b></span>}
-            </div>
-          )}
-
-          {/* Grand total */}
-          {q.total_all != null && (
-            <div className="flex justify-between items-center pt-2 border-t border-brand-border/60">
-              <span className="text-sm font-semibold text-brand-text">{isAr ? 'الإجمالي الكلي' : 'Grand Total'}</span>
-              <span className="text-lg font-bold text-emerald-400 font-mono">{fmtUSD(q.total_all)}</span>
-            </div>
-          )}
-
-          {q.notes && <p className="text-xs text-brand-text-muted border-t border-brand-border/40 pt-2">{q.notes}</p>}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Log item ───────────────────────────────────────────────────────────────────
 const LOG_COLORS: Record<string, string> = {
   update:           'text-blue-400 bg-blue-400/10',
@@ -521,12 +375,9 @@ export default function AgentProfilePage() {
     </div>
   )
 
-  const quotes    = agent.quotes      ?? []
   const history   = agent.price_history ?? []
   const contracts = agent.contracts   ?? []
   const editLog   = agent.edit_log    ?? []
-  const activeQuotes  = quotes.filter(q => q.status === 'active')
-  const otherQuotes   = quotes.filter(q => q.status !== 'active')
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-8">
@@ -712,31 +563,6 @@ export default function AgentProfilePage() {
               </div>
             )}
           </div>
-
-          {/* Active Quotes */}
-          <div className="card">
-            <h3 className="text-sm font-semibold text-brand-text mb-4 flex items-center gap-2">
-              <Anchor size={14} className="text-brand-primary-light" />
-              {isAr ? 'العروض النشطة' : 'Active Offers'}
-              <span className="text-xs text-brand-text-muted">({activeQuotes.length})</span>
-            </h3>
-            {activeQuotes.length === 0
-              ? <p className="text-sm text-brand-text-muted text-center py-4">{isAr ? 'لا توجد عروض نشطة' : 'No active offers'}</p>
-              : <div className="space-y-3">{activeQuotes.map(q => <QuoteCard key={q.id} q={q} isAr={isAr} />)}</div>
-            }
-          </div>
-
-          {/* Other Quotes */}
-          {otherQuotes.length > 0 && (
-            <div className="card">
-              <h3 className="text-sm font-semibold text-brand-text mb-4 flex items-center gap-2">
-                <FileText size={14} className="text-brand-text-muted" />
-                {isAr ? 'عروض سابقة / منتهية' : 'Past / Expired Offers'}
-                <span className="text-xs text-brand-text-muted">({otherQuotes.length})</span>
-              </h3>
-              <div className="space-y-3">{otherQuotes.map(q => <QuoteCard key={q.id} q={q} isAr={isAr} />)}</div>
-            </div>
-          )}
 
           {/* Price History */}
           <div className="card">
