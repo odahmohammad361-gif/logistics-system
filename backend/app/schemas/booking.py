@@ -45,6 +45,18 @@ class BookingCargoImageResponse(BaseModel):
         from_attributes = True
 
 
+class BookingCargoDocumentResponse(BaseModel):
+    id: int
+    document_type: str
+    custom_file_type: Optional[str] = None
+    file_path: str
+    original_filename: Optional[str] = None
+    uploaded_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Cargo Line ────────────────────────────────────────────────────────────────
 
 class BookingCargoLineCreate(BaseModel):
@@ -63,6 +75,12 @@ class BookingCargoLineCreate(BaseModel):
     carton_height_cm: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    clearance_through_us: Optional[bool] = None
+    clearance_agent_id: Optional[int] = None
+    clearance_agent_rate_id: Optional[int] = None
+    manual_clearance_agent_name: Optional[str] = None
+    manual_clearance_agent_phone: Optional[str] = None
+    manual_clearance_agent_notes: Optional[str] = None
 
 
 class BookingCargoLineUpdate(BaseModel):
@@ -80,6 +98,12 @@ class BookingCargoLineUpdate(BaseModel):
     carton_height_cm: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    clearance_through_us: Optional[bool] = None
+    clearance_agent_id: Optional[int] = None
+    clearance_agent_rate_id: Optional[int] = None
+    manual_clearance_agent_name: Optional[str] = None
+    manual_clearance_agent_phone: Optional[str] = None
+    manual_clearance_agent_notes: Optional[str] = None
 
 
 class BookingCargoLineResponse(BaseModel):
@@ -102,7 +126,15 @@ class BookingCargoLineResponse(BaseModel):
     chargeable_weight_kg: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    clearance_through_us: Optional[bool] = None
+    clearance_agent_id: Optional[int] = None
+    clearance_agent_name: Optional[str] = None
+    clearance_agent_rate_id: Optional[int] = None
+    manual_clearance_agent_name: Optional[str] = None
+    manual_clearance_agent_phone: Optional[str] = None
+    manual_clearance_agent_notes: Optional[str] = None
     images: List[BookingCargoImageResponse] = []
+    documents: List[BookingCargoDocumentResponse] = []
     created_at: datetime
 
     class Config:

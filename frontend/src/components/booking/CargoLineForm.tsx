@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { getEligibleClients } from '@/services/bookingService'
+import { getClearanceAgents } from '@/services/agentService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -25,6 +26,12 @@ interface FormValues {
   carton_width_cm:    string
   carton_height_cm:   string
   freight_share:      string
+  clearance_through_us: string
+  clearance_agent_id: string
+  clearance_agent_rate_id: string
+  manual_clearance_agent_name: string
+  manual_clearance_agent_phone: string
+  manual_clearance_agent_notes: string
   notes:              string
 }
 
@@ -48,6 +55,12 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
     enabled:  open && !!bookingId,
   })
 
+  const { data: clearanceAgentsData } = useQuery({
+    queryKey: ['clearance-agents-cargo'],
+    queryFn: () => getClearanceAgents({ page: 1, page_size: 100 }),
+    enabled: open,
+  })
+
   const bookingDest = eligibleData?.booking_destination ?? null
 
   const clientOptions = useMemo(() => {
@@ -59,6 +72,30 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
   }, [eligibleData, isAr])
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
+  const selectedClearanceAgentId = watch('clearance_agent_id')
+
+  const clearanceAgentOptions = useMemo(() => {
+    return (clearanceAgentsData?.results ?? []).map(a => ({
+      value: String(a.id),
+      label: `${isAr && a.name_ar ? a.name_ar : a.name}${a.country ? ` — ${a.country}` : ''}`,
+    }))
+  }, [clearanceAgentsData, isAr])
+
+  const clearanceRateOptions = useMemo(() => {
+    const agent = (clearanceAgentsData?.results ?? []).find(a => String(a.id) === selectedClearanceAgentId)
+    return (agent?.rates ?? []).map(r => ({
+      value: String(r.id),
+      label: [
+        r.service_mode?.toUpperCase(),
+        r.country,
+        r.port,
+        r.container_size,
+        r.carrier_name,
+        r.route,
+      ].filter(Boolean).join(' · '),
+    }))
+  }, [clearanceAgentsData, selectedClearanceAgentId])
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +114,12 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
         carton_width_cm:  initial.carton_width_cm   != null ? String(initial.carton_width_cm)   : '',
         carton_height_cm: initial.carton_height_cm  != null ? String(initial.carton_height_cm)  : '',
         freight_share:    initial.freight_share     != null ? String(initial.freight_share)     : '',
+        clearance_through_us: initial.clearance_through_us === false ? 'manual' : 'us',
+        clearance_agent_id: initial.clearance_agent_id != null ? String(initial.clearance_agent_id) : '',
+        clearance_agent_rate_id: initial.clearance_agent_rate_id != null ? String(initial.clearance_agent_rate_id) : '',
+        manual_clearance_agent_name: initial.manual_clearance_agent_name ?? '',
+        manual_clearance_agent_phone: initial.manual_clearance_agent_phone ?? '',
+        manual_clearance_agent_notes: initial.manual_clearance_agent_notes ?? '',
         notes:            initial.notes             ?? '',
       })
     } else {
@@ -84,7 +127,9 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
         client_id:'', description:'', description_ar:'', hs_code:'', shipping_marks:'',
         cartons:'', gross_weight_kg:'', net_weight_kg:'', cbm:'',
         carton_length_cm:'', carton_width_cm:'', carton_height_cm:'',
-        freight_share:'', notes:'',
+        freight_share:'', clearance_through_us:'us', clearance_agent_id:'',
+        clearance_agent_rate_id:'', manual_clearance_agent_name:'',
+        manual_clearance_agent_phone:'', manual_clearance_agent_notes:'', notes:'',
       })
     }
   }, [open, initial, reset])
@@ -125,6 +170,12 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
       carton_width_cm:    toNum(vals.carton_width_cm),
       carton_height_cm:   toNum(vals.carton_height_cm),
       freight_share:      toNum(vals.freight_share),
+      clearance_through_us: vals.clearance_through_us !== 'manual',
+      clearance_agent_id: vals.clearance_through_us !== 'manual' && vals.clearance_agent_id ? parseInt(vals.clearance_agent_id) : null,
+      clearance_agent_rate_id: vals.clearance_through_us !== 'manual' && vals.clearance_agent_rate_id ? parseInt(vals.clearance_agent_rate_id) : null,
+      manual_clearance_agent_name: vals.clearance_through_us === 'manual' ? (vals.manual_clearance_agent_name || null) : null,
+      manual_clearance_agent_phone: vals.clearance_through_us === 'manual' ? (vals.manual_clearance_agent_phone || null) : null,
+      manual_clearance_agent_notes: vals.clearance_through_us === 'manual' ? (vals.manual_clearance_agent_notes || null) : null,
       notes:              vals.notes || null,
     })
   }
@@ -175,6 +226,56 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
             disabled={!!initial}
             {...register('client_id', { required: t('common.required') })}
           />
+        </FormSection>
+
+        <FormSection title={isAr ? 'التخليص الجمركي للعميل' : 'Client Customs Clearance'}>
+          <div className="grid grid-cols-2 gap-2">
+            <label className={`flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer text-xs font-medium transition-all ${
+              clearanceThroughUs
+                ? 'border-brand-primary bg-brand-primary/15 text-brand-primary-light'
+                : 'border-brand-border text-brand-text-muted hover:border-brand-border-focus'
+            }`}>
+              <input type="radio" value="us" className="sr-only" {...register('clearance_through_us')} />
+              {isAr ? 'التخليص عن طريقنا' : 'Clearance through us'}
+            </label>
+            <label className={`flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer text-xs font-medium transition-all ${
+              !clearanceThroughUs
+                ? 'border-brand-primary bg-brand-primary/15 text-brand-primary-light'
+                : 'border-brand-border text-brand-text-muted hover:border-brand-border-focus'
+            }`}>
+              <input type="radio" value="manual" className="sr-only" {...register('clearance_through_us')} />
+              {isAr ? 'وكيل خارجي / يدوي' : 'Outside agent / manual'}
+            </label>
+          </div>
+
+          {clearanceThroughUs ? (
+            <FormRow>
+              <Select
+                label={isAr ? 'وكيل التخليص' : 'Clearance Agent'}
+                options={clearanceAgentOptions}
+                placeholder={isAr ? 'اختر وكيل التخليص' : 'Select clearance agent'}
+                {...register('clearance_agent_id')}
+              />
+              <Select
+                label={isAr ? 'سعر التخليص' : 'Clearance Rate'}
+                options={clearanceRateOptions}
+                placeholder={clearanceRateOptions.length ? '—' : (isAr ? 'لا توجد أسعار لهذا الوكيل' : 'No rates for this agent')}
+                {...register('clearance_agent_rate_id')}
+              />
+            </FormRow>
+          ) : (
+            <>
+              <FormRow>
+                <Input label={isAr ? 'اسم وكيل التخليص الخارجي' : 'Outside Clearance Agent'} {...register('manual_clearance_agent_name')} />
+                <Input label={t('common.phone')} {...register('manual_clearance_agent_phone')} />
+              </FormRow>
+              <Textarea
+                label={isAr ? 'ملاحظات الوكيل الخارجي' : 'Outside Agent Notes'}
+                rows={2}
+                {...register('manual_clearance_agent_notes')}
+              />
+            </>
+          )}
         </FormSection>
 
         {/* Description */}

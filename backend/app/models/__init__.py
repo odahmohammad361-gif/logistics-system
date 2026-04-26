@@ -10,7 +10,7 @@ from app.models.invoice_item import InvoiceItem
 from app.models.market_rate import MarketRate
 from app.models.company_settings import CompanySettings
 from app.models.company_warehouse import CompanyWarehouse
-from app.models.booking import Booking, BookingCargoLine, BookingCargoImage
+from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingCargoDocument
 from app.models.supplier import Supplier
 from app.models.product import Product, ProductPhoto
 from app.models.customer import Customer
@@ -21,6 +21,6 @@ __all__ = [
     "Invoice", "InvoiceType", "InvoiceStatus",
     "InvoiceItem", "MarketRate",
     "CompanySettings", "CompanyWarehouse",
-    "Booking", "BookingCargoLine", "BookingCargoImage",
+    "Booking", "BookingCargoLine", "BookingCargoImage", "BookingCargoDocument",
     "Supplier", "Product", "ProductPhoto", "Customer",
 ]

@@ -120,16 +120,32 @@ class BookingCargoLine(Base):
     freight_share = Column(Numeric(14, 2), nullable=True)
     notes         = Column(Text,           nullable=True)
 
+    # Per-client customs clearance decision inside this container
+    clearance_through_us = Column(Boolean, nullable=True)
+    clearance_agent_id = Column(Integer, ForeignKey("clearance_agents.id"), nullable=True)
+    clearance_agent_rate_id = Column(Integer, ForeignKey("clearance_agent_rates.id"), nullable=True)
+    manual_clearance_agent_name = Column(String(200), nullable=True)
+    manual_clearance_agent_phone = Column(String(60), nullable=True)
+    manual_clearance_agent_notes = Column(Text, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     booking = relationship("Booking",         back_populates="cargo_lines")
     client  = relationship("Client",          foreign_keys=[client_id])
+    clearance_agent = relationship("ClearanceAgent", foreign_keys=[clearance_agent_id])
+    clearance_agent_rate = relationship("ClearanceAgentRate", foreign_keys=[clearance_agent_rate_id])
     images  = relationship(
         "BookingCargoImage",
         back_populates="cargo_line",
         cascade="all, delete-orphan",
         order_by="BookingCargoImage.uploaded_at",
+    )
+    documents = relationship(
+        "BookingCargoDocument",
+        back_populates="cargo_line",
+        cascade="all, delete-orphan",
+        order_by="BookingCargoDocument.uploaded_at",
     )
 
 
@@ -143,6 +159,20 @@ class BookingCargoImage(Base):
     uploaded_at       = Column(DateTime(timezone=True), server_default=func.now())
 
     cargo_line = relationship("BookingCargoLine", back_populates="images")
+
+
+class BookingCargoDocument(Base):
+    __tablename__ = "booking_cargo_documents"
+
+    id                = Column(Integer,      primary_key=True, index=True)
+    cargo_line_id     = Column(Integer,      ForeignKey("booking_cargo_lines.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_type     = Column(String(40),   nullable=False, index=True)  # pl | security_approval | invoice | other
+    custom_file_type  = Column(String(120),  nullable=True)
+    file_path         = Column(String(500),  nullable=False)
+    original_filename = Column(String(255),  nullable=True)
+    uploaded_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+    cargo_line = relationship("BookingCargoLine", back_populates="documents")
 
 
 class BookingLoadingPhoto(Base):

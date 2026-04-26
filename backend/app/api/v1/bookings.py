@@ -12,14 +12,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingLoadingPhoto, CONTAINER_CBM
+from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingCargoDocument, BookingLoadingPhoto, CONTAINER_CBM
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
 from app.models.shipping_agent import AgentCarrierRate
+from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate
 from app.schemas.booking import (
     BookingCreate, BookingUpdate, BookingResponse, BookingListResponse, BookingListItem,
     BookingCargoLineCreate, BookingCargoLineUpdate, BookingCargoLineResponse,
-    BookingCargoImageResponse, AgentShort, BranchShort, ClientShort,
+    BookingCargoImageResponse, BookingCargoDocumentResponse, AgentShort, BranchShort, ClientShort,
 )
 
 router = APIRouter()
@@ -31,6 +32,7 @@ UPLOAD_DIR = os.path.join(
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _AIR_DIVISOR = Decimal("6000")
+DOCUMENT_TYPES = {"pl", "security_approval", "invoice", "other"}
 
 
 # ── Destination helpers ───────────────────────────────────────────────────────
@@ -174,6 +176,29 @@ def _assert_cargo_editable(b: Booking) -> None:
         )
 
 
+def _validate_clearance_selection(db: Session, line_data) -> None:
+    def val(name: str):
+        return line_data.get(name) if isinstance(line_data, dict) else getattr(line_data, name, None)
+
+    if val("clearance_through_us") is True:
+        if not val("clearance_agent_id"):
+            raise HTTPException(400, "Clearance agent is required when clearance is through us")
+        agent = db.query(ClearanceAgent).filter(
+            ClearanceAgent.id == val("clearance_agent_id"),
+            ClearanceAgent.is_active == True,  # noqa: E712
+        ).first()
+        if not agent:
+            raise HTTPException(404, "Clearance agent not found")
+        if val("clearance_agent_rate_id"):
+            rate = db.query(ClearanceAgentRate).filter(
+                ClearanceAgentRate.id == val("clearance_agent_rate_id"),
+                ClearanceAgentRate.agent_id == val("clearance_agent_id"),
+                ClearanceAgentRate.is_active == True,  # noqa: E712
+            ).first()
+            if not rate:
+                raise HTTPException(404, "Clearance agent rate not found")
+
+
 def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
     used = sum(Decimal(str(ln.cbm)) for ln in booking.cargo_lines if ln.cbm)
     capacity = CONTAINER_CBM.get(booking.container_size) if booking.container_size else None
@@ -207,6 +232,13 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
         chargeable_weight_kg=line.chargeable_weight_kg,
         freight_share=line.freight_share,
         notes=line.notes,
+        clearance_through_us=line.clearance_through_us,
+        clearance_agent_id=line.clearance_agent_id,
+        clearance_agent_name=line.clearance_agent.name if line.clearance_agent else None,
+        clearance_agent_rate_id=line.clearance_agent_rate_id,
+        manual_clearance_agent_name=line.manual_clearance_agent_name,
+        manual_clearance_agent_phone=line.manual_clearance_agent_phone,
+        manual_clearance_agent_notes=line.manual_clearance_agent_notes,
         images=[
             BookingCargoImageResponse(
                 id=img.id,
@@ -215,6 +247,17 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
                 uploaded_at=img.uploaded_at,
             )
             for img in line.images
+        ],
+        documents=[
+            BookingCargoDocumentResponse(
+                id=doc.id,
+                document_type=doc.document_type,
+                custom_file_type=doc.custom_file_type,
+                file_path=doc.file_path,
+                original_filename=doc.original_filename,
+                uploaded_at=doc.uploaded_at,
+            )
+            for doc in line.documents
         ],
         created_at=line.created_at,
     )
@@ -608,6 +651,7 @@ def add_cargo_line(
                        f"Client '{client.name}' ({client.client_code}) appears to be from {client_dest.title()}. "
                        f"Only {dest_label} clients can be added to this container.",
             )
+    _validate_clearance_selection(db, payload)
 
     line = BookingCargoLine(
         booking_id=booking_id,
@@ -626,6 +670,12 @@ def add_cargo_line(
         carton_height_cm=payload.carton_height_cm,
         freight_share=payload.freight_share,
         notes=payload.notes or None,
+        clearance_through_us=payload.clearance_through_us,
+        clearance_agent_id=payload.clearance_agent_id if payload.clearance_through_us else None,
+        clearance_agent_rate_id=payload.clearance_agent_rate_id if payload.clearance_through_us else None,
+        manual_clearance_agent_name=None if payload.clearance_through_us else payload.manual_clearance_agent_name,
+        manual_clearance_agent_phone=None if payload.clearance_through_us else payload.manual_clearance_agent_phone,
+        manual_clearance_agent_notes=None if payload.clearance_through_us else payload.manual_clearance_agent_notes,
     )
     if b.mode == "AIR":
         _compute_air_weights(line)
@@ -655,6 +705,20 @@ def update_cargo_line(
         _assert_cargo_editable(b)
 
     data = payload.model_dump(exclude_unset=True)
+    merged = {
+        "clearance_through_us": line.clearance_through_us,
+        "clearance_agent_id": line.clearance_agent_id,
+        "clearance_agent_rate_id": line.clearance_agent_rate_id,
+    }
+    merged.update({k: v for k, v in data.items() if k in merged})
+    _validate_clearance_selection(db, merged)
+    if merged.get("clearance_through_us") is True:
+        data["manual_clearance_agent_name"] = None
+        data["manual_clearance_agent_phone"] = None
+        data["manual_clearance_agent_notes"] = None
+    elif merged.get("clearance_through_us") is False:
+        data["clearance_agent_id"] = None
+        data["clearance_agent_rate_id"] = None
     for field, value in data.items():
         setattr(line, field, value)
 
@@ -780,6 +844,109 @@ def delete_cargo_image(
         os.remove(full_path)
 
     db.delete(img)
+    db.commit()
+
+
+# ── Cargo Documents ──────────────────────────────────────────────────────────
+
+@router.post("/{booking_id}/cargo-lines/{line_id}/documents/{document_type}", response_model=list[BookingCargoDocumentResponse])
+async def upload_cargo_documents(
+    booking_id: int,
+    line_id: int,
+    document_type: str,
+    files: list[UploadFile] = File(...),
+    custom_file_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.STAFF)),
+):
+    doc_type = document_type.strip().lower()
+    if doc_type not in DOCUMENT_TYPES:
+        raise HTTPException(400, "document_type must be pl, security_approval, invoice or other")
+    if doc_type == "other" and not custom_file_type:
+        raise HTTPException(400, "custom_file_type is required for other documents")
+    line = db.query(BookingCargoLine).filter(
+        BookingCargoLine.id == line_id,
+        BookingCargoLine.booking_id == booking_id,
+    ).first()
+    if not line:
+        raise HTTPException(404, "Cargo line not found")
+
+    doc_dir = os.path.join(UPLOAD_DIR, str(booking_id), str(line_id), "documents", doc_type)
+    os.makedirs(doc_dir, exist_ok=True)
+
+    created: list[BookingCargoDocument] = []
+    for f in files:
+        ext = os.path.splitext(f.filename or "file.bin")[1].lower() or ".bin"
+        fname = f"{uuid.uuid4().hex}{ext}"
+        fpath = os.path.join(doc_dir, fname)
+        with open(fpath, "wb") as fp:
+            fp.write(await f.read())
+        doc = BookingCargoDocument(
+            cargo_line_id=line_id,
+            document_type=doc_type,
+            custom_file_type=custom_file_type if doc_type == "other" else None,
+            file_path=f"bookings/{booking_id}/{line_id}/documents/{doc_type}/{fname}",
+            original_filename=f.filename,
+        )
+        db.add(doc)
+        created.append(doc)
+
+    db.commit()
+    for doc in created:
+        db.refresh(doc)
+    return [
+        BookingCargoDocumentResponse(
+            id=doc.id,
+            document_type=doc.document_type,
+            custom_file_type=doc.custom_file_type,
+            file_path=doc.file_path,
+            original_filename=doc.original_filename,
+            uploaded_at=doc.uploaded_at,
+        )
+        for doc in created
+    ]
+
+
+@router.get("/{booking_id}/cargo-lines/{line_id}/documents/{doc_id}")
+def serve_cargo_document(
+    booking_id: int,
+    line_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    doc = db.query(BookingCargoDocument).filter(
+        BookingCargoDocument.id == doc_id,
+        BookingCargoDocument.cargo_line_id == line_id,
+    ).first()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    full_path = os.path.join(uploads_root, doc.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(404, "Document file not found on disk")
+    return FileResponse(full_path, filename=doc.original_filename)
+
+
+@router.delete("/{booking_id}/cargo-lines/{line_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cargo_document(
+    booking_id: int,
+    line_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.STAFF)),
+):
+    doc = db.query(BookingCargoDocument).filter(
+        BookingCargoDocument.id == doc_id,
+        BookingCargoDocument.cargo_line_id == line_id,
+    ).first()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    full_path = os.path.join(uploads_root, doc.file_path)
+    if os.path.isfile(full_path):
+        os.remove(full_path)
+    db.delete(doc)
     db.commit()
 
 

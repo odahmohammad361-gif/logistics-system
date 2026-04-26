@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus } from 'lucide-react'
 import clsx from 'clsx'
-import type { BookingCargoLine, BookingMode } from '@/types'
-import { deleteCargoImage, uploadCargoImages, getCargoImageUrl } from '@/services/bookingService'
+import type { BookingCargoDocument, BookingCargoLine, BookingMode } from '@/types'
+import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments, getCargoDocumentUrl } from '@/services/bookingService'
 
 const SLICE_COLORS = [
   'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
@@ -25,7 +25,10 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   const { t, i18n } = useTranslation()
   const isRTL = i18n.language === 'ar'
   const [showImages, setShowImages] = useState(false)
+  const [showDocs, setShowDocs]     = useState(false)
   const [uploading, setUploading]   = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
+  const [otherFileType, setOtherFileType] = useState('')
   const color = SLICE_COLORS[index % SLICE_COLORS.length]
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -47,6 +50,36 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   }
 
   const clientName = isRTL ? (line.client.name_ar ?? line.client.name) : line.client.name
+  const docLabel = (doc: BookingCargoDocument) => {
+    if (doc.document_type === 'pl') return isRTL ? 'PL / قائمة تعبئة' : 'PL / Packing List'
+    if (doc.document_type === 'security_approval') return isRTL ? 'موافقات أمنية' : 'Security Approval'
+    if (doc.document_type === 'invoice') return isRTL ? 'فواتير البضاعة' : 'Goods Invoice'
+    return doc.custom_file_type || (isRTL ? 'ملف آخر' : 'Other File')
+  }
+  const docsByType = {
+    pl: line.documents.filter(d => d.document_type === 'pl').length,
+    security_approval: line.documents.filter(d => d.document_type === 'security_approval').length,
+    invoice: line.documents.filter(d => d.document_type === 'invoice').length,
+    other: line.documents.filter(d => d.document_type === 'other').length,
+  }
+
+  async function handleDocumentUpload(type: 'pl' | 'security_approval' | 'invoice' | 'other', files: File[]) {
+    if (!files.length) return
+    if (type === 'other' && !otherFileType.trim()) return
+    setUploadingDoc(type)
+    try {
+      await uploadCargoDocuments(bookingId, line.id, type, files, otherFileType.trim() || undefined)
+      if (type === 'other') setOtherFileType('')
+      onRefresh()
+    } finally {
+      setUploadingDoc(null)
+    }
+  }
+
+  async function handleDeleteDocument(docId: number) {
+    await deleteCargoDocument(bookingId, line.id, docId)
+    onRefresh()
+  }
 
   return (
     <div className="rounded-xl border border-brand-border bg-brand-card overflow-hidden">
@@ -78,6 +111,20 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           )}
         </div>
       </div>
+
+      {/* Clearance */}
+      {(line.clearance_through_us != null || line.clearance_agent_name || line.manual_clearance_agent_name) && (
+        <div className="px-4 py-2 border-b border-brand-border/50 bg-white/[0.02]">
+          <p className="text-[10px] text-brand-text-muted uppercase tracking-wide mb-1">
+            {isRTL ? 'التخليص الجمركي' : 'Customs Clearance'}
+          </p>
+          <p className="text-xs text-brand-text-muted">
+            {line.clearance_through_us === false
+              ? `${isRTL ? 'وكيل خارجي' : 'Outside agent'}: ${line.manual_clearance_agent_name || '—'}${line.manual_clearance_agent_phone ? ` · ${line.manual_clearance_agent_phone}` : ''}`
+              : `${isRTL ? 'عن طريقنا' : 'Through us'}: ${line.clearance_agent_name || '—'}${line.clearance_agent_rate_id ? ` · rate #${line.clearance_agent_rate_id}` : ''}`}
+          </p>
+        </div>
+      )}
 
       {/* Stats — backend returns Numeric as strings, so coerce to Number */}
       <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -142,6 +189,103 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           )}
         </div>
       )}
+
+      {/* Documents section */}
+      <div className="border-t border-brand-border/60">
+        <button
+          onClick={() => setShowDocs(v => !v)}
+          className="flex items-center justify-between w-full px-4 py-2 text-xs text-brand-text-muted hover:text-brand-text hover:bg-white/5 transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <FileText size={13} />
+            {isRTL ? 'ملفات العميل' : 'Client Files'} {line.documents.length > 0 && `(${line.documents.length})`}
+          </span>
+          {showDocs ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </button>
+
+        {showDocs && (
+          <div className="px-4 pb-4 space-y-3">
+            <div className="grid sm:grid-cols-2 gap-2">
+              {([
+                { type: 'pl' as const, label: isRTL ? 'رفع PL' : 'Upload PL', icon: FileText, count: docsByType.pl },
+                { type: 'security_approval' as const, label: isRTL ? 'رفع موافقات أمنية' : 'Upload Security Approvals', icon: ShieldCheck, count: docsByType.security_approval },
+                { type: 'invoice' as const, label: isRTL ? 'رفع فواتير البضاعة' : 'Upload Goods Invoices', icon: Receipt, count: docsByType.invoice },
+              ]).map(item => {
+                const Icon = item.icon
+                return (
+                  <label key={item.type} className={clsx(
+                    'flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-brand-border',
+                    'text-xs text-brand-text-muted cursor-pointer hover:border-brand-primary hover:text-brand-primary transition-colors',
+                    uploadingDoc === item.type && 'pointer-events-none opacity-50',
+                  )}>
+                    {uploadingDoc === item.type ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
+                    <span>{item.label}{item.count > 0 ? ` (${item.count})` : ''}</span>
+                    <input
+                      type="file"
+                      multiple={item.type !== 'pl'}
+                      className="hidden"
+                      onChange={e => {
+                        handleDocumentUpload(item.type, Array.from(e.target.files ?? []))
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                )
+              })}
+              <div className="flex gap-2">
+                <input
+                  className="input-base flex-1 text-xs"
+                  placeholder={isRTL ? 'نوع الملف' : 'File type'}
+                  value={otherFileType}
+                  onChange={e => setOtherFileType(e.target.value)}
+                />
+                <label className={clsx(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-brand-border',
+                  'text-xs text-brand-text-muted cursor-pointer hover:border-brand-primary hover:text-brand-primary transition-colors',
+                  (!otherFileType.trim() || uploadingDoc === 'other') && 'opacity-50',
+                )}>
+                  {uploadingDoc === 'other' ? <Loader2 size={13} className="animate-spin" /> : <FolderPlus size={13} />}
+                  <span>{isRTL ? 'أخرى' : 'Other'}</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    disabled={!otherFileType.trim()}
+                    onChange={e => {
+                      handleDocumentUpload('other', Array.from(e.target.files ?? []))
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {line.documents.length > 0 && (
+              <div className="space-y-1.5">
+                {line.documents.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] border border-brand-border/50 px-3 py-2">
+                    <FileText size={13} className="text-brand-primary-light" />
+                    <a
+                      href={getCargoDocumentUrl(bookingId, line.id, doc.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1 text-xs text-brand-text hover:text-brand-primary-light truncate"
+                    >
+                      {docLabel(doc)} · {doc.original_filename || 'file'}
+                    </a>
+                    <button
+                      onClick={() => handleDeleteDocument(doc.id)}
+                      className="p-1 rounded text-brand-text-muted hover:text-brand-red hover:bg-brand-red/10 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Images section */}
       <div className="border-t border-brand-border/60">

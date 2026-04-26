@@ -1,5 +1,5 @@
 import api from './api'
-import type { Booking, BookingListResponse, BookingCargoLine, BookingCargoImage } from '@/types'
+import type { Booking, BookingListResponse, BookingCargoLine, BookingCargoImage, BookingCargoDocument } from '@/types'
 
 const BASE = '/bookings'
 
@@ -47,6 +47,33 @@ export const deleteCargoImage = (bookingId: number, lineId: number, imgId: numbe
 export const getCargoImageUrl = (bookingId: number, lineId: number, imgId: number): string => {
   const base = api.defaults.baseURL ?? ''
   return `${base}${BASE}/${bookingId}/cargo-lines/${lineId}/images/${imgId}`
+}
+
+// ── Cargo Documents ──────────────────────────────────────────────────────────
+
+export const uploadCargoDocuments = (
+  bookingId: number,
+  lineId: number,
+  documentType: 'pl' | 'security_approval' | 'invoice' | 'other',
+  files: File[],
+  customFileType?: string,
+) => {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  const params = customFileType ? { custom_file_type: customFileType } : undefined
+  return api.post<BookingCargoDocument[]>(
+    `${BASE}/${bookingId}/cargo-lines/${lineId}/documents/${documentType}`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' }, params },
+  ).then((r) => r.data)
+}
+
+export const deleteCargoDocument = (bookingId: number, lineId: number, docId: number) =>
+  api.delete(`${BASE}/${bookingId}/cargo-lines/${lineId}/documents/${docId}`)
+
+export const getCargoDocumentUrl = (bookingId: number, lineId: number, docId: number): string => {
+  const base = api.defaults.baseURL ?? ''
+  return `${base}${BASE}/${bookingId}/cargo-lines/${lineId}/documents/${docId}`
 }
 
 // ── Eligible clients ──────────────────────────────────────────────────────────

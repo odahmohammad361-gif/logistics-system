@@ -484,6 +484,15 @@ export interface BookingCargoImage {
   uploaded_at: string
 }
 
+export interface BookingCargoDocument {
+  id: number
+  document_type: 'pl' | 'security_approval' | 'invoice' | 'other'
+  custom_file_type: string | null
+  file_path: string
+  original_filename: string | null
+  uploaded_at: string
+}
+
 export interface BookingCargoLine {
   id: number
   booking_id: number
@@ -504,7 +513,15 @@ export interface BookingCargoLine {
   chargeable_weight_kg: number | null
   freight_share: number | null
   notes: string | null
+  clearance_through_us: boolean | null
+  clearance_agent_id: number | null
+  clearance_agent_name: string | null
+  clearance_agent_rate_id: number | null
+  manual_clearance_agent_name: string | null
+  manual_clearance_agent_phone: string | null
+  manual_clearance_agent_notes: string | null
   images: BookingCargoImage[]
+  documents: BookingCargoDocument[]
   created_at: string
 }
 

@@ -65,6 +65,10 @@ function fileUrl(path: string) {
   return new URL(`/uploads/${path}`, window.location.origin).href
 }
 
+function isImagePath(path: string) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(path)
+}
+
 function infoRow(label: string, value: unknown) {
   return `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`
 }
@@ -75,6 +79,7 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
   const generated = new Date().toLocaleString()
   const lineClient = (line: BookingCargoLine) => isRTL ? (line.client.name_ar ?? line.client.name) : line.client.name
   const totalCargoImages = booking.cargo_lines.reduce((sum, line) => sum + line.images.length, 0)
+  const totalCargoDocs = booking.cargo_lines.reduce((sum, line) => sum + line.documents.length, 0)
 
   const summaryRows = [
     infoRow(isRTL ? 'رقم الحجز' : 'Booking No.', booking.booking_number),
@@ -113,6 +118,7 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
       <td>${esc(line.cbm)}</td>
       <td>${esc(line.hs_code)}</td>
       <td>${esc(line.images.length)}</td>
+      <td>${esc(line.documents.length)}</td>
     </tr>
   `).join('')
 
@@ -142,6 +148,24 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
     </section>
   `)).join('')
 
+  const cargoDocumentPages = booking.cargo_lines.flatMap(line => line.documents.map((doc, idx) => {
+    const label =
+      doc.document_type === 'pl' ? (isRTL ? 'PL / قائمة تعبئة' : 'PL / Packing List') :
+      doc.document_type === 'security_approval' ? (isRTL ? 'موافقات أمنية' : 'Security Approval') :
+      doc.document_type === 'invoice' ? (isRTL ? 'فواتير البضاعة' : 'Goods Invoice') :
+      (doc.custom_file_type || (isRTL ? 'ملف آخر' : 'Other File'))
+    const href = fileUrl(doc.file_path)
+    return `
+      <section class="page ${isImagePath(doc.file_path) ? 'photo-page' : ''}">
+        <h2>${esc(label)}</h2>
+        <p class="muted">${esc(line.client.client_code)} · ${esc(lineClient(line))} · ${idx + 1}/${line.documents.length}</p>
+        ${isImagePath(doc.file_path)
+          ? `<img src="${href}" alt="${esc(doc.original_filename ?? '')}" />`
+          : `<div class="file-box"><p>${esc(doc.original_filename ?? 'file')}</p><a href="${href}">${esc(isRTL ? 'فتح الملف' : 'Open file')}</a></div>`}
+      </section>
+    `
+  })).join('')
+
   return `<!doctype html>
 <html lang="${isRTL ? 'ar' : 'en'}" dir="${dir}">
 <head>
@@ -168,6 +192,8 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
     .photo-page { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
     .photo-page img { max-width: 100%; max-height: 215mm; object-fit: contain; border: 1px solid #cbd5e1; }
     .caption { margin-top: 10px; font-size: 12px; color: #334155; }
+    .file-box { margin: 35mm auto 0; max-width: 120mm; border: 1px solid #cbd5e1; padding: 16px; border-radius: 8px; text-align: center; }
+    .file-box a { color: #0369a1; font-weight: 700; }
     .future { color: #94a3b8; font-size: 11px; margin-top: 8px; }
     @media print {
       body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -186,16 +212,17 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
       <div class="stat">${esc(isRTL ? 'العملاء' : 'Clients')}<strong>${booking.cargo_lines.length}</strong></div>
       <div class="stat">${esc(isRTL ? 'صور التحميل' : 'Loading Photos')}<strong>${booking.loading_photos.length}</strong></div>
       <div class="stat">${esc(isRTL ? 'صور البضاعة' : 'Cargo Photos')}<strong>${totalCargoImages}</strong></div>
-      <div class="stat">${esc(isRTL ? 'الحالة' : 'Status')}<strong>${esc(booking.status)}</strong></div>
+      <div class="stat">${esc(isRTL ? 'ملفات العملاء' : 'Client Files')}<strong>${totalCargoDocs}</strong></div>
     </div>
     <p class="future">${esc(isRTL ? 'هذا الأرشيف قابل للتوسعة لاحقاً ليشمل B/L و CO والفواتير والتخليص والتسليم.' : 'This archive is ready to expand later with B/L, CO, invoices, clearance and delivery files.')}</p>
   </section>
 
   ${options.summary ? `<section class="page"><h2>${esc(isRTL ? 'ملخص الحاوية' : 'Container Summary')}</h2><table>${summaryRows}</table></section>` : ''}
-  ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="10">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
+  ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th><th>${esc(isRTL ? 'ملفات' : 'Files')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="11">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
   ${options.loading ? `<section class="page"><h2>${esc(isRTL ? 'معلومات التحميل' : 'Loading Information')}</h2><table>${loadingRows}</table></section>` : ''}
   ${options.loadingPhotos ? loadingPhotoPages : ''}
   ${options.cargoImages ? cargoImagePages : ''}
+  ${options.cargo ? cargoDocumentPages : ''}
 </body>
 </html>`
 }
