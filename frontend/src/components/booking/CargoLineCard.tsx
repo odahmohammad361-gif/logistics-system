@@ -39,6 +39,7 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   const [otherFileType, setOtherFileType] = useState('')
   const [preview, setPreview] = useState<{ title: string; url: string; filename?: string | null } | null>(null)
   const color = SLICE_COLORS[index % SLICE_COLORS.length]
+  const generatedDescription = Boolean(line.extracted_goods?.goods?.length && line.description?.trim().startsWith('1.'))
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -221,9 +222,9 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
       </div>
 
       {/* Description */}
-      {(line.description || line.hs_code || line.shipping_marks) && (
+      {((line.description && !generatedDescription) || line.hs_code || line.shipping_marks) && (
         <div className="px-4 pb-3 space-y-1">
-          {line.description && (
+          {line.description && !generatedDescription && (
             <p className="text-xs text-brand-text-muted">
               <span className="text-brand-text-dim">{t('bookings.description')}: </span>
               {isRTL ? (line.description_ar ?? line.description) : line.description}
@@ -444,21 +445,33 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           <p className="text-[10px] text-brand-text-muted uppercase tracking-wide mb-2">
             {isRTL ? 'بيانات مستخرجة من الملفات' : 'Extracted goods from files'}
           </p>
-          <div className="space-y-1.5">
-            {line.extracted_goods.goods.slice(0, 5).map((item, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_auto] gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-xs">
-                <span className="text-brand-text truncate">{idx + 1}. {item.description || '—'}</span>
-                <span className="text-brand-text-muted font-mono">
-                  {item.cartons != null ? `${item.cartons} CTNS` : ''}
-                  {item.gross_weight_kg != null ? ` · ${item.gross_weight_kg} KG` : ''}
-                </span>
-              </div>
-            ))}
-            {line.extracted_goods.goods.length > 5 && (
-              <p className="text-[11px] text-brand-text-muted">
-                +{line.extracted_goods.goods.length - 5} {isRTL ? 'بنود أخرى' : 'more items'}
-              </p>
-            )}
+          <div className="overflow-x-auto rounded-lg border border-brand-border/50">
+            <table className="min-w-[720px] w-full text-xs">
+              <thead className="bg-white/[0.04] text-brand-text-muted">
+                <tr>
+                  <th className="px-2 py-1.5 text-start">#</th>
+                  <th className="px-2 py-1.5 text-start">{isRTL ? 'الوصف' : 'Description'}</th>
+                  <th className="px-2 py-1.5 text-end">{isRTL ? 'كراتين' : 'CTNS'}</th>
+                  <th className="px-2 py-1.5 text-end">{isRTL ? 'الكمية' : 'QTY'}</th>
+                  <th className="px-2 py-1.5 text-end">{isRTL ? 'الوزن' : 'KG'}</th>
+                  <th className="px-2 py-1.5 text-end">CBM</th>
+                  <th className="px-2 py-1.5 text-start">HS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {line.extracted_goods.goods.map((item, idx) => (
+                  <tr key={idx} className="border-t border-brand-border/40">
+                    <td className="px-2 py-1.5 text-brand-text-muted">{idx + 1}</td>
+                    <td className="px-2 py-1.5 text-brand-text">{item.description || '—'}</td>
+                    <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.cartons ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.quantity ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.gross_weight_kg ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.cbm ?? '—'}</td>
+                    <td className="px-2 py-1.5 font-mono text-brand-text-muted">{item.hs_code ?? line.hs_code ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : null}

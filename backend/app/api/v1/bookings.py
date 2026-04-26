@@ -478,19 +478,11 @@ def _parse_cargo_documents(text_by_type: dict[str, str]) -> dict:
         if short_desc:
             goods.append({"description": " ".join(short_desc.split()), "hs_code": hs_code, "source": "document_text"})
 
-    descriptions = [str(g["description"]) for g in goods if g.get("description")]
-    description = "\n".join(
-        f"{idx + 1}. {desc}"
-        + (f" - {goods[idx].get('cartons')} CTNS" if goods[idx].get("cartons") else "")
-        + (f" / {goods[idx].get('quantity')} PCS" if goods[idx].get("quantity") else "")
-        + (f" / {goods[idx].get('gross_weight_kg')} KGS" if goods[idx].get("gross_weight_kg") else "")
-        for idx, desc in enumerate(descriptions[:30])
-    )
     marks = "N/M" if re.search(r"\bN/M\b", combined, re.I) else None
 
     return {
         "fields": {
-            "description": description or None,
+            "description": None,
             "description_ar": None,
             "hs_code": hs_code,
             "shipping_marks": marks,
@@ -1529,10 +1521,10 @@ def extract_cargo_documents(
 
     parsed = _parse_cargo_documents(text_by_type)
     fields = parsed["fields"]
-    if fields.get("description"):
-        line.description = fields["description"]
-    if fields.get("description_ar"):
-        line.description_ar = fields["description_ar"]
+    if line.description and re.match(r"^\s*1\.\s+", line.description):
+        line.description = None
+    if line.description_ar and re.match(r"^\s*1\.\s+", line.description_ar):
+        line.description_ar = None
     if fields.get("hs_code"):
         line.hs_code = fields["hs_code"]
     if fields.get("shipping_marks"):

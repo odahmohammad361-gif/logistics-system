@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
@@ -59,6 +59,15 @@ interface FormValues {
   notes:              string
 }
 
+interface GoodsRow {
+  description: string
+  cartons: string
+  quantity: string
+  gross_weight_kg: string
+  cbm: string
+  hs_code: string
+}
+
 interface Props {
   open:        boolean
   onClose:     () => void
@@ -116,6 +125,7 @@ export default function CargoLineForm({
   }, [eligibleData, isAr])
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const [goodsRows, setGoodsRows] = useState<GoodsRow[]>([])
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
@@ -189,12 +199,21 @@ export default function CargoLineForm({
 
   useEffect(() => {
     if (!open) return
+    const extractedRows = initial?.extracted_goods?.goods?.map(item => ({
+      description: item.description ?? '',
+      cartons: item.cartons != null ? String(item.cartons) : '',
+      quantity: item.quantity != null ? String(item.quantity) : '',
+      gross_weight_kg: item.gross_weight_kg != null ? String(item.gross_weight_kg) : '',
+      cbm: item.cbm != null ? String(item.cbm) : '',
+      hs_code: item.hs_code ?? '',
+    })) ?? []
+    setGoodsRows(extractedRows)
     if (initial) {
       reset({
         client_id:        String(initial.client.id),
         goods_source:     initial.goods_source ?? 'client_ready_goods',
         is_full_container_client: initial.is_full_container_client ?? false,
-        description:      initial.description      ?? '',
+        description:      initial.extracted_goods?.goods?.length && initial.description?.trim().startsWith('1.') ? '' : (initial.description ?? ''),
         description_ar:   initial.description_ar   ?? '',
         hs_code:          initial.hs_code           ?? '',
         shipping_marks:   initial.shipping_marks    ?? '',
@@ -247,8 +266,28 @@ export default function CargoLineForm({
 
   function toNum(v: string) { const n = parseFloat(v); return isNaN(n) ? null : n }
   function toInt(v: string) { const n = parseInt(v); return isNaN(n) ? null : n }
+  function updateGoodsRow(index: number, field: keyof GoodsRow, value: string) {
+    setGoodsRows(rows => rows.map((row, i) => i === index ? { ...row, [field]: value } : row))
+  }
+  function addGoodsRow() {
+    setGoodsRows(rows => [...rows, { description: '', cartons: '', quantity: '', gross_weight_kg: '', cbm: '', hs_code: '' }])
+  }
+  function removeGoodsRow(index: number) {
+    setGoodsRows(rows => rows.filter((_, i) => i !== index))
+  }
 
   async function handleFormSubmit(vals: FormValues) {
+    const cleanedGoods = goodsRows
+      .map(row => ({
+        description: row.description.trim(),
+        cartons: toInt(row.cartons),
+        quantity: toInt(row.quantity),
+        gross_weight_kg: toNum(row.gross_weight_kg),
+        cbm: toNum(row.cbm),
+        hs_code: row.hs_code.trim() || null,
+        source: initial?.extracted_goods?.goods?.length ? 'document_or_manual' : 'manual',
+      }))
+      .filter(row => row.description || row.cartons != null || row.quantity != null || row.gross_weight_kg != null || row.cbm != null || row.hs_code)
     await onSubmit({
       client_id:          parseInt(vals.client_id),
       goods_source:       vals.goods_source || 'client_ready_goods',
@@ -272,6 +311,14 @@ export default function CargoLineForm({
       manual_clearance_agent_phone: vals.clearance_through_us === 'manual' ? (vals.manual_clearance_agent_phone || null) : null,
       manual_clearance_agent_notes: vals.clearance_through_us === 'manual' ? (vals.manual_clearance_agent_notes || null) : null,
       notes:              vals.notes || null,
+      extracted_goods: cleanedGoods.length
+        ? {
+            ...(initial?.extracted_goods ?? {}),
+            version: 1,
+            updated_at: new Date().toISOString(),
+            goods: cleanedGoods,
+          }
+        : null,
     })
   }
 
@@ -432,49 +479,87 @@ export default function CargoLineForm({
           )}
         </FormSection>
 
-        {/* Description */}
-        <FormSection title={t('bookings.description')}>
-          {initial?.extracted_goods?.goods?.length ? (
+        <FormSection title={isAr ? 'قائمة البضاعة' : 'Goods List'}>
+          {goodsRows.length ? (
             <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-brand-primary-light">
-                  {isAr ? 'قائمة البضاعة المستخرجة من الملفات' : 'Goods list extracted from files'}
+                  {initial?.extracted_goods?.goods?.length
+                    ? (isAr ? 'قائمة البضاعة المستخرجة من الملفات' : 'Goods list extracted from files')
+                    : (isAr ? 'قائمة البضاعة اليدوية' : 'Manual goods list')}
                 </p>
-                {initial.extracted_goods.confidence && (
+                {initial?.extracted_goods?.confidence && (
                   <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-brand-text-muted">
                     {initial.extracted_goods.confidence}
                   </span>
                 )}
               </div>
-              <div className="max-h-44 overflow-y-auto rounded-lg border border-brand-border/50">
-                <table className="w-full text-xs">
+              <div className="max-h-72 overflow-auto rounded-lg border border-brand-border/50">
+                <table className="min-w-[760px] w-full text-xs">
                   <thead className="bg-white/[0.04] text-brand-text-muted">
                     <tr>
                       <th className="px-2 py-1.5 text-start">#</th>
                       <th className="px-2 py-1.5 text-start">{isAr ? 'الوصف' : 'Description'}</th>
                       <th className="px-2 py-1.5 text-end">{isAr ? 'كراتين' : 'CTNS'}</th>
+                      <th className="px-2 py-1.5 text-end">{isAr ? 'الكمية' : 'QTY'}</th>
                       <th className="px-2 py-1.5 text-end">{isAr ? 'الوزن' : 'KG'}</th>
+                      <th className="px-2 py-1.5 text-end">CBM</th>
+                      <th className="px-2 py-1.5 text-start">HS</th>
+                      <th className="px-2 py-1.5" />
                     </tr>
                   </thead>
                   <tbody>
-                    {initial.extracted_goods.goods.map((item, idx) => (
+                    {goodsRows.map((item, idx) => (
                       <tr key={idx} className="border-t border-brand-border/40">
                         <td className="px-2 py-1.5 text-brand-text-muted">{idx + 1}</td>
-                        <td className="px-2 py-1.5 text-brand-text">{item.description || '—'}</td>
-                        <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.cartons ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.gross_weight_kg ?? '—'}</td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs" value={item.description} onChange={e => updateGoodsRow(idx, 'description', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs text-end" type="number" value={item.cartons} onChange={e => updateGoodsRow(idx, 'cartons', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs text-end" type="number" value={item.quantity} onChange={e => updateGoodsRow(idx, 'quantity', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs text-end" type="number" value={item.gross_weight_kg} onChange={e => updateGoodsRow(idx, 'gross_weight_kg', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs text-end" type="number" value={item.cbm} onChange={e => updateGoodsRow(idx, 'cbm', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input className="input-base h-8 text-xs" value={item.hs_code} onChange={e => updateGoodsRow(idx, 'hs_code', e.target.value)} />
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <button type="button" className="text-brand-red hover:underline" onClick={() => removeGoodsRow(idx)}>
+                            {isAr ? 'حذف' : 'Remove'}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-brand-text-muted">
-                {isAr
-                  ? 'يمكنك تعديل الحقول في الأسفل قبل الحفظ؛ القائمة ستبقى محفوظة للتصدير لاحقاً.'
-                  : 'You can edit the fields below before saving; this list stays stored for later exports.'}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-brand-text-muted">
+                  {isAr
+                    ? 'هذه القائمة هي المرجع للتصدير لاحقاً. الحقول بالأسفل ملاحظات عامة فقط.'
+                    : 'This list is the export reference later. The fields below are only general notes.'}
+                </p>
+                <button type="button" className="text-xs font-semibold text-brand-primary-light hover:underline" onClick={addGoodsRow}>
+                  {isAr ? '+ إضافة بند' : '+ Add item'}
+                </button>
+              </div>
             </div>
-          ) : null}
+          ) : (
+            <button type="button" className="rounded-lg border border-dashed border-brand-border px-3 py-2 text-xs text-brand-text-muted hover:border-brand-primary hover:text-brand-primary" onClick={addGoodsRow}>
+              {isAr ? '+ إضافة قائمة بضاعة يدوياً' : '+ Add manual goods list'}
+            </button>
+          )}
+        </FormSection>
+
+        {/* Description */}
+        <FormSection title={isAr ? 'ملاحظات وصف البضاعة' : t('bookings.description')}>
           <FormRow>
             <Input label={t('common.english')}    {...register('description')} />
             <Input label={t('common.arabic')} dir="rtl" {...register('description_ar')} />
