@@ -24,6 +24,22 @@ function normKey(value: string | null | undefined) {
   return (value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '')
 }
 
+function canonicalContainerSize(value: string | null | undefined) {
+  const v = normKey(value)
+  if (!v) return ''
+  if (v.includes('40hq') || v.includes('40hc') || v.includes('40highcube')) return '40HQ'
+  if (v.includes('20')) return '20GP'
+  if (v.includes('40')) return '40GP'
+  return v.toUpperCase()
+}
+
+function sizeMatches(rateSize: string | null | undefined, expectedSize: string | null | undefined) {
+  const rate = canonicalContainerSize(rateSize)
+  const expected = canonicalContainerSize(expectedSize)
+  if (!rate || !expected) return true
+  return rate === expected || looseKeyMatch(rateSize, expectedSize)
+}
+
 function looseKeyMatch(left: string | null | undefined, right: string | null | undefined) {
   const a = normKey(left)
   const b = normKey(right)
@@ -150,32 +166,37 @@ export default function CargoLineForm({
   const clearanceRateOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
     const expectedMode = clearanceMode(mode)
-    const expectedSize = normKey(containerSize)
     const expectedCarrier = normKey(carrierName)
     const agent = (clearanceAgentsData?.results ?? []).find(a => String(a.id) === selectedClearanceAgentId)
-    return (agent?.rates ?? [])
+    const baseRates = (agent?.rates ?? [])
       .filter(r => {
         const rateDest = normalizeCountry(r.country)
-        const rateSize = normKey(r.container_size)
-        const rateCarrier = normKey(r.carrier_name)
         if (destination && rateDest && rateDest !== destination) return false
         if (r.service_mode && r.service_mode !== expectedMode) return false
-        if (expectedMode === 'sea' && expectedSize && rateSize !== expectedSize) return false
-        if (expectedCarrier && rateCarrier && !looseKeyMatch(r.carrier_name, carrierName)) return false
+        if (expectedMode === 'sea' && !sizeMatches(r.container_size, containerSize)) return false
         return true
       })
-      .map(r => ({
-      value: String(r.id),
-      label: [
-        r.service_mode?.toUpperCase(),
-        r.country,
-        r.port,
-        r.container_size,
-        r.carrier_name,
-        r.route,
-      ].filter(Boolean).join(' · '),
-    }))
-  }, [clearanceAgentsData, selectedClearanceAgentId, bookingDest, mode, containerSize, carrierName])
+    const strictCarrierRates = baseRates.filter(r => {
+      const rateCarrier = normKey(r.carrier_name)
+      return !expectedCarrier || !rateCarrier || looseKeyMatch(r.carrier_name, carrierName)
+    })
+    const rates = strictCarrierRates.length ? strictCarrierRates : baseRates
+    return rates.map(r => {
+      const carrierFallback = expectedCarrier && normKey(r.carrier_name) && !looseKeyMatch(r.carrier_name, carrierName)
+      return {
+        value: String(r.id),
+        label: [
+          r.service_mode?.toUpperCase(),
+          r.country,
+          r.port,
+          r.container_size,
+          r.carrier_name,
+          r.route,
+          carrierFallback ? (isAr ? 'تحقق من الناقل' : 'check carrier') : '',
+        ].filter(Boolean).join(' · '),
+      }
+    })
+  }, [clearanceAgentsData, selectedClearanceAgentId, bookingDest, mode, containerSize, carrierName, isAr])
 
   useEffect(() => {
     if (!open || !clearanceThroughUs) return

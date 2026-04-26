@@ -203,6 +203,27 @@ def _norm_key(value: str | None) -> str:
     return (value or "").strip().lower().replace(" ", "").replace("-", "").replace("_", "")
 
 
+def _canonical_container_size(value: str | None) -> str:
+    v = _norm_key(value)
+    if not v:
+        return ""
+    if "40hq" in v or "40hc" in v or "40highcube" in v:
+        return "40HQ"
+    if "20" in v:
+        return "20GP"
+    if "40" in v:
+        return "40GP"
+    return v.upper()
+
+
+def _container_size_matches(rate_size: str | None, booking_size: str | None) -> bool:
+    rate = _canonical_container_size(rate_size)
+    booking = _canonical_container_size(booking_size)
+    if not rate or not booking:
+        return True
+    return rate == booking or _loose_key_match(rate_size, booking_size)
+
+
 def _loose_key_match(left: str | None, right: str | None) -> bool:
     a = _norm_key(left)
     b = _norm_key(right)
@@ -313,11 +334,8 @@ def _validate_clearance_selection(db: Session, line_data, booking: Booking | Non
                 if rate.service_mode and rate.service_mode != expected_mode:
                     raise HTTPException(400, f"Selected clearance rate is for {rate.service_mode}, but this container needs {expected_mode} clearance")
                 if expected_mode == "sea" and rate.container_size and booking.container_size:
-                    if _norm_key(rate.container_size) != _norm_key(booking.container_size):
+                    if not _container_size_matches(rate.container_size, booking.container_size):
                         raise HTTPException(400, f"Selected clearance rate is for {rate.container_size}, but this container is {booking.container_size}")
-                if rate.carrier_name and booking.carrier_name:
-                    if not _loose_key_match(rate.carrier_name, booking.carrier_name):
-                        raise HTTPException(400, f"Selected clearance rate is for carrier {rate.carrier_name}, but this container uses {booking.carrier_name}")
                 booking_dest = _port_to_destination(booking.port_of_discharge) or booking.destination
                 rate_dest = _country_to_destination(rate.country)
                 if booking_dest and rate_dest and booking_dest != rate_dest:
