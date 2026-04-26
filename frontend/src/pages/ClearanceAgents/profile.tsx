@@ -115,7 +115,7 @@ export default function ClearanceAgentProfilePage() {
   const [rateModal, setRateModal] = useState(false)
   const [editingRate, setEditingRate] = useState<ClearanceAgentRate | null>(null)
   const [deletingRate, setDeletingRate] = useState<ClearanceAgentRate | null>(null)
-  const [form, setForm] = useState<RateForm>(emptyRateForm())
+  const [rateForms, setRateForms] = useState<RateForm[]>([emptyRateForm()])
 
   const { data: agent, isLoading } = useQuery<ClearanceAgent>({
     queryKey: ['clearance-agent-profile', agentId],
@@ -125,31 +125,10 @@ export default function ClearanceAgentProfilePage() {
 
   const saveRateMut = useMutation({
     mutationFn: () => {
-      const n = (s: string) => s ? Number(s) : null
-      const payload = {
-        service_mode: form.service_mode,
-        country: form.country || null,
-        port: form.port || null,
-        route: form.route || null,
-        container_size: form.service_mode === 'sea' ? form.container_size || null : null,
-        carrier_name: form.service_mode === 'sea' ? form.carrier_name || null : null,
-        buy_clearance_fee: n(form.buy_clearance_fee),
-        sell_clearance_fee: n(form.sell_clearance_fee),
-        buy_transportation: n(form.buy_transportation),
-        sell_transportation: n(form.sell_transportation),
-        buy_delivery_authorization: n(form.buy_delivery_authorization),
-        sell_delivery_authorization: n(form.sell_delivery_authorization),
-        buy_inspection_ramp: form.service_mode === 'sea' ? n(form.buy_inspection_ramp) : null,
-        sell_inspection_ramp: form.service_mode === 'sea' ? n(form.sell_inspection_ramp) : null,
-        buy_port_inspection: form.service_mode === 'sea' ? n(form.buy_port_inspection) : null,
-        sell_port_inspection: form.service_mode === 'sea' ? n(form.sell_port_inspection) : null,
-        buy_import_export_card_pct: n(form.buy_import_export_card_pct),
-        sell_import_export_card_pct: n(form.sell_import_export_card_pct),
-        notes: form.notes || null,
-      }
+      const payloads = rateForms.map(ratePayload)
       return editingRate
-        ? updateClearanceAgentRate(agentId, editingRate.id, payload)
-        : createClearanceAgentRate(agentId, payload)
+        ? updateClearanceAgentRate(agentId, editingRate.id, payloads[0])
+        : Promise.all(payloads.map(payload => createClearanceAgentRate(agentId, payload)))
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clearance-agent-profile', agentId] })
@@ -168,26 +147,70 @@ export default function ClearanceAgentProfilePage() {
     },
   })
 
-  function setField(field: string, value: string) {
-    setForm(f => ({ ...f, [field]: value }))
+  function ratePayload(f: RateForm) {
+    const n = (s: string) => s ? Number(s) : null
+    return {
+      service_mode: f.service_mode,
+      country: f.country || null,
+      port: f.port || null,
+      route: f.route || null,
+      container_size: f.service_mode === 'sea' ? f.container_size || null : null,
+      carrier_name: f.service_mode === 'sea' ? f.carrier_name || null : null,
+      buy_clearance_fee: n(f.buy_clearance_fee),
+      sell_clearance_fee: n(f.sell_clearance_fee),
+      buy_transportation: n(f.buy_transportation),
+      sell_transportation: n(f.sell_transportation),
+      buy_delivery_authorization: n(f.buy_delivery_authorization),
+      sell_delivery_authorization: n(f.sell_delivery_authorization),
+      buy_inspection_ramp: f.service_mode === 'sea' ? n(f.buy_inspection_ramp) : null,
+      sell_inspection_ramp: f.service_mode === 'sea' ? n(f.sell_inspection_ramp) : null,
+      buy_port_inspection: f.service_mode === 'sea' ? n(f.buy_port_inspection) : null,
+      sell_port_inspection: f.service_mode === 'sea' ? n(f.sell_port_inspection) : null,
+      buy_import_export_card_pct: n(f.buy_import_export_card_pct),
+      sell_import_export_card_pct: n(f.sell_import_export_card_pct),
+      notes: f.notes || null,
+    }
+  }
+
+  function setField(index: number, field: string, value: string) {
+    setRateForms(forms => forms.map((f, i) => i === index ? { ...f, [field]: value } : f))
   }
 
   function openAddRate() {
     setEditingRate(null)
-    setForm(emptyRateForm(agent))
+    setRateForms([emptyRateForm(agent)])
     setRateModal(true)
   }
 
   function openEditRate(rate: ClearanceAgentRate) {
     setEditingRate(rate)
-    setForm(formFromRate(rate))
+    setRateForms([formFromRate(rate)])
     setRateModal(true)
   }
 
-  function applyMarkup() {
-    const pct = Number(form.markup_pct)
+  function addAnotherQuote() {
+    setRateForms(forms => {
+      const last = forms[forms.length - 1] ?? emptyRateForm(agent)
+      return [...forms, {
+        ...emptyRateForm(agent),
+        service_mode: last.service_mode,
+        country: last.country,
+        port: last.port,
+        route: last.route,
+      }]
+    })
+  }
+
+  function removeQuote(index: number) {
+    setRateForms(forms => forms.filter((_, i) => i !== index))
+  }
+
+  function applyMarkup(index: number) {
+    const current = rateForms[index]
+    const pct = Number(current?.markup_pct)
     if (!pct) return
-    setForm(f => {
+    setRateForms(forms => forms.map((f, i) => {
+      if (i !== index) return f
       const next = { ...f }
       PRICE_FIELDS.forEach(([key]) => {
         const buyKey = `buy_${key}`
@@ -198,13 +221,11 @@ export default function ClearanceAgentProfilePage() {
       const cardPct = Number(f.buy_import_export_card_pct)
       if (cardPct) next.sell_import_export_card_pct = (cardPct * (1 + pct / 100)).toFixed(3)
       return next
-    })
+    }))
   }
 
   if (isLoading) return <div className="skeleton h-80 rounded-xl max-w-5xl mx-auto" />
   if (!agent) return <div className="card max-w-3xl mx-auto text-center text-brand-text-muted">Agent not found</div>
-
-  const ports = COUNTRY_PORTS[form.country]?.[form.service_mode as 'sea' | 'air'] ?? []
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-8">
@@ -300,83 +321,34 @@ export default function ClearanceAgentProfilePage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setRateModal(false)}>{t('common.cancel')}</Button>
-            <Button loading={saveRateMut.isPending} onClick={() => saveRateMut.mutate()}>{t('common.save')}</Button>
+            <Button loading={saveRateMut.isPending} onClick={() => saveRateMut.mutate()}>
+              {editingRate ? t('common.save') : (isAr ? `حفظ ${rateForms.length} عرض` : `Save ${rateForms.length} Quote${rateForms.length === 1 ? '' : 's'}`)}
+            </Button>
           </>
         }>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="label-base">{isAr ? 'نوع التخليص' : 'Clearance Type'}</label>
-              <select className="input-base w-full" value={form.service_mode} onChange={e => setField('service_mode', e.target.value)}>
-                <option value="sea">{isAr ? 'بحري' : 'Sea'}</option>
-                <option value="air">{isAr ? 'جوي' : 'Air'}</option>
-              </select>
-            </div>
-            <div>
-              <label className="label-base">{t('common.country')}</label>
-              <select className="input-base w-full" value={form.country} onChange={e => setField('country', e.target.value)}>
-                <option value="Jordan">Jordan</option>
-                <option value="Iraq">Iraq</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="label-base">{form.service_mode === 'air' ? (isAr ? 'المطار' : 'Airport') : (isAr ? 'الميناء' : 'Port')}</label>
-              <input list="clearance-ports" className="input-base w-full" value={form.port} onChange={e => setField('port', e.target.value)} />
-              <datalist id="clearance-ports">{ports.map(p => <option key={p} value={p} />)}</datalist>
-            </div>
-            <Input label={isAr ? 'المسار' : 'Route'} placeholder="Aqaba -> Amman" value={form.route} onChange={e => setField('route', e.target.value)} />
-          </div>
+          {rateForms.map((form, index) => (
+            <ClearanceQuoteBlock
+              key={index}
+              form={form}
+              index={index}
+              isAr={isAr}
+              canRemove={!editingRate && rateForms.length > 1}
+              onRemove={() => removeQuote(index)}
+              onApplyMarkup={() => applyMarkup(index)}
+              setField={(field, value) => setField(index, field, value)}
+            />
+          ))}
 
-          {form.service_mode === 'sea' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-brand-border/50 bg-white/[0.02] p-3">
-              <div>
-                <label className="label-base">{isAr ? 'حجم الحاوية' : 'Container Size'}</label>
-                <select className="input-base w-full" value={form.container_size} onChange={e => setField('container_size', e.target.value)}>
-                  <option value="">—</option>
-                  {CONTAINER_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label-base">{isAr ? 'الناقل / الخط الملاحي' : 'Carrier / Shipping Line'}</label>
-                <input list="clearance-carriers" className="input-base w-full" value={form.carrier_name} onChange={e => setField('carrier_name', e.target.value)} />
-                <datalist id="clearance-carriers">
-                  {CARRIER_OPTIONS.map(carrier => <option key={carrier} value={carrier} />)}
-                </datalist>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <input type="number" step="0.1" min="0" className="input-base w-28 text-xs" value={form.markup_pct} onChange={e => setField('markup_pct', e.target.value)} placeholder={isAr ? 'نسبة %' : 'Margin %'} />
-            <button type="button" onClick={applyMarkup} className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
-              {isAr ? 'تطبيق النسبة على كل البيع' : 'Apply % to All Sells'}
+          {!editingRate && (
+            <button
+              type="button"
+              onClick={addAnotherQuote}
+              className="w-full rounded-lg border border-dashed border-brand-border hover:border-brand-primary/60 bg-white/[0.02] hover:bg-brand-primary/10 text-brand-primary-light text-sm font-semibold py-3 flex items-center justify-center gap-2 transition-colors"
+            >
+              <Plus size={14} /> {isAr ? 'إضافة عرض آخر' : 'Add Another Quote'}
             </button>
-          </div>
-
-          <FormSection title={isAr ? 'أسعار التخليص' : 'Clearance Prices'}>
-            <div className="overflow-x-auto">
-              <div className="min-w-[680px] space-y-1">
-                <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 px-1">
-                  <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'البند' : 'Item'}</span>
-                  <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء' : 'Buy'}</span>
-                  <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
-                  <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
-                </div>
-                {PRICE_FIELDS.filter(([key]) => form.service_mode === 'sea' || !['inspection_ramp', 'port_inspection'].includes(key)).map(([key, labelEn, labelAr]) => (
-                  <PriceInputRow key={key} field={key} label={isAr ? labelAr : labelEn} form={form} setField={setField} />
-                ))}
-                <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 items-center">
-                  <span className="text-xs text-brand-text-muted">{isAr ? 'بطاقة مستورد %' : 'Import and Export Card %'}</span>
-                  <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.buy_import_export_card_pct} onChange={e => setField('buy_import_export_card_pct', e.target.value)} />
-                  <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.sell_import_export_card_pct} onChange={e => setField('sell_import_export_card_pct', e.target.value)} />
-                  <div className="text-xs text-center text-brand-text-muted">{margin(form.buy_import_export_card_pct, form.sell_import_export_card_pct)}</div>
-                </div>
-              </div>
-            </div>
-          </FormSection>
-
-          <Textarea label={t('common.notes')} value={form.notes} onChange={e => setField('notes', e.target.value)} />
+          )}
         </div>
       </Modal>
 
@@ -389,6 +361,117 @@ export default function ClearanceAgentProfilePage() {
         }>
         <p className="text-sm text-brand-text-muted">{isAr ? 'حذف سعر التخليص هذا؟' : 'Delete this clearance rate?'}</p>
       </Modal>
+    </div>
+  )
+}
+
+function ClearanceQuoteBlock({
+  form,
+  index,
+  isAr,
+  canRemove,
+  onRemove,
+  onApplyMarkup,
+  setField,
+}: {
+  form: RateForm
+  index: number
+  isAr: boolean
+  canRemove: boolean
+  onRemove: () => void
+  onApplyMarkup: () => void
+  setField: (field: string, value: string) => void
+}) {
+  const ports = COUNTRY_PORTS[form.country]?.[form.service_mode as 'sea' | 'air'] ?? []
+  return (
+    <div className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-5">
+      <div className="flex items-center gap-2">
+        <span className="w-6 h-6 rounded-lg bg-brand-primary/15 text-brand-primary-light text-xs font-bold flex items-center justify-center">
+          {index + 1}
+        </span>
+        <p className="text-xs font-semibold text-brand-text-muted uppercase tracking-wider flex-1">
+          {isAr ? 'عرض تخليص' : 'Clearance Quote'}
+        </p>
+        {canRemove && (
+          <button type="button" onClick={onRemove} className="p-1.5 rounded-lg hover:bg-red-500/15 text-brand-text-muted hover:text-red-400 transition-colors">
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <label className="label-base">{isAr ? 'نوع التخليص' : 'Clearance Type'}</label>
+          <select className="input-base w-full" value={form.service_mode} onChange={e => setField('service_mode', e.target.value)}>
+            <option value="sea">{isAr ? 'بحري' : 'Sea'}</option>
+            <option value="air">{isAr ? 'جوي' : 'Air'}</option>
+          </select>
+        </div>
+        <div>
+          <label className="label-base">{isAr ? 'الدولة' : 'Country'}</label>
+          <select className="input-base w-full" value={form.country} onChange={e => setField('country', e.target.value)}>
+            <option value="Jordan">Jordan</option>
+            <option value="Iraq">Iraq</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label className="label-base">{form.service_mode === 'air' ? (isAr ? 'المطار' : 'Airport') : (isAr ? 'الميناء' : 'Port')}</label>
+          <input list={`clearance-ports-${index}`} className="input-base w-full" value={form.port} onChange={e => setField('port', e.target.value)} />
+          <datalist id={`clearance-ports-${index}`}>{ports.map(p => <option key={p} value={p} />)}</datalist>
+        </div>
+        <Input label={isAr ? 'المسار' : 'Route'} placeholder="Aqaba -> Amman" value={form.route} onChange={e => setField('route', e.target.value)} />
+      </div>
+
+      {form.service_mode === 'sea' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-brand-border/50 bg-white/[0.02] p-3">
+          <div>
+            <label className="label-base">{isAr ? 'حجم الحاوية' : 'Container Size'}</label>
+            <select className="input-base w-full" value={form.container_size} onChange={e => setField('container_size', e.target.value)}>
+              <option value="">—</option>
+              {CONTAINER_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label-base">{isAr ? 'الناقل / الخط الملاحي' : 'Carrier / Shipping Line'}</label>
+            <input list={`clearance-carriers-${index}`} className="input-base w-full" value={form.carrier_name} onChange={e => setField('carrier_name', e.target.value)} />
+            <datalist id={`clearance-carriers-${index}`}>
+              {CARRIER_OPTIONS.map(carrier => <option key={carrier} value={carrier} />)}
+            </datalist>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <input type="number" step="0.1" min="0" className="input-base w-28 text-xs" value={form.markup_pct} onChange={e => setField('markup_pct', e.target.value)} placeholder={isAr ? 'نسبة %' : 'Margin %'} />
+        <button type="button" onClick={onApplyMarkup} className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/25 transition-colors">
+          {isAr ? 'تطبيق النسبة على كل البيع' : 'Apply % to All Sells'}
+        </button>
+      </div>
+
+      <FormSection title={isAr ? 'أسعار التخليص' : 'Clearance Prices'}>
+        <div className="overflow-x-auto">
+          <div className="min-w-[680px] space-y-1">
+            <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 px-1">
+              <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'البند' : 'Item'}</span>
+              <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'شراء' : 'Buy'}</span>
+              <span className="text-[10px] text-brand-text-muted uppercase">{isAr ? 'بيع' : 'Sell'}</span>
+              <span className="text-[10px] text-brand-text-muted uppercase text-center">{isAr ? 'هامش' : 'Margin'}</span>
+            </div>
+            {PRICE_FIELDS.filter(([key]) => form.service_mode === 'sea' || !['inspection_ramp', 'port_inspection'].includes(key)).map(([key, labelEn, labelAr]) => (
+              <PriceInputRow key={key} field={key} label={isAr ? labelAr : labelEn} form={form} setField={setField} />
+            ))}
+            <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 items-center">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'بطاقة مستورد %' : 'Import and Export Card %'}</span>
+              <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.buy_import_export_card_pct} onChange={e => setField('buy_import_export_card_pct', e.target.value)} />
+              <input type="number" step="0.001" min="0" className="input-base text-xs" value={form.sell_import_export_card_pct} onChange={e => setField('sell_import_export_card_pct', e.target.value)} />
+              <div className="text-xs text-center text-brand-text-muted">{margin(form.buy_import_export_card_pct, form.sell_import_export_card_pct)}</div>
+            </div>
+          </div>
+        </div>
+      </FormSection>
+
+      <Textarea label={isAr ? 'ملاحظات' : 'Notes'} value={form.notes} onChange={e => setField('notes', e.target.value)} />
     </div>
   )
 }
