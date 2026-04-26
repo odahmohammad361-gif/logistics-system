@@ -513,8 +513,6 @@ def _parse_cargo_documents(text_by_type: dict[str, str]) -> dict:
             "container_no": _first_match(r"CONTAINER NO\.?\s*:\s*([A-Z0-9-]+)", combined),
             "seal_no": _first_match(r"SEAL NO\.?\s*:\s*([A-Z0-9-]+)", combined),
             "bl_number": _first_match(r"B/L NO\.?\s*:\s*([A-Z0-9-]+)", combined),
-            "port_of_loading": _first_match(r"Port of Loading:\s*(.+?)\s{2,}Place of Delivery", combined),
-            "port_of_discharge": _first_match(r"Place of Delivery:\s*(.+)", combined),
         },
         "goods": goods,
         "invoice_no": _first_match(r"INVOICE NO\.?\s*:\s*([A-Z0-9/-]+)", combined),
@@ -1558,12 +1556,10 @@ def extract_cargo_documents(
         line.cbm = fields["cbm"]
 
     booking_fields = parsed.get("booking_fields") or {}
-    for field in ("container_no", "seal_no", "bl_number", "port_of_loading", "port_of_discharge"):
+    for field in ("container_no", "seal_no", "bl_number"):
         value = booking_fields.get(field)
         if value and not getattr(b, field):
             setattr(b, field, value)
-    if booking_fields.get("port_of_discharge"):
-        b.destination = _port_to_destination(booking_fields["port_of_discharge"]) or b.destination
 
     line.extracted_goods = {
         "version": 1,
