@@ -213,12 +213,12 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
             <p className="text-sm font-bold text-amber-400 font-mono">{Number(line.chargeable_weight_kg).toFixed(2)}</p>
           </div>
         )}
-        {line.freight_share != null && (
-          <div>
-            <p className="text-[10px] text-brand-text-muted">{t('bookings.freight_share')}</p>
-            <p className="text-sm font-bold text-brand-text font-mono">${Number(line.freight_share).toFixed(2)}</p>
-          </div>
-        )}
+        <div>
+          <p className="text-[10px] text-brand-text-muted">{t('bookings.freight_share')}</p>
+          <p className="text-sm font-bold text-emerald-400 font-mono">
+            {line.freight_share != null ? `$${Number(line.freight_share).toFixed(2)}` : '—'}
+          </p>
+        </div>
       </div>
 
       {/* Description */}

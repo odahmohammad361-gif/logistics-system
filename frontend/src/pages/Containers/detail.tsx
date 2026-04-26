@@ -101,6 +101,7 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
     infoRow(isRTL ? 'ETA' : 'ETA', booking.eta),
     infoRow(isRTL ? 'شرط التسليم' : 'Incoterm', booking.incoterm),
     infoRow(isRTL ? 'تكلفة الشحن' : 'Freight Cost', money(booking.freight_cost, booking.currency)),
+    infoRow(isRTL ? 'سعر بيع الشحن' : 'Selling Freight', money(booking.sell_freight_cost, booking.currency)),
     infoRow(isRTL ? 'نسبة الربح' : 'Markup', booking.markup_pct != null ? `${booking.markup_pct}%` : '—'),
     infoRow(isRTL ? 'السعة' : 'Capacity', booking.container_cbm_capacity != null ? `${booking.container_cbm_capacity} CBM` : '—'),
     infoRow(isRTL ? 'الحجم المستخدم' : 'Used CBM', booking.total_cbm_used != null ? `${booking.total_cbm_used} CBM` : '—'),
@@ -120,6 +121,7 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
       <td>${esc(line.net_weight_kg)}</td>
       <td>${esc(line.cbm)}</td>
       <td>${esc(line.hs_code)}</td>
+      <td>${esc(money(line.freight_share, booking.currency))}</td>
       <td>${esc(line.images.length)}</td>
       <td>${esc(line.documents.length)}</td>
     </tr>
@@ -226,7 +228,7 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
   </section>
 
   ${options.summary ? `<section class="page"><h2>${esc(isRTL ? 'ملخص الحاوية' : 'Container Summary')}</h2><table>${summaryRows}</table></section>` : ''}
-  ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'مصدر البضاعة' : 'Source')}</th><th>${esc(isRTL ? 'حاوية كاملة' : 'Full Container')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th><th>${esc(isRTL ? 'ملفات' : 'Files')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="13">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
+  ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'مصدر البضاعة' : 'Source')}</th><th>${esc(isRTL ? 'حاوية كاملة' : 'Full Container')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'حصة الشحن' : 'Freight Share')}</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th><th>${esc(isRTL ? 'ملفات' : 'Files')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="14">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
   ${options.loading ? `<section class="page"><h2>${esc(isRTL ? 'معلومات التحميل' : 'Loading Information')}</h2><table>${loadingRows}</table></section>` : ''}
   ${options.loadingPhotos ? loadingPhotoPages : ''}
   ${options.cargoImages ? cargoImagePages : ''}
@@ -621,6 +623,16 @@ export default function BookingDetailPage() {
               <p className="text-[10px] text-brand-text-muted mb-0.5">{t('bookings.freight_cost')}</p>
               <p className="text-sm text-brand-text font-mono">
                 {booking.freight_cost.toLocaleString()} {booking.currency}
+              </p>
+            </div>
+          )}
+          {booking.sell_freight_cost != null && (
+            <div>
+              <p className="text-[10px] text-brand-text-muted mb-0.5">
+                {isRTL ? 'سعر بيع الشحن' : 'Selling Freight'}
+              </p>
+              <p className="text-sm text-emerald-400 font-mono">
+                {booking.sell_freight_cost.toLocaleString()} {booking.currency}
               </p>
             </div>
           )}

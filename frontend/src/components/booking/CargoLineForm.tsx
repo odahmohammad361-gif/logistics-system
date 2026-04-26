@@ -617,6 +617,20 @@ export default function CargoLineForm({
           </FormSection>
         )}
 
+        <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-2">
+          <p className="text-[11px] uppercase tracking-wide text-emerald-300/80">
+            {t('bookings.freight_share')}
+          </p>
+          <p className="mt-1 text-lg font-bold font-mono text-emerald-300">
+            {initial?.freight_share != null ? `$${Number(initial.freight_share).toFixed(2)}` : '—'}
+          </p>
+          <p className="mt-1 text-[11px] text-brand-text-muted">
+            {isAr
+              ? 'يحسب تلقائياً من سعر البيع حسب CBM أو الوزن أو سعر الحاوية.'
+              : 'Auto-calculated from your selling freight by CBM, weight, or container price.'}
+          </p>
+        </div>
+
         <Textarea label={t('common.notes')} rows={2} {...register('notes')} />
       </div>
     </Modal>
