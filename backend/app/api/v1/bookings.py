@@ -4,6 +4,7 @@ import uuid
 import json
 import shutil
 import zipfile
+import subprocess
 from decimal import Decimal
 from datetime import date, datetime
 from typing import Optional
@@ -12,6 +13,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
+from PIL import Image
+import pytesseract
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -362,6 +365,153 @@ def _zip_file_if_exists(zf: zipfile.ZipFile, uploads_root: str, file_path: str |
     return True
 
 
+def _doc_full_path(file_path: str) -> str:
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    full_path = os.path.abspath(os.path.join(uploads_root, file_path))
+    if not full_path.startswith(os.path.abspath(uploads_root) + os.sep):
+        raise HTTPException(400, "Invalid file path")
+    return full_path
+
+
+def _read_document_text(full_path: str) -> str:
+    ext = os.path.splitext(full_path)[1].lower()
+    if ext == ".pdf":
+        try:
+            result = subprocess.run(
+                ["pdftotext", "-layout", full_path, "-"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.stdout.strip():
+                return result.stdout
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return ""
+    if ext in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+        try:
+            with Image.open(full_path) as img:
+                return pytesseract.image_to_string(img, lang="eng+ara")
+        except Exception:
+            return ""
+    if ext in {".txt", ".csv"}:
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                return fh.read()
+        except OSError:
+            return ""
+    return ""
+
+
+def _money_or_number(value: str | None) -> Decimal | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"[^0-9.]", "", value)
+    if not cleaned:
+        return None
+    try:
+        return Decimal(cleaned)
+    except Exception:
+        return None
+
+
+def _first_match(pattern: str, text: str, flags: int = re.I) -> str | None:
+    m = re.search(pattern, text, flags)
+    return m.group(1).strip() if m else None
+
+
+def _best_hs_code(text: str) -> str | None:
+    codes = []
+    for code in re.findall(r"\b\d{6,10}\b", text):
+        if code.startswith(("19", "20")):
+            continue
+        codes.append(code)
+    if not codes:
+        return None
+    return max(set(codes), key=codes.count)
+
+
+def _parse_pl_goods(text: str, hs_code: str | None) -> list[dict]:
+    goods: list[dict] = []
+    row_re = re.compile(
+        r"^\s*(?:N/M\s+)?([A-Za-z][A-Za-z0-9’' /,&().-]{2,}?)\s{2,}(\d+)\s+(\d+)\s+(\d+(?:\.\d+)?)(?:\s+(\d+(?:\.\d+)?))?\s*$",
+        re.M,
+    )
+    for m in row_re.finditer(text):
+        description = " ".join(m.group(1).split())
+        if description.upper() in {"TOTAL", "MARK", "NUMBERS"} or "TOTAL" in description.upper():
+            continue
+        goods.append({
+            "description": description,
+            "cartons": int(m.group(2)),
+            "quantity": int(m.group(3)),
+            "gross_weight_kg": float(m.group(4)),
+            "cbm": float(m.group(5)) if m.group(5) else None,
+            "hs_code": hs_code,
+            "source": "packing_list",
+        })
+    return goods
+
+
+def _parse_cargo_documents(text_by_type: dict[str, str]) -> dict:
+    combined = "\n".join(text_by_type.values())
+    pl_text = text_by_type.get("pl", "")
+    hs_code = _best_hs_code(combined)
+    goods = _parse_pl_goods(pl_text or combined, hs_code)
+
+    cartons = gross_weight = cbm = None
+    total_match = re.search(
+        r"^\s*TOTAL\s+(\d+)\s+(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$",
+        pl_text or combined,
+        re.I | re.M,
+    )
+    if total_match:
+        cartons = int(total_match.group(1))
+        gross_weight = _money_or_number(total_match.group(3))
+        cbm = _money_or_number(total_match.group(4))
+    elif goods:
+        cartons = sum(int(g.get("cartons") or 0) for g in goods)
+        gross_weight = sum(Decimal(str(g.get("gross_weight_kg") or 0)) for g in goods)
+
+    if not goods:
+        short_desc = _first_match(r"7\.Number and kind of packages;description of goods\s+.*?\n\s*(.+?);", combined, re.I | re.S)
+        if short_desc:
+            goods.append({"description": " ".join(short_desc.split()), "hs_code": hs_code, "source": "document_text"})
+
+    descriptions = [str(g["description"]) for g in goods if g.get("description")]
+    description = "\n".join(
+        f"{idx + 1}. {desc}"
+        + (f" - {goods[idx].get('cartons')} CTNS" if goods[idx].get("cartons") else "")
+        + (f" / {goods[idx].get('quantity')} PCS" if goods[idx].get("quantity") else "")
+        + (f" / {goods[idx].get('gross_weight_kg')} KGS" if goods[idx].get("gross_weight_kg") else "")
+        for idx, desc in enumerate(descriptions[:30])
+    )
+    marks = "N/M" if re.search(r"\bN/M\b", combined, re.I) else None
+
+    return {
+        "fields": {
+            "description": description or None,
+            "description_ar": None,
+            "hs_code": hs_code,
+            "shipping_marks": marks,
+            "cartons": cartons,
+            "gross_weight_kg": float(gross_weight) if gross_weight is not None else None,
+            "net_weight_kg": None,
+            "cbm": float(cbm) if cbm is not None else None,
+        },
+        "booking_fields": {
+            "container_no": _first_match(r"CONTAINER NO\.?\s*:\s*([A-Z0-9-]+)", combined),
+            "seal_no": _first_match(r"SEAL NO\.?\s*:\s*([A-Z0-9-]+)", combined),
+            "bl_number": _first_match(r"B/L NO\.?\s*:\s*([A-Z0-9-]+)", combined),
+            "port_of_loading": _first_match(r"Port of Loading:\s*(.+?)\s{2,}Place of Delivery", combined),
+            "port_of_discharge": _first_match(r"Place of Delivery:\s*(.+)", combined),
+        },
+        "goods": goods,
+        "invoice_no": _first_match(r"INVOICE NO\.?\s*:\s*([A-Z0-9/-]+)", combined),
+        "confidence": "high" if goods and cartons and gross_weight else "medium" if goods else "low",
+    }
+
+
 def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
     used = sum(Decimal(str(ln.cbm)) for ln in booking.cargo_lines if ln.cbm)
     capacity = CONTAINER_CBM.get(booking.container_size) if booking.container_size else None
@@ -397,6 +547,7 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
         chargeable_weight_kg=line.chargeable_weight_kg,
         freight_share=line.freight_share,
         notes=line.notes,
+        extracted_goods=line.extracted_goods,
         clearance_through_us=line.clearance_through_us,
         clearance_agent_id=line.clearance_agent_id,
         clearance_agent_name=line.clearance_agent.name if line.clearance_agent else None,
@@ -678,6 +829,7 @@ def create_booking(
             carton_height_cm=line_data.carton_height_cm,
             freight_share=line_data.freight_share,
             notes=line_data.notes or None,
+            extracted_goods=line_data.extracted_goods,
             clearance_through_us=line_data.clearance_through_us,
             clearance_agent_id=line_data.clearance_agent_id if line_data.clearance_through_us else None,
             clearance_agent_rate_id=line_data.clearance_agent_rate_id if line_data.clearance_through_us else None,
@@ -832,6 +984,7 @@ def download_booking_archive_zip(
                     "volumetric_weight_kg": line.volumetric_weight_kg,
                     "chargeable_weight_kg": line.chargeable_weight_kg,
                     "freight_share": line.freight_share,
+                    "extracted_goods": line.extracted_goods,
                     "clearance_through_us": line.clearance_through_us,
                     "clearance_agent_id": line.clearance_agent_id,
                     "clearance_agent_name": line.clearance_agent.name if line.clearance_agent else None,
@@ -1040,6 +1193,7 @@ def add_cargo_line(
         manual_clearance_agent_name=None if payload.clearance_through_us else payload.manual_clearance_agent_name,
         manual_clearance_agent_phone=None if payload.clearance_through_us else payload.manual_clearance_agent_phone,
         manual_clearance_agent_notes=None if payload.clearance_through_us else payload.manual_clearance_agent_notes,
+        extracted_goods=payload.extracted_goods,
     )
     if b.mode == "AIR":
         _compute_air_weights(line)
@@ -1327,6 +1481,94 @@ def delete_cargo_document(
     db.commit()
 
 
+@router.post("/{booking_id}/cargo-lines/{line_id}/extract-documents", response_model=BookingCargoLineResponse)
+def extract_cargo_documents(
+    booking_id: int,
+    line_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.STAFF)),
+):
+    line = db.query(BookingCargoLine).filter(
+        BookingCargoLine.id == line_id,
+        BookingCargoLine.booking_id == booking_id,
+    ).first()
+    if not line:
+        raise HTTPException(404, "Cargo line not found")
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    _assert_cargo_editable(b)
+
+    docs = [
+        doc for doc in line.documents
+        if doc.document_type in {"pl", "pi", "ci", "sc", "co", "bl_copy", "goods_invoice", "other"}
+    ]
+    if not docs:
+        raise HTTPException(400, "Upload PI, PL, SC, CO, B/L or invoice files before extracting cargo data.")
+
+    text_by_type: dict[str, str] = {}
+    source_docs = []
+    for doc in docs:
+        full_path = _doc_full_path(doc.file_path)
+        if not os.path.isfile(full_path):
+            continue
+        text = _read_document_text(full_path)
+        if not text.strip():
+            continue
+        key = doc.document_type
+        text_by_type[key] = f"{text_by_type.get(key, '')}\n{text}"
+        source_docs.append({
+            "id": doc.id,
+            "type": doc.document_type,
+            "filename": doc.original_filename,
+            "characters": len(text),
+        })
+
+    if not text_by_type:
+        raise HTTPException(400, "Could not extract readable text from the uploaded files.")
+
+    parsed = _parse_cargo_documents(text_by_type)
+    fields = parsed["fields"]
+    if fields.get("description"):
+        line.description = fields["description"]
+    if fields.get("description_ar"):
+        line.description_ar = fields["description_ar"]
+    if fields.get("hs_code"):
+        line.hs_code = fields["hs_code"]
+    if fields.get("shipping_marks"):
+        line.shipping_marks = fields["shipping_marks"]
+    if fields.get("cartons") is not None:
+        line.cartons = fields["cartons"]
+    if fields.get("gross_weight_kg") is not None:
+        line.gross_weight_kg = fields["gross_weight_kg"]
+    if fields.get("net_weight_kg") is not None:
+        line.net_weight_kg = fields["net_weight_kg"]
+    if fields.get("cbm") is not None:
+        _assert_cargo_capacity(b, fields["cbm"], exclude_line_id=line.id)
+        line.cbm = fields["cbm"]
+
+    booking_fields = parsed.get("booking_fields") or {}
+    for field in ("container_no", "seal_no", "bl_number", "port_of_loading", "port_of_discharge"):
+        value = booking_fields.get(field)
+        if value and not getattr(b, field):
+            setattr(b, field, value)
+    if booking_fields.get("port_of_discharge"):
+        b.destination = _port_to_destination(booking_fields["port_of_discharge"]) or b.destination
+
+    line.extracted_goods = {
+        "version": 1,
+        "extracted_at": datetime.utcnow().isoformat() + "Z",
+        "confidence": parsed.get("confidence"),
+        "invoice_no": parsed.get("invoice_no"),
+        "source_documents": source_docs,
+        "goods": parsed.get("goods") or [],
+    }
+
+    db.commit()
+    db.refresh(line)
+    return _serialize_line(line)
+
+
 # ── Loading Info ─────────────────────────────────────────────────────────────
 
 class LoadingInfoUpdate(BaseModel):
@@ -1476,6 +1718,7 @@ def get_packing_list(
             "cbm": float(ln.cbm) if ln.cbm else 0,
             "chargeable_weight_kg": float(ln.chargeable_weight_kg) if ln.chargeable_weight_kg else None,
             "freight_share": float(ln.freight_share) if ln.freight_share else None,
+            "extracted_goods": ln.extracted_goods,
         })
         totals["cartons"] += ln.cartons or 0
         totals["gross_weight_kg"] += Decimal(str(ln.gross_weight_kg)) if ln.gross_weight_kg else 0

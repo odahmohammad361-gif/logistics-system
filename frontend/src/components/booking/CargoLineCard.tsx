@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus, Eye, Download } from 'lucide-react'
+import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus, Eye, Download, FileSearch } from 'lucide-react'
 import clsx from 'clsx'
 import type { BookingCargoDocument, BookingCargoLine, BookingMode } from '@/types'
-import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments } from '@/services/bookingService'
+import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments, extractCargoDocuments } from '@/services/bookingService'
 import FilePreviewModal from './FilePreviewModal'
 
 const SLICE_COLORS = [
@@ -23,16 +23,19 @@ interface Props {
   onEdit?: () => void
   onDelete?: () => void
   onRefresh: () => void
+  onExtracted?: (line: BookingCargoLine) => void
   locked?: boolean
 }
 
-export default function CargoLineCard({ line, index, mode, bookingId, onEdit, onDelete, onRefresh, locked }: Props) {
+export default function CargoLineCard({ line, index, mode, bookingId, onEdit, onDelete, onRefresh, onExtracted, locked }: Props) {
   const { t, i18n } = useTranslation()
   const isRTL = i18n.language === 'ar'
   const [showImages, setShowImages] = useState(false)
   const [showDocs, setShowDocs]     = useState(false)
   const [uploading, setUploading]   = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState<string | null>(null)
   const [otherFileType, setOtherFileType] = useState('')
   const [preview, setPreview] = useState<{ title: string; url: string; filename?: string | null } | null>(null)
   const color = SLICE_COLORS[index % SLICE_COLORS.length]
@@ -98,6 +101,21 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   async function handleDeleteDocument(docId: number) {
     await deleteCargoDocument(bookingId, line.id, docId)
     onRefresh()
+  }
+
+  async function handleExtractDocuments() {
+    setExtracting(true)
+    setExtractError(null)
+    try {
+      const extractedLine = await extractCargoDocuments(bookingId, line.id)
+      onRefresh()
+      onExtracted?.(extractedLine)
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setExtractError(typeof detail === 'string' ? detail : (isRTL ? 'تعذر استخراج بيانات البضاعة.' : 'Could not extract cargo data.'))
+    } finally {
+      setExtracting(false)
+    }
   }
 
   return (
@@ -241,6 +259,22 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
 
         {showDocs && (
           <div className="px-4 pb-4 space-y-3">
+            {extractError && (
+              <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-xs text-brand-red">
+                {extractError}
+              </div>
+            )}
+            {line.documents.length > 0 && !locked && (
+              <button
+                type="button"
+                onClick={handleExtractDocuments}
+                disabled={extracting}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-brand-primary/25 bg-brand-primary/10 px-3 py-2 text-xs font-semibold text-brand-primary-light hover:bg-brand-primary/15 disabled:opacity-50"
+              >
+                {extracting ? <Loader2 size={13} className="animate-spin" /> : <FileSearch size={13} />}
+                {isRTL ? 'استخراج بيانات البضاعة من الملفات' : 'Extract cargo data from files'}
+              </button>
+            )}
             <div className="grid sm:grid-cols-2 gap-2">
               {([
                 { type: 'pi' as const, label: isRTL ? 'رفع فاتورة أولية' : 'Upload PI', icon: Receipt, count: docsByType.pi },
@@ -405,6 +439,29 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           </div>
         )}
       </div>
+      {line.extracted_goods?.goods?.length ? (
+        <div className="border-t border-brand-border/60 px-4 py-3">
+          <p className="text-[10px] text-brand-text-muted uppercase tracking-wide mb-2">
+            {isRTL ? 'بيانات مستخرجة من الملفات' : 'Extracted goods from files'}
+          </p>
+          <div className="space-y-1.5">
+            {line.extracted_goods.goods.slice(0, 5).map((item, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_auto] gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-xs">
+                <span className="text-brand-text truncate">{idx + 1}. {item.description || '—'}</span>
+                <span className="text-brand-text-muted font-mono">
+                  {item.cartons != null ? `${item.cartons} CTNS` : ''}
+                  {item.gross_weight_kg != null ? ` · ${item.gross_weight_kg} KG` : ''}
+                </span>
+              </div>
+            ))}
+            {line.extracted_goods.goods.length > 5 && (
+              <p className="text-[11px] text-brand-text-muted">
+                +{line.extracted_goods.goods.length - 5} {isRTL ? 'بنود أخرى' : 'more items'}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
       {preview && (
         <FilePreviewModal
           open={!!preview}

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Text, Date, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Text, Date, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -121,6 +121,7 @@ class BookingCargoLine(Base):
     # Cost split
     freight_share = Column(Numeric(14, 2), nullable=True)
     notes         = Column(Text,           nullable=True)
+    extracted_goods = Column(JSON, nullable=True)
 
     # Per-client customs clearance decision inside this container
     clearance_through_us = Column(Boolean, nullable=True)

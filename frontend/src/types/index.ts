@@ -515,6 +515,22 @@ export interface BookingCargoLine {
   chargeable_weight_kg: number | null
   freight_share: number | null
   notes: string | null
+  extracted_goods: {
+    version?: number
+    extracted_at?: string
+    confidence?: string
+    invoice_no?: string | null
+    source_documents?: Array<{ id: number; type: string; filename: string | null; characters?: number }>
+    goods?: Array<{
+      description?: string
+      cartons?: number | null
+      quantity?: number | null
+      gross_weight_kg?: number | null
+      cbm?: number | null
+      hs_code?: string | null
+      source?: string
+    }>
+  } | null
   clearance_through_us: boolean | null
   clearance_agent_id: number | null
   clearance_agent_name: string | null

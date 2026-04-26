@@ -875,6 +875,12 @@ export default function BookingDetailPage() {
                 onEdit={booking.is_locked ? undefined : () => { setCargoError(null); setEditingLine(line); setShowCargoForm(true) }}
                 onDelete={booking.is_locked ? undefined : () => setConfirmDeleteLine(line.id)}
                 onRefresh={() => qc.invalidateQueries({ queryKey: ['booking', bookingId] })}
+                onExtracted={(extractedLine) => {
+                  setCargoError(null)
+                  setEditingLine(extractedLine)
+                  setShowCargoForm(true)
+                  qc.invalidateQueries({ queryKey: ['booking', bookingId] })
+                }}
                 locked={booking.is_locked}
               />
             ))}

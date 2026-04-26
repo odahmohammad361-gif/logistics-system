@@ -434,6 +434,47 @@ export default function CargoLineForm({
 
         {/* Description */}
         <FormSection title={t('bookings.description')}>
+          {initial?.extracted_goods?.goods?.length ? (
+            <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-brand-primary-light">
+                  {isAr ? 'قائمة البضاعة المستخرجة من الملفات' : 'Goods list extracted from files'}
+                </p>
+                {initial.extracted_goods.confidence && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-brand-text-muted">
+                    {initial.extracted_goods.confidence}
+                  </span>
+                )}
+              </div>
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-brand-border/50">
+                <table className="w-full text-xs">
+                  <thead className="bg-white/[0.04] text-brand-text-muted">
+                    <tr>
+                      <th className="px-2 py-1.5 text-start">#</th>
+                      <th className="px-2 py-1.5 text-start">{isAr ? 'الوصف' : 'Description'}</th>
+                      <th className="px-2 py-1.5 text-end">{isAr ? 'كراتين' : 'CTNS'}</th>
+                      <th className="px-2 py-1.5 text-end">{isAr ? 'الوزن' : 'KG'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {initial.extracted_goods.goods.map((item, idx) => (
+                      <tr key={idx} className="border-t border-brand-border/40">
+                        <td className="px-2 py-1.5 text-brand-text-muted">{idx + 1}</td>
+                        <td className="px-2 py-1.5 text-brand-text">{item.description || '—'}</td>
+                        <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.cartons ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-end font-mono text-brand-text-muted">{item.gross_weight_kg ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-brand-text-muted">
+                {isAr
+                  ? 'يمكنك تعديل الحقول في الأسفل قبل الحفظ؛ القائمة ستبقى محفوظة للتصدير لاحقاً.'
+                  : 'You can edit the fields below before saving; this list stays stored for later exports.'}
+              </p>
+            </div>
+          ) : null}
           <FormRow>
             <Input label={t('common.english')}    {...register('description')} />
             <Input label={t('common.arabic')} dir="rtl" {...register('description_ar')} />

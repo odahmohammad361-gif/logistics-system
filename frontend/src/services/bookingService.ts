@@ -71,6 +71,9 @@ export const uploadCargoDocuments = (
 export const deleteCargoDocument = (bookingId: number, lineId: number, docId: number) =>
   api.delete(`${BASE}/${bookingId}/cargo-lines/${lineId}/documents/${docId}`)
 
+export const extractCargoDocuments = (bookingId: number, lineId: number) =>
+  api.post<BookingCargoLine>(`${BASE}/${bookingId}/cargo-lines/${lineId}/extract-documents`).then((r) => r.data)
+
 export const getCargoDocumentUrl = (bookingId: number, lineId: number, docId: number): string => {
   const base = api.defaults.baseURL ?? ''
   return `${base}${BASE}/${bookingId}/cargo-lines/${lineId}/documents/${docId}`

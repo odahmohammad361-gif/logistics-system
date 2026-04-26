@@ -77,6 +77,7 @@ class BookingCargoLineCreate(BaseModel):
     carton_height_cm: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    extracted_goods: Optional[dict] = None
     clearance_through_us: Optional[bool] = None
     clearance_agent_id: Optional[int] = None
     clearance_agent_rate_id: Optional[int] = None
@@ -102,6 +103,7 @@ class BookingCargoLineUpdate(BaseModel):
     carton_height_cm: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    extracted_goods: Optional[dict] = None
     clearance_through_us: Optional[bool] = None
     clearance_agent_id: Optional[int] = None
     clearance_agent_rate_id: Optional[int] = None
@@ -132,6 +134,7 @@ class BookingCargoLineResponse(BaseModel):
     chargeable_weight_kg: Optional[Decimal] = None
     freight_share: Optional[Decimal] = None
     notes: Optional[str] = None
+    extracted_goods: Optional[dict] = None
     clearance_through_us: Optional[bool] = None
     clearance_agent_id: Optional[int] = None
     clearance_agent_name: Optional[str] = None
