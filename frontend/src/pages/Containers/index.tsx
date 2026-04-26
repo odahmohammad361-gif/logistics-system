@@ -110,6 +110,14 @@ function ContainerCard({ b, isAr, onView }: {
 }) {
   const sc     = STATUS_CONFIG[b.status as BookingStatus] ?? STATUS_CONFIG.draft
   const border = CARD_BORDER[b.status as BookingStatus]   ?? 'border-white/10'
+  const modeTone =
+    b.mode === 'AIR' ? 'from-violet-500/15 via-white/[0.03] to-white/[0.015]' :
+    b.mode === 'FCL' ? 'from-emerald-500/15 via-white/[0.03] to-white/[0.015]' :
+                       'from-blue-500/15 via-white/[0.03] to-white/[0.015]'
+  const railTone =
+    b.mode === 'AIR' ? 'bg-violet-400/60' :
+    b.mode === 'FCL' ? 'bg-emerald-400/60' :
+                       'bg-blue-400/60'
 
   const freight    = Number(b.freight_cost ?? 0)
   const maxCbm     = Number(b.max_cbm ?? 0)
@@ -122,14 +130,21 @@ function ContainerCard({ b, isAr, onView }: {
       type="button"
       onClick={onView}
       className={clsx(
-        'rounded-2xl border bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col text-start w-full',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+        'group relative overflow-hidden rounded-xl border bg-gradient-to-br transition-all flex flex-col text-start w-full min-h-[250px]',
+        'hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+        modeTone,
         border,
       )}
     >
+      <div className="absolute inset-x-4 top-3 flex justify-between opacity-30 pointer-events-none">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <span key={i} className={clsx('h-8 w-px rounded-full', railTone)} />
+        ))}
+      </div>
+      <div className={clsx('absolute inset-y-0 start-0 w-1.5', railTone)} />
 
       {/* Card header */}
-      <div className="px-4 pt-4 pb-3 border-b border-white/5 flex items-start justify-between gap-2">
+      <div className="relative px-4 pt-4 pb-3 border-b border-white/5 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
             <span className={clsx('inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full',
@@ -152,12 +167,14 @@ function ContainerCard({ b, isAr, onView }: {
       </div>
 
       {/* Card body */}
-      <div className="px-4 py-3 flex flex-col gap-2.5 flex-1">
-        <CountdownBadge etd={b.etd} eta={b.eta} status={b.status as BookingStatus} isAr={isAr} />
+      <div className="relative px-4 py-3 flex flex-col gap-2.5 flex-1">
+        <div className="rounded-lg border border-white/8 bg-black/10 px-3 py-2">
+          <CountdownBadge etd={b.etd} eta={b.eta} status={b.status as BookingStatus} isAr={isAr} />
+        </div>
 
         {/* Route + destination */}
         {(b.port_of_loading || b.port_of_discharge) && (
-          <div className="flex items-center gap-1 text-[11px] text-gray-400 flex-wrap">
+          <div className="flex items-center gap-1 text-[11px] text-gray-300 flex-wrap rounded-lg bg-white/[0.035] border border-white/5 px-3 py-2">
             <MapPin size={11} className="text-brand-primary-light flex-shrink-0" />
             <span>{b.port_of_loading ?? '—'}</span>
             <ArrowRight size={10} />
@@ -177,12 +194,12 @@ function ContainerCard({ b, isAr, onView }: {
 
         {/* Agent */}
         {b.agent_name && (
-          <p className="text-[11px] text-gray-400 truncate">🚢 {b.agent_name}</p>
+          <p className="text-[11px] text-gray-300 truncate rounded-lg bg-white/[0.025] border border-white/5 px-3 py-1.5">🚢 {b.agent_name}</p>
         )}
 
         {/* B/L & container number */}
         {(b.container_no || b.bl_number || b.vessel_name) && (
-          <div className="text-[10px] font-mono text-gray-500 space-y-0.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] font-mono text-gray-400">
             {b.container_no && <p>CNT: {b.container_no}</p>}
             {b.bl_number    && <p>B/L: {b.bl_number}</p>}
             {b.vessel_name  && <p>🚢 {b.vessel_name}</p>}
