@@ -152,12 +152,12 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
 
   const cargoDocumentPages = booking.cargo_lines.flatMap(line => line.documents.map((doc, idx) => {
     const label =
-      doc.document_type === 'pi' ? 'PI' :
-      doc.document_type === 'ci' ? 'CI' :
-      doc.document_type === 'pl' ? (isRTL ? 'PL / قائمة تعبئة' : 'PL / Packing List') :
-      doc.document_type === 'sc' ? 'SC' :
-      doc.document_type === 'co' ? (isRTL ? 'CO / شهادة المنشأ' : 'CO / Certificate of Origin') :
-      doc.document_type === 'bl_copy' ? (isRTL ? 'نسخة B/L' : 'B/L Copy') :
+      doc.document_type === 'pi' ? (isRTL ? 'فاتورة أولية' : 'PI / Proforma Invoice') :
+      doc.document_type === 'ci' ? (isRTL ? 'فاتورة تجارية' : 'CI / Commercial Invoice') :
+      doc.document_type === 'pl' ? (isRTL ? 'قائمة التعبئة' : 'PL / Packing List') :
+      doc.document_type === 'sc' ? (isRTL ? 'عقد البيع' : 'SC / Sales Contract') :
+      doc.document_type === 'co' ? (isRTL ? 'شهادة المنشأ' : 'CO / Certificate of Origin') :
+      doc.document_type === 'bl_copy' ? (isRTL ? 'نسخة بوليصة الشحن' : 'B/L Copy') :
       doc.document_type === 'security_approval' ? (isRTL ? 'موافقات أمنية' : 'Security Approval') :
       doc.document_type === 'goods_invoice' ? (isRTL ? 'فواتير البضاعة' : 'Goods Invoice') :
       (doc.custom_file_type || (isRTL ? 'ملف آخر' : 'Other File'))
@@ -250,6 +250,7 @@ export default function BookingDetailPage() {
   const [editingLine, setEditingLine]             = useState<BookingCargoLine | null>(null)
   const [savingHeader, setSavingHeader]           = useState(false)
   const [savingCargo, setSavingCargo]             = useState(false)
+  const [cargoError, setCargoError]               = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete]         = useState(false)
   const [confirmDeleteLine, setConfirmDeleteLine] = useState<number | null>(null)
   const [downloadingZip, setDownloadingZip]       = useState(false)
@@ -317,12 +318,16 @@ export default function BookingDetailPage() {
 
   async function handleSaveCargo(data: Record<string, unknown>) {
     setSavingCargo(true)
+    setCargoError(null)
     try {
       if (editingLine) {
         await updateLineMut.mutateAsync({ lineId: editingLine.id, data })
       } else {
         await addLineMut.mutateAsync(data)
       }
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setCargoError(typeof detail === 'string' ? detail : (isRTL ? 'تعذر حفظ بيانات البضاعة.' : 'Could not save cargo line.'))
     } finally {
       setSavingCargo(false)
     }
@@ -446,6 +451,13 @@ export default function BookingDetailPage() {
     }))
   const allExportSelected = Object.values(exportOptions).every(Boolean)
   const cargoImageCount = booking.cargo_lines.reduce((sum, line) => sum + line.images.length, 0)
+  const hasFullContainerClient = booking.cargo_lines.some(line => line.is_full_container_client)
+  const usedCbm = Number(booking.total_cbm_used ?? 0)
+  const capacityCbm = booking.container_cbm_capacity != null ? Number(booking.container_cbm_capacity) : null
+  const remainingCbm = capacityCbm != null ? Math.max(0, capacityCbm - usedCbm) : null
+  const lclAtCapacity = booking.mode === 'LCL' && remainingCbm != null && remainingCbm <= 0
+  const lclNearCapacity = booking.mode === 'LCL' && Number(booking.fill_percent ?? 0) >= 90
+  const addCargoBlocked = hasFullContainerClient || lclAtCapacity
   const exportSections: Array<{ key: ExportSection; label: string; hint: string; count?: number }> = [
     {
       key: 'summary',
@@ -781,12 +793,42 @@ export default function BookingDetailPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-brand-text">{t('bookings.cargo_lines')}</h2>
           {isAdmin && !booking.is_locked && (
-            <Button size="sm" onClick={() => { setEditingLine(null); setShowCargoForm(true) }}>
+            <Button
+              size="sm"
+              disabled={addCargoBlocked}
+              title={
+                hasFullContainerClient
+                  ? (isRTL ? 'هذه الحاوية مخصصة لعميل واحد' : 'This container is assigned to one full-container client')
+                  : lclAtCapacity
+                    ? (isRTL ? 'الحاوية ممتلئة ولا يمكن إضافة عميل جديد' : 'Container is full; no more cargo can be added')
+                    : undefined
+              }
+              onClick={() => { setCargoError(null); setEditingLine(null); setShowCargoForm(true) }}
+            >
               <Plus size={13} />
               {t('bookings.add_client_cargo')}
             </Button>
           )}
         </div>
+
+        {(hasFullContainerClient || lclNearCapacity) && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+            hasFullContainerClient
+              ? 'bg-emerald-500/8 border-emerald-500/20'
+              : 'bg-amber-400/8 border-amber-400/20'
+          }`}>
+            <AlertTriangle size={14} className={hasFullContainerClient ? 'text-emerald-300' : 'text-amber-300'} />
+            <p className="text-xs text-brand-text-muted">
+              {hasFullContainerClient
+                ? (isRTL
+                  ? 'هذه الحاوية مخصصة كحاوية كاملة لعميل واحد، لذلك لا يمكن إضافة عملاء آخرين.'
+                  : 'This container is marked as a full container for one client, so no additional clients can be added.')
+                : (isRTL
+                  ? `الحاوية وصلت ${booking.fill_percent ?? 0}% من السعة. المتبقي ${remainingCbm?.toFixed(3) ?? '0.000'} CBM.`
+                  : `Container is at ${booking.fill_percent ?? 0}% capacity. Remaining space is ${remainingCbm?.toFixed(3) ?? '0.000'} CBM.`)}
+            </p>
+          </div>
+        )}
 
         {/* Lock banner */}
         {booking.is_locked && (
@@ -819,7 +861,7 @@ export default function BookingDetailPage() {
                 index={idx}
                 mode={booking.mode}
                 bookingId={bookingId}
-                onEdit={booking.is_locked ? undefined : () => { setEditingLine(line); setShowCargoForm(true) }}
+                onEdit={booking.is_locked ? undefined : () => { setCargoError(null); setEditingLine(line); setShowCargoForm(true) }}
                 onDelete={booking.is_locked ? undefined : () => setConfirmDeleteLine(line.id)}
                 onRefresh={() => qc.invalidateQueries({ queryKey: ['booking', bookingId] })}
                 locked={booking.is_locked}
@@ -966,8 +1008,14 @@ export default function BookingDetailPage() {
         onSubmit={handleSaveCargo}
         mode={booking.mode}
         bookingId={bookingId}
+        containerSize={booking.container_size}
+        carrierName={booking.carrier_name}
+        capacityCbm={capacityCbm}
+        usedCbm={usedCbm}
+        existingLineCount={booking.cargo_lines.length}
         initial={editingLine}
         saving={savingCargo}
+        errorMessage={cargoError}
       />
     </div>
   )

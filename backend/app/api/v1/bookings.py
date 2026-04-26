@@ -196,7 +196,95 @@ def _assert_cargo_editable(b: Booking) -> None:
         )
 
 
-def _validate_clearance_selection(db: Session, line_data) -> None:
+def _norm_key(value: str | None) -> str:
+    return (value or "").strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+
+
+def _loose_key_match(left: str | None, right: str | None) -> bool:
+    a = _norm_key(left)
+    b = _norm_key(right)
+    return bool(a and b and (a == b or a in b or b in a))
+
+
+def _country_to_destination(country: str | None) -> str | None:
+    if not country:
+        return None
+    c = country.lower()
+    if "jordan" in c or "الأردن" in c or c == "jo":
+        return "jordan"
+    if "iraq" in c or "العراق" in c or c == "iq":
+        return "iraq"
+    return None
+
+
+def _booking_capacity(booking: Booking) -> Decimal | None:
+    if booking.max_cbm is not None:
+        return Decimal(str(booking.max_cbm))
+    if booking.container_size and booking.container_size in CONTAINER_CBM:
+        return Decimal(str(CONTAINER_CBM[booking.container_size]))
+    return None
+
+
+def _cargo_cbm_total(booking: Booking, exclude_line_id: int | None = None) -> Decimal:
+    total = Decimal("0")
+    for line in booking.cargo_lines:
+        if exclude_line_id is not None and line.id == exclude_line_id:
+            continue
+        if line.cbm:
+            total += Decimal(str(line.cbm))
+    return total
+
+
+def _assert_cargo_capacity(booking: Booking, new_cbm, exclude_line_id: int | None = None) -> None:
+    if booking.mode != "LCL":
+        return
+    capacity = _booking_capacity(booking)
+    if capacity is None:
+        return
+    cbm = Decimal(str(new_cbm or 0))
+    used = _cargo_cbm_total(booking, exclude_line_id=exclude_line_id)
+    remaining = max(capacity - used, Decimal("0"))
+    if cbm > remaining:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Not enough CBM in this LCL container. Remaining capacity is "
+                f"{remaining.quantize(Decimal('0.001'))} CBM, but this cargo needs "
+                f"{cbm.quantize(Decimal('0.001'))} CBM."
+            ),
+        )
+
+
+def _assert_full_container_rules(booking: Booking, full_client: bool | None, exclude_line_id: int | None = None) -> None:
+    existing_full = any(
+        line.is_full_container_client
+        for line in booking.cargo_lines
+        if exclude_line_id is None or line.id != exclude_line_id
+    )
+    other_lines = [
+        line for line in booking.cargo_lines
+        if exclude_line_id is None or line.id != exclude_line_id
+    ]
+    if existing_full:
+        raise HTTPException(
+            status_code=400,
+            detail="This container is already assigned as a full container for one client. No additional clients can be added.",
+        )
+    if full_client and other_lines:
+        raise HTTPException(
+            status_code=400,
+            detail="A full-container client must be the only client in the container. Remove other clients first.",
+        )
+
+
+def _promote_lcl_to_fcl_if_needed(db: Session, booking: Booking, full_client: bool | None) -> None:
+    if full_client and booking.mode == "LCL":
+        booking.mode = "FCL"
+        if not str(booking.booking_number or "").upper().startswith("FCL-"):
+            booking.booking_number = _generate_booking_number(db, "FCL")
+
+
+def _validate_clearance_selection(db: Session, line_data, booking: Booking | None = None) -> None:
     def val(name: str):
         return line_data.get(name) if isinstance(line_data, dict) else getattr(line_data, name, None)
 
@@ -217,6 +305,20 @@ def _validate_clearance_selection(db: Session, line_data) -> None:
             ).first()
             if not rate:
                 raise HTTPException(404, "Clearance agent rate not found")
+            if booking:
+                expected_mode = "air" if booking.mode == "AIR" else "sea"
+                if rate.service_mode and rate.service_mode != expected_mode:
+                    raise HTTPException(400, f"Selected clearance rate is for {rate.service_mode}, but this container needs {expected_mode} clearance")
+                if expected_mode == "sea" and rate.container_size and booking.container_size:
+                    if _norm_key(rate.container_size) != _norm_key(booking.container_size):
+                        raise HTTPException(400, f"Selected clearance rate is for {rate.container_size}, but this container is {booking.container_size}")
+                if rate.carrier_name and booking.carrier_name:
+                    if not _loose_key_match(rate.carrier_name, booking.carrier_name):
+                        raise HTTPException(400, f"Selected clearance rate is for carrier {rate.carrier_name}, but this container uses {booking.carrier_name}")
+                booking_dest = _port_to_destination(booking.port_of_discharge) or booking.destination
+                rate_dest = _country_to_destination(rate.country)
+                if booking_dest and rate_dest and booking_dest != rate_dest:
+                    raise HTTPException(400, f"Selected clearance rate is for {rate.country}, but this container is going to {booking_dest}")
 
 
 def _validate_goods_source(source: str | None) -> str | None:
@@ -539,14 +641,30 @@ def create_booking(
     db.add(booking)
     db.flush()
 
+    full_container_lines = [line for line in payload.cargo_lines if line.is_full_container_client]
+    if full_container_lines and len(payload.cargo_lines) > 1:
+        raise HTTPException(400, "A full-container client must be the only client in the container.")
+    if booking.mode == "LCL":
+        capacity = _booking_capacity(booking)
+        if capacity is not None:
+            total_cbm = sum((Decimal(str(line.cbm)) for line in payload.cargo_lines if line.cbm), Decimal("0"))
+            if total_cbm > capacity:
+                raise HTTPException(
+                    400,
+                    f"Not enough CBM in this LCL container. Capacity is {capacity.quantize(Decimal('0.001'))} CBM, but cargo totals {total_cbm.quantize(Decimal('0.001'))} CBM.",
+                )
+
     for i, line_data in enumerate(payload.cargo_lines):
         client = db.query(Client).filter(Client.id == line_data.client_id).first()
         if not client:
             raise HTTPException(404, f"Client {line_data.client_id} not found")
+        _validate_clearance_selection(db, line_data, booking)
         line = BookingCargoLine(
             booking_id=booking.id,
             client_id=line_data.client_id,
             sort_order=line_data.sort_order if line_data.sort_order else i,
+            goods_source=_validate_goods_source(line_data.goods_source),
+            is_full_container_client=line_data.is_full_container_client,
             description=line_data.description or None,
             description_ar=line_data.description_ar or None,
             hs_code=line_data.hs_code or None,
@@ -560,10 +678,17 @@ def create_booking(
             carton_height_cm=line_data.carton_height_cm,
             freight_share=line_data.freight_share,
             notes=line_data.notes or None,
+            clearance_through_us=line_data.clearance_through_us,
+            clearance_agent_id=line_data.clearance_agent_id if line_data.clearance_through_us else None,
+            clearance_agent_rate_id=line_data.clearance_agent_rate_id if line_data.clearance_through_us else None,
+            manual_clearance_agent_name=None if line_data.clearance_through_us else line_data.manual_clearance_agent_name,
+            manual_clearance_agent_phone=None if line_data.clearance_through_us else line_data.manual_clearance_agent_phone,
+            manual_clearance_agent_notes=None if line_data.clearance_through_us else line_data.manual_clearance_agent_notes,
         )
         if mode == "AIR":
             _compute_air_weights(line)
         db.add(line)
+        _promote_lcl_to_fcl_if_needed(db, booking, line_data.is_full_container_client)
 
     db.commit()
     db.refresh(booking)
@@ -886,7 +1011,9 @@ def add_cargo_line(
                        f"Client '{client.name}' ({client.client_code}) appears to be from {client_dest.title()}. "
                        f"Only {dest_label} clients can be added to this container.",
             )
-    _validate_clearance_selection(db, payload)
+    _assert_full_container_rules(b, payload.is_full_container_client)
+    _assert_cargo_capacity(b, payload.cbm)
+    _validate_clearance_selection(db, payload, b)
 
     line = BookingCargoLine(
         booking_id=booking_id,
@@ -917,6 +1044,7 @@ def add_cargo_line(
     if b.mode == "AIR":
         _compute_air_weights(line)
     db.add(line)
+    _promote_lcl_to_fcl_if_needed(db, b, payload.is_full_container_client)
     db.commit()
     db.refresh(line)
     return _serialize_line(line)
@@ -950,7 +1078,12 @@ def update_cargo_line(
         "clearance_agent_rate_id": line.clearance_agent_rate_id,
     }
     merged.update({k: v for k, v in data.items() if k in merged})
-    _validate_clearance_selection(db, merged)
+    effective_full_client = data.get("is_full_container_client", line.is_full_container_client)
+    effective_cbm = data.get("cbm", line.cbm)
+    if b:
+        _assert_full_container_rules(b, effective_full_client, exclude_line_id=line.id)
+        _assert_cargo_capacity(b, effective_cbm, exclude_line_id=line.id)
+    _validate_clearance_selection(db, merged, b)
     if merged.get("clearance_through_us") is True:
         data["manual_clearance_agent_name"] = None
         data["manual_clearance_agent_phone"] = None
@@ -963,6 +1096,8 @@ def update_cargo_line(
 
     if b and b.mode == "AIR":
         _compute_air_weights(line)
+    if b:
+        _promote_lcl_to_fcl_if_needed(db, b, effective_full_client)
 
     db.commit()
     db.refresh(line)

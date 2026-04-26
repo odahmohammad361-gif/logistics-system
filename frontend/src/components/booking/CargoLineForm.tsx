@@ -20,6 +20,16 @@ function normalizeCountry(value: string | null | undefined) {
   return v
 }
 
+function normKey(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '')
+}
+
+function looseKeyMatch(left: string | null | undefined, right: string | null | undefined) {
+  const a = normKey(left)
+  const b = normKey(right)
+  return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)))
+}
+
 function clearanceMode(mode: BookingMode) {
   return mode === 'AIR' ? 'air' : 'sea'
 }
@@ -55,11 +65,31 @@ interface Props {
   onSubmit:    (data: Record<string, unknown>) => Promise<void>
   mode:        BookingMode
   bookingId:   number
+  containerSize?: string | null
+  carrierName?: string | null
+  capacityCbm?: number | null
+  usedCbm?: number | null
+  existingLineCount?: number
   initial?:    BookingCargoLine | null
   saving?:     boolean
+  errorMessage?: string | null
 }
 
-export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId, initial, saving }: Props) {
+export default function CargoLineForm({
+  open,
+  onClose,
+  onSubmit,
+  mode,
+  bookingId,
+  containerSize,
+  carrierName,
+  capacityCbm,
+  usedCbm,
+  existingLineCount = 0,
+  initial,
+  saving,
+  errorMessage,
+}: Props) {
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
 
@@ -89,6 +119,13 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
+  const watchedCbm = watch('cbm')
+  const baseUsedCbm = Math.max(0, Number(usedCbm ?? 0) - Number(initial?.cbm ?? 0))
+  const remainingCbm = capacityCbm != null ? Math.max(0, capacityCbm - baseUsedCbm) : null
+  const enteredCbm = parseFloat(watchedCbm || '0') || 0
+  const capacityExceeded = mode === 'LCL' && remainingCbm != null && enteredCbm > remainingCbm
+  const fillWarning = mode === 'LCL' && capacityCbm != null && capacityCbm > 0 && (Number(usedCbm ?? 0) / capacityCbm) >= 0.9
+  const cannotMarkFull = mode === 'LCL' && !initial?.is_full_container_client && existingLineCount > (initial ? 1 : 0)
 
   const clearanceAgentOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
@@ -103,9 +140,20 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
   const clearanceRateOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
     const expectedMode = clearanceMode(mode)
+    const expectedSize = normKey(containerSize)
+    const expectedCarrier = normKey(carrierName)
     const agent = (clearanceAgentsData?.results ?? []).find(a => String(a.id) === selectedClearanceAgentId)
     return (agent?.rates ?? [])
-      .filter(r => (!destination || normalizeCountry(r.country) === destination) && (!r.service_mode || r.service_mode === expectedMode))
+      .filter(r => {
+        const rateDest = normalizeCountry(r.country)
+        const rateSize = normKey(r.container_size)
+        const rateCarrier = normKey(r.carrier_name)
+        if (destination && rateDest && rateDest !== destination) return false
+        if (r.service_mode && r.service_mode !== expectedMode) return false
+        if (expectedMode === 'sea' && expectedSize && rateSize !== expectedSize) return false
+        if (expectedCarrier && rateCarrier && !looseKeyMatch(r.carrier_name, carrierName)) return false
+        return true
+      })
       .map(r => ({
       value: String(r.id),
       label: [
@@ -117,7 +165,14 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
         r.route,
       ].filter(Boolean).join(' · '),
     }))
-  }, [clearanceAgentsData, selectedClearanceAgentId, bookingDest, mode])
+  }, [clearanceAgentsData, selectedClearanceAgentId, bookingDest, mode, containerSize, carrierName])
+
+  useEffect(() => {
+    if (!open || !clearanceThroughUs) return
+    if (clearanceRateOptions.length === 1 && selectedClearanceRateId !== clearanceRateOptions[0].value) {
+      setValue('clearance_agent_rate_id', clearanceRateOptions[0].value)
+    }
+  }, [open, clearanceThroughUs, clearanceRateOptions, selectedClearanceRateId, setValue])
 
   useEffect(() => {
     if (!open || !selectedClearanceAgentId) return
@@ -231,13 +286,18 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
-          <Button onClick={handleSubmit(handleFormSubmit)} loading={saving}>
+          <Button onClick={handleSubmit(handleFormSubmit)} loading={saving} disabled={capacityExceeded}>
             {initial ? t('common.update') : t('common.add')}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
+        {errorMessage && (
+          <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-xs text-brand-red">
+            {errorMessage}
+          </div>
+        )}
         {/* Destination badge */}
         {bookingDest && (
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
@@ -251,6 +311,23 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
                 ? `هذه الحاوية متجهة إلى ${bookingDest === 'jordan' ? 'الأردن' : 'العراق'} — يظهر فقط العملاء المطابقون`
                 : `Container destined for ${bookingDest === 'jordan' ? 'Jordan' : 'Iraq'} — only matching clients shown`}
             </span>
+          </div>
+        )}
+        {mode === 'LCL' && remainingCbm != null && (
+          <div className={`rounded-lg border px-3 py-2 text-xs ${
+            capacityExceeded
+              ? 'border-brand-red/30 bg-brand-red/10 text-brand-red'
+              : fillWarning
+                ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                : 'border-brand-border bg-white/[0.03] text-brand-text-muted'
+          }`}>
+            {capacityExceeded
+              ? (isAr
+                ? `لا يمكن إضافة هذه البضاعة. المتبقي ${remainingCbm.toFixed(3)} CBM والمطلوب ${enteredCbm.toFixed(3)} CBM.`
+                : `Cannot add this cargo. Remaining capacity is ${remainingCbm.toFixed(3)} CBM and this cargo needs ${enteredCbm.toFixed(3)} CBM.`)
+              : (isAr
+                ? `المتبقي في الحاوية: ${remainingCbm.toFixed(3)} CBM${fillWarning ? ' — الحاوية وصلت 90% أو أكثر.' : ''}`
+                : `Remaining container capacity: ${remainingCbm.toFixed(3)} CBM${fillWarning ? ' — container is at 90% or more.' : ''}`)}
           </div>
         )}
 
@@ -276,8 +353,27 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
               {...register('goods_source')}
             />
             <label className="flex items-center gap-2 rounded-lg border border-brand-border bg-brand-surface px-3 py-2.5 text-sm text-brand-text-muted">
-              <input type="checkbox" className="accent-brand-primary" {...register('is_full_container_client')} />
-              <span>{isAr ? 'هذا العميل حجز الحاوية كاملة' : 'Full container for this client'}</span>
+              <input
+                type="checkbox"
+                className="accent-brand-primary"
+                disabled={cannotMarkFull}
+                {...register('is_full_container_client')}
+              />
+              <span>
+                {isAr ? 'هذا العميل حجز الحاوية كاملة' : 'Full container for this client'}
+                {mode === 'LCL' && (
+                  <span className="block text-[11px] text-brand-text-muted mt-0.5">
+                    {isAr
+                      ? 'عند الحفظ ستتحول الحاوية إلى FCL برقم جديد ولا يمكن إضافة عملاء آخرين.'
+                      : 'Saving this will convert the container to FCL with a new number and no more clients can be added.'}
+                  </span>
+                )}
+                {cannotMarkFull && (
+                  <span className="block text-[11px] text-brand-red mt-0.5">
+                    {isAr ? 'يجب أن يكون هذا العميل وحده داخل الحاوية.' : 'This client must be the only cargo line in the container.'}
+                  </span>
+                )}
+              </span>
             </label>
           </div>
         </FormSection>
@@ -317,7 +413,7 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
               <Select
                 label={isAr ? 'سعر التخليص' : 'Clearance Rate'}
                 options={clearanceRateOptions}
-                placeholder={clearanceRateOptions.length ? '—' : (isAr ? 'لا توجد أسعار لهذا الوكيل' : 'No rates for this agent')}
+                placeholder={clearanceRateOptions.length ? '—' : (isAr ? 'لا توجد أسعار مطابقة للحجم/الناقل' : 'No matching rate for this size/carrier')}
                 {...register('clearance_agent_rate_id')}
               />
             </FormRow>

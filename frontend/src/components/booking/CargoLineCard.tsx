@@ -51,12 +51,12 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
 
   const clientName = isRTL ? (line.client.name_ar ?? line.client.name) : line.client.name
   const docLabel = (doc: BookingCargoDocument) => {
-    if (doc.document_type === 'pi') return 'PI'
-    if (doc.document_type === 'ci') return 'CI'
-    if (doc.document_type === 'pl') return isRTL ? 'PL / قائمة تعبئة' : 'PL / Packing List'
-    if (doc.document_type === 'sc') return 'SC'
-    if (doc.document_type === 'co') return isRTL ? 'CO / شهادة المنشأ' : 'CO / Certificate of Origin'
-    if (doc.document_type === 'bl_copy') return isRTL ? 'نسخة B/L' : 'B/L Copy'
+    if (doc.document_type === 'pi') return isRTL ? 'فاتورة أولية' : 'PI / Proforma Invoice'
+    if (doc.document_type === 'ci') return isRTL ? 'فاتورة تجارية' : 'CI / Commercial Invoice'
+    if (doc.document_type === 'pl') return isRTL ? 'قائمة التعبئة' : 'PL / Packing List'
+    if (doc.document_type === 'sc') return isRTL ? 'عقد البيع' : 'SC / Sales Contract'
+    if (doc.document_type === 'co') return isRTL ? 'شهادة المنشأ' : 'CO / Certificate of Origin'
+    if (doc.document_type === 'bl_copy') return isRTL ? 'نسخة بوليصة الشحن' : 'B/L Copy'
     if (doc.document_type === 'security_approval') return isRTL ? 'موافقات أمنية' : 'Security Approval'
     if (doc.document_type === 'goods_invoice') return isRTL ? 'فواتير البضاعة' : 'Goods Invoice'
     return doc.custom_file_type || (isRTL ? 'ملف آخر' : 'Other File')
@@ -237,12 +237,12 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           <div className="px-4 pb-4 space-y-3">
             <div className="grid sm:grid-cols-2 gap-2">
               {([
-                { type: 'pi' as const, label: isRTL ? 'رفع PI' : 'Upload PI', icon: Receipt, count: docsByType.pi },
-                { type: 'ci' as const, label: isRTL ? 'رفع CI' : 'Upload CI', icon: Receipt, count: docsByType.ci },
-                { type: 'pl' as const, label: isRTL ? 'رفع PL' : 'Upload PL', icon: FileText, count: docsByType.pl },
-                { type: 'sc' as const, label: isRTL ? 'رفع SC' : 'Upload SC', icon: FileText, count: docsByType.sc },
-                { type: 'co' as const, label: isRTL ? 'رفع CO' : 'Upload CO', icon: FileText, count: docsByType.co },
-                { type: 'bl_copy' as const, label: isRTL ? 'رفع نسخة B/L' : 'Upload B/L Copy', icon: FileText, count: docsByType.bl_copy },
+                { type: 'pi' as const, label: isRTL ? 'رفع فاتورة أولية' : 'Upload PI', icon: Receipt, count: docsByType.pi },
+                { type: 'ci' as const, label: isRTL ? 'رفع فاتورة تجارية' : 'Upload CI', icon: Receipt, count: docsByType.ci },
+                { type: 'pl' as const, label: isRTL ? 'رفع قائمة التعبئة' : 'Upload PL', icon: FileText, count: docsByType.pl },
+                { type: 'sc' as const, label: isRTL ? 'رفع عقد البيع' : 'Upload SC', icon: FileText, count: docsByType.sc },
+                { type: 'co' as const, label: isRTL ? 'رفع شهادة المنشأ' : 'Upload CO', icon: FileText, count: docsByType.co },
+                { type: 'bl_copy' as const, label: isRTL ? 'رفع نسخة بوليصة الشحن' : 'Upload B/L Copy', icon: FileText, count: docsByType.bl_copy },
                 { type: 'security_approval' as const, label: isRTL ? 'رفع موافقات أمنية' : 'Upload Security Approvals', icon: ShieldCheck, count: docsByType.security_approval },
                 { type: 'goods_invoice' as const, label: isRTL ? 'رفع فواتير البضاعة' : 'Upload Goods Invoices', icon: Receipt, count: docsByType.goods_invoice },
               ]).map(item => {
