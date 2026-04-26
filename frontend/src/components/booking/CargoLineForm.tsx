@@ -12,6 +12,18 @@ import type { BookingCargoLine, BookingMode } from '@/types'
 const DEST_LABEL: Record<string, string> = { jordan: '🇯🇴 Jordan', iraq: '🇮🇶 Iraq' }
 const DEST_LABEL_AR: Record<string, string> = { jordan: '🇯🇴 الأردن', iraq: '🇮🇶 العراق' }
 
+function normalizeCountry(value: string | null | undefined) {
+  const v = (value ?? '').trim().toLowerCase()
+  if (!v) return ''
+  if (v.includes('jordan') || v.includes('الأردن') || v === 'jo') return 'jordan'
+  if (v.includes('iraq') || v.includes('العراق') || v === 'iq') return 'iraq'
+  return v
+}
+
+function clearanceMode(mode: BookingMode) {
+  return mode === 'AIR' ? 'air' : 'sea'
+}
+
 interface FormValues {
   client_id:          string
   description:        string
@@ -74,17 +86,25 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
+  const selectedClearanceRateId = watch('clearance_agent_rate_id')
 
   const clearanceAgentOptions = useMemo(() => {
-    return (clearanceAgentsData?.results ?? []).map(a => ({
+    const destination = normalizeCountry(bookingDest)
+    return (clearanceAgentsData?.results ?? [])
+      .filter(a => !destination || normalizeCountry(a.country) === destination)
+      .map(a => ({
       value: String(a.id),
       label: `${isAr && a.name_ar ? a.name_ar : a.name}${a.country ? ` — ${a.country}` : ''}`,
     }))
-  }, [clearanceAgentsData, isAr])
+  }, [clearanceAgentsData, bookingDest, isAr])
 
   const clearanceRateOptions = useMemo(() => {
+    const destination = normalizeCountry(bookingDest)
+    const expectedMode = clearanceMode(mode)
     const agent = (clearanceAgentsData?.results ?? []).find(a => String(a.id) === selectedClearanceAgentId)
-    return (agent?.rates ?? []).map(r => ({
+    return (agent?.rates ?? [])
+      .filter(r => (!destination || normalizeCountry(r.country) === destination) && (!r.service_mode || r.service_mode === expectedMode))
+      .map(r => ({
       value: String(r.id),
       label: [
         r.service_mode?.toUpperCase(),
@@ -95,7 +115,20 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
         r.route,
       ].filter(Boolean).join(' · '),
     }))
-  }, [clearanceAgentsData, selectedClearanceAgentId])
+  }, [clearanceAgentsData, selectedClearanceAgentId, bookingDest, mode])
+
+  useEffect(() => {
+    if (!open || !selectedClearanceAgentId) return
+    if (clearanceAgentOptions.some(a => a.value === selectedClearanceAgentId)) return
+    setValue('clearance_agent_id', '')
+    setValue('clearance_agent_rate_id', '')
+  }, [open, clearanceAgentOptions, selectedClearanceAgentId, setValue])
+
+  useEffect(() => {
+    if (!open) return
+    if (!selectedClearanceRateId || clearanceRateOptions.some(r => r.value === selectedClearanceRateId)) return
+    setValue('clearance_agent_rate_id', '')
+  }, [open, clearanceRateOptions, selectedClearanceRateId, setValue])
 
   useEffect(() => {
     if (!open) return
@@ -253,7 +286,11 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
               <Select
                 label={isAr ? 'وكيل التخليص' : 'Clearance Agent'}
                 options={clearanceAgentOptions}
-                placeholder={isAr ? 'اختر وكيل التخليص' : 'Select clearance agent'}
+                placeholder={clearanceAgentOptions.length
+                  ? (isAr ? 'اختر وكيل التخليص' : 'Select clearance agent')
+                  : (bookingDest
+                    ? (isAr ? `لا يوجد وكلاء تخليص لـ ${DEST_LABEL_AR[bookingDest] ?? bookingDest}` : `No clearance agents for ${DEST_LABEL[bookingDest] ?? bookingDest}`)
+                    : (isAr ? 'لا يوجد وكلاء تخليص' : 'No clearance agents'))}
                 {...register('clearance_agent_id')}
               />
               <Select
