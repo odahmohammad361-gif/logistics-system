@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, ArrowRight, Container, Plane, Package,
-  MapPin, FileText, Clock, Users,
+  MapPin, Clock, Users,
 } from 'lucide-react'
 import { getBookings, createBooking } from '@/services/bookingService'
 import { useAuth } from '@/hooks/useAuth'
@@ -105,8 +105,8 @@ function CbmBar({ used, max, pct }: { used: number | null; max: number | null; p
 
 // ── Container card ────────────────────────────────────────────────────────────
 
-function ContainerCard({ b, isAr, onEdit, onView }: {
-  b: BookingListItem; isAr: boolean; onEdit: () => void; onView: () => void
+function ContainerCard({ b, isAr, onView }: {
+  b: BookingListItem; isAr: boolean; onView: () => void
 }) {
   const sc     = STATUS_CONFIG[b.status as BookingStatus] ?? STATUS_CONFIG.draft
   const border = CARD_BORDER[b.status as BookingStatus]   ?? 'border-white/10'
@@ -118,7 +118,15 @@ function ContainerCard({ b, isAr, onEdit, onView }: {
   const sellPerCbm = buyPerCbm * (1 + markup / 100)
 
   return (
-    <div className={clsx('rounded-2xl border bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col', border)}>
+    <button
+      type="button"
+      onClick={onView}
+      className={clsx(
+        'rounded-2xl border bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col text-start w-full',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50',
+        border,
+      )}
+    >
 
       {/* Card header */}
       <div className="px-4 pt-4 pb-3 border-b border-white/5 flex items-start justify-between gap-2">
@@ -208,17 +216,7 @@ function ContainerCard({ b, isAr, onEdit, onView }: {
           </div>
         )}
       </div>
-
-      {/* Card footer */}
-      <div className="px-4 pb-3 flex gap-2 border-t border-white/5 pt-3">
-        <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={onView}>
-          <FileText size={12} className="me-1" />{isAr ? 'التفاصيل' : 'Details'}
-        </Button>
-        <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={onEdit}>
-          {isAr ? 'تعديل' : 'Edit'}
-        </Button>
-      </div>
-    </div>
+    </button>
   )
 }
 
@@ -368,7 +366,6 @@ export default function ContainersPage() {
               b={b}
               isAr={isAr}
               onView={() => navigate(`/containers/${b.id}`)}
-              onEdit={() => { setEditItem(b as any); setShowForm(true) }}
             />
           ))}
         </div>
