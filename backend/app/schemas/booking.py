@@ -171,6 +171,7 @@ class BookingCreate(BaseModel):
     eta: Optional[date] = None
     incoterm: Optional[str] = None
     freight_cost: Optional[Decimal] = None
+    sell_freight_cost: Optional[Decimal] = None
     currency: str = "USD"
     notes: Optional[str] = None
     is_direct_booking: bool = False
@@ -198,6 +199,7 @@ class BookingUpdate(BaseModel):
     eta: Optional[date] = None
     incoterm: Optional[str] = None
     freight_cost: Optional[Decimal] = None
+    sell_freight_cost: Optional[Decimal] = None
     currency: Optional[str] = None
     notes: Optional[str] = None
     is_direct_booking: Optional[bool] = None
@@ -225,6 +227,7 @@ class BookingResponse(BaseModel):
     eta: Optional[date] = None
     incoterm: Optional[str] = None
     freight_cost: Optional[Decimal] = None
+    sell_freight_cost: Optional[Decimal] = None
     currency: str
     notes: Optional[str] = None
     is_direct_booking: bool = False
@@ -271,6 +274,7 @@ class BookingListItem(BaseModel):
     fill_percent: Optional[float] = None
     agent_name: Optional[str] = None
     freight_cost: Optional[Decimal] = None
+    sell_freight_cost: Optional[Decimal] = None
     max_cbm: Optional[Decimal] = None
     markup_pct: Optional[Decimal] = None
     container_no: Optional[str] = None

@@ -65,7 +65,6 @@ interface FormValues {
   carton_length_cm:   string
   carton_width_cm:    string
   carton_height_cm:   string
-  freight_share:      string
   clearance_through_us: string
   clearance_agent_id: string
   clearance_agent_rate_id: string
@@ -245,7 +244,6 @@ export default function CargoLineForm({
         carton_length_cm: initial.carton_length_cm  != null ? String(initial.carton_length_cm)  : '',
         carton_width_cm:  initial.carton_width_cm   != null ? String(initial.carton_width_cm)   : '',
         carton_height_cm: initial.carton_height_cm  != null ? String(initial.carton_height_cm)  : '',
-        freight_share:    initial.freight_share     != null ? String(initial.freight_share)     : '',
         clearance_through_us: initial.clearance_through_us === false ? 'manual' : 'us',
         clearance_agent_id: initial.clearance_agent_id != null ? String(initial.clearance_agent_id) : '',
         clearance_agent_rate_id: initial.clearance_agent_rate_id != null ? String(initial.clearance_agent_rate_id) : '',
@@ -260,7 +258,7 @@ export default function CargoLineForm({
         description:'', description_ar:'', hs_code:'', shipping_marks:'',
         cartons:'', gross_weight_kg:'', net_weight_kg:'', cbm:'',
         carton_length_cm:'', carton_width_cm:'', carton_height_cm:'',
-        freight_share:'', clearance_through_us:'us', clearance_agent_id:'',
+        clearance_through_us:'us', clearance_agent_id:'',
         clearance_agent_rate_id:'', manual_clearance_agent_name:'',
         manual_clearance_agent_phone:'', manual_clearance_agent_notes:'', notes:'',
       })
@@ -324,7 +322,6 @@ export default function CargoLineForm({
       carton_length_cm:   toNum(vals.carton_length_cm),
       carton_width_cm:    toNum(vals.carton_width_cm),
       carton_height_cm:   toNum(vals.carton_height_cm),
-      freight_share:      toNum(vals.freight_share),
       clearance_through_us: vals.clearance_through_us !== 'manual',
       clearance_agent_id: vals.clearance_through_us !== 'manual' && vals.clearance_agent_id ? parseInt(vals.clearance_agent_id) : null,
       clearance_agent_rate_id: vals.clearance_through_us !== 'manual' && vals.clearance_agent_rate_id ? parseInt(vals.clearance_agent_rate_id) : null,
@@ -620,15 +617,7 @@ export default function CargoLineForm({
           </FormSection>
         )}
 
-        {/* Freight share */}
-        <FormRow>
-          <Input
-            label={t('bookings.freight_share')}
-            type="number" step="0.01" min="0"
-            {...register('freight_share')}
-          />
-          <Textarea label={t('common.notes')} rows={2} {...register('notes')} />
-        </FormRow>
+        <Textarea label={t('common.notes')} rows={2} {...register('notes')} />
       </div>
     </Modal>
   )

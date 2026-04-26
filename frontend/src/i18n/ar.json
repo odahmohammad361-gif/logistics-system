@@ -403,7 +403,7 @@
     "gross_weight": "الوزن الإجمالي (كغ)",
     "net_weight": "الوزن الصافي (كغ)",
     "cbm_label": "الحجم (م³)",
-    "freight_share": "حصة الشحن",
+    "freight_share": "حصة العميل من الشحن",
     "air_dims": "أبعاد الشحن الجوي",
     "volumetric_weight": "الوزن الحجمي (كغ)",
     "chargeable_weight": "الوزن القابل للشحن (كغ)",

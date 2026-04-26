@@ -78,13 +78,14 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
             "carrier_name": rate.carrier_name,
             "port_of_loading": rate.pol,
             "port_of_discharge": rate.pod,
-        "freight_cost": rate.buy_air_kg,
-        "max_cbm": None,
-        "markup_pct": _margin_pct(rate.buy_air_kg, rate.sell_air_kg),
-        "container_size": None,
-        "etd": rate.vessel_day,
-        "loading_warehouse_id": rate.loading_warehouse_id,
-    }
+            "freight_cost": rate.buy_air_kg,
+            "sell_freight_cost": rate.sell_air_kg,
+            "max_cbm": None,
+            "markup_pct": _margin_pct(rate.buy_air_kg, rate.sell_air_kg),
+            "container_size": None,
+            "etd": rate.vessel_day,
+            "loading_warehouse_id": rate.loading_warehouse_id,
+        }
 
     if mode == "LCL":
         lcl = {
@@ -98,6 +99,7 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
             "port_of_loading": rate.pol,
             "port_of_discharge": rate.pod,
             "freight_cost": buy,
+            "sell_freight_cost": sell,
             "max_cbm": cap,
             "markup_pct": _margin_pct(buy, sell),
             "container_size": size or None,
@@ -116,6 +118,7 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
         "port_of_loading": rate.pol,
         "port_of_discharge": rate.pod,
         "freight_cost": buy,
+        "sell_freight_cost": sell,
         "max_cbm": cap,
         "markup_pct": _margin_pct(buy, sell),
         "container_size": size or None,
@@ -257,6 +260,97 @@ def _cargo_cbm_total(booking: Booking, exclude_line_id: int | None = None) -> De
         if line.cbm:
             total += Decimal(str(line.cbm))
     return total
+
+
+def _money(value) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _booking_sell_freight(booking: Booking) -> Decimal | None:
+    sell = _money(getattr(booking, "sell_freight_cost", None))
+    if sell is not None:
+        return sell
+    buy = _money(booking.freight_cost)
+    if buy is None:
+        return None
+    markup = _money(booking.markup_pct) or Decimal("0")
+    return (buy * (Decimal("1") + (markup / Decimal("100")))).quantize(Decimal("0.01"))
+
+
+def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
+    sell_freight = _booking_sell_freight(booking)
+    lines = db.query(BookingCargoLine).filter(
+        BookingCargoLine.booking_id == booking.id
+    ).order_by(BookingCargoLine.sort_order, BookingCargoLine.id).all()
+    if sell_freight is None:
+        for line in lines:
+            line.freight_share = None
+        return
+
+    mode = (booking.mode or "").upper()
+    if mode == "LCL":
+        for line in lines:
+            cbm = _money(line.cbm) or Decimal("0")
+            line.freight_share = (sell_freight * cbm).quantize(Decimal("0.01"))
+        return
+
+    if mode == "AIR":
+        for line in lines:
+            kg = _money(line.chargeable_weight_kg) or _money(line.gross_weight_kg) or Decimal("0")
+            line.freight_share = (sell_freight * kg).quantize(Decimal("0.01"))
+        return
+
+    if not lines:
+        return
+    if len(lines) == 1 or any(line.is_full_container_client for line in lines):
+        for line in lines:
+            line.freight_share = sell_freight if line.is_full_container_client or len(lines) == 1 else Decimal("0.00")
+        return
+
+    total_cbm = sum((_money(line.cbm) or Decimal("0")) for line in lines)
+    if total_cbm > 0:
+        assigned = Decimal("0.00")
+        for index, line in enumerate(lines):
+            if index == len(lines) - 1:
+                line.freight_share = sell_freight - assigned
+            else:
+                cbm = _money(line.cbm) or Decimal("0")
+                share = (sell_freight * cbm / total_cbm).quantize(Decimal("0.01"))
+                line.freight_share = share
+                assigned += share
+    else:
+        equal = (sell_freight / Decimal(len(lines))).quantize(Decimal("0.01"))
+        assigned = Decimal("0.00")
+        for index, line in enumerate(lines):
+            if index == len(lines) - 1:
+                line.freight_share = sell_freight - assigned
+            else:
+                line.freight_share = equal
+                assigned += equal
+
+
+def _refresh_booking_rate_snapshot(db: Session, booking: Booking) -> None:
+    if not booking.agent_carrier_rate_id:
+        return
+    rate = db.query(AgentCarrierRate).filter(
+        AgentCarrierRate.id == booking.agent_carrier_rate_id,
+        AgentCarrierRate.is_active == True,  # noqa: E712
+    ).first()
+    if not rate:
+        return
+    snapshot = _rate_snapshot_values(rate, booking.mode, booking.container_size)
+    if snapshot.get("freight_cost") is not None:
+        booking.freight_cost = snapshot.get("freight_cost")
+    if snapshot.get("sell_freight_cost") is not None:
+        booking.sell_freight_cost = snapshot.get("sell_freight_cost")
+    if snapshot.get("max_cbm") is not None:
+        booking.max_cbm = snapshot.get("max_cbm")
+    booking.markup_pct = snapshot.get("markup_pct")
 
 
 def _assert_cargo_capacity(booking: Booking, new_cbm, exclude_line_id: int | None = None) -> None:
@@ -608,6 +702,7 @@ def _serialize_booking(b: Booking) -> BookingResponse:
         eta=b.eta,
         incoterm=b.incoterm,
         freight_cost=b.freight_cost,
+        sell_freight_cost=b.sell_freight_cost,
         currency=b.currency or "USD",
         notes=b.notes,
         is_direct_booking=(b.is_direct_booking == "1"),
@@ -727,6 +822,7 @@ def list_bookings(
             fill_percent=pct,
             agent_name=b.agent.name if b.agent else None,
             freight_cost=b.freight_cost,
+            sell_freight_cost=b.sell_freight_cost,
             max_cbm=b.max_cbm,
             markup_pct=b.markup_pct,
             container_no=b.container_no,
@@ -785,6 +881,7 @@ def create_booking(
         eta=payload.eta,
         incoterm=payload.incoterm or None,
         freight_cost=(rate_snapshot["freight_cost"] if rate_snapshot else payload.freight_cost),
+        sell_freight_cost=(rate_snapshot["sell_freight_cost"] if rate_snapshot else payload.sell_freight_cost),
         currency="USD",
         notes=payload.notes or None,
         is_direct_booking="1" if payload.is_direct_booking else "0",
@@ -835,7 +932,6 @@ def create_booking(
             carton_length_cm=line_data.carton_length_cm,
             carton_width_cm=line_data.carton_width_cm,
             carton_height_cm=line_data.carton_height_cm,
-            freight_share=line_data.freight_share,
             notes=line_data.notes or None,
             extracted_goods=line_data.extracted_goods,
             clearance_through_us=line_data.clearance_through_us,
@@ -849,7 +945,11 @@ def create_booking(
             _compute_air_weights(line)
         db.add(line)
         _promote_lcl_to_fcl_if_needed(db, booking, line_data.is_full_container_client)
+        if line_data.is_full_container_client:
+            _refresh_booking_rate_snapshot(db, booking)
 
+    db.flush()
+    _recalculate_freight_shares(db, booking)
     db.commit()
     db.refresh(booking)
     return _serialize_booking(booking)
@@ -909,6 +1009,7 @@ def download_booking_archive_zip(
         "eta": b.eta,
         "incoterm": b.incoterm,
         "freight_cost": b.freight_cost,
+        "sell_freight_cost": b.sell_freight_cost,
         "currency": b.currency or "USD",
         "markup_pct": b.markup_pct,
         "max_cbm": b.max_cbm,
@@ -1059,7 +1160,7 @@ def update_booking(
     if "is_direct_booking" in data:
         data["is_direct_booking"] = "1" if data["is_direct_booking"] else "0"
     # If this booking was created from an agent snapshot, certain fields are immutable
-    locked_fields = {"carrier_name", "container_size", "max_cbm", "port_of_loading", "port_of_discharge", "freight_cost"}
+    locked_fields = {"carrier_name", "container_size", "max_cbm", "port_of_loading", "port_of_discharge", "freight_cost", "sell_freight_cost"}
     if getattr(b, 'is_agent_snapshot', False):
         for k in list(data.keys()):
             if k in locked_fields:
@@ -1071,6 +1172,10 @@ def update_booking(
         new_dest = _port_to_destination(data["port_of_discharge"])
         if new_dest:   # only override if we can detect — don't clear existing
             b.destination = new_dest
+
+    if {"freight_cost", "sell_freight_cost", "markup_pct", "container_size", "mode"} & set(data.keys()):
+        db.flush()
+        _recalculate_freight_shares(db, b)
 
     db.commit()
     db.refresh(b)
@@ -1193,7 +1298,6 @@ def add_cargo_line(
         carton_length_cm=payload.carton_length_cm,
         carton_width_cm=payload.carton_width_cm,
         carton_height_cm=payload.carton_height_cm,
-        freight_share=payload.freight_share,
         notes=payload.notes or None,
         clearance_through_us=payload.clearance_through_us,
         clearance_agent_id=payload.clearance_agent_id if payload.clearance_through_us else None,
@@ -1207,6 +1311,10 @@ def add_cargo_line(
         _compute_air_weights(line)
     db.add(line)
     _promote_lcl_to_fcl_if_needed(db, b, payload.is_full_container_client)
+    if payload.is_full_container_client:
+        _refresh_booking_rate_snapshot(db, b)
+    db.flush()
+    _recalculate_freight_shares(db, b)
     db.commit()
     db.refresh(line)
     return _serialize_line(line)
@@ -1232,6 +1340,7 @@ def update_cargo_line(
         _assert_cargo_editable(b)
 
     data = payload.model_dump(exclude_unset=True)
+    data.pop("freight_share", None)
     if "goods_source" in data:
         data["goods_source"] = _validate_goods_source(data["goods_source"])
     merged = {
@@ -1260,6 +1369,10 @@ def update_cargo_line(
         _compute_air_weights(line)
     if b:
         _promote_lcl_to_fcl_if_needed(db, b, effective_full_client)
+        if effective_full_client:
+            _refresh_booking_rate_snapshot(db, b)
+        db.flush()
+        _recalculate_freight_shares(db, b)
 
     db.commit()
     db.refresh(line)
@@ -1283,6 +1396,9 @@ def delete_cargo_line(
     if b:
         _assert_cargo_editable(b)
     db.delete(line)
+    if b:
+        db.flush()
+        _recalculate_freight_shares(db, b)
     db.commit()
 
 
@@ -1570,6 +1686,10 @@ def extract_cargo_documents(
         "goods": parsed.get("goods") or [],
     }
 
+    if b.mode == "AIR":
+        _compute_air_weights(line)
+    db.flush()
+    _recalculate_freight_shares(db, b)
     db.commit()
     db.refresh(line)
     return _serialize_line(line)

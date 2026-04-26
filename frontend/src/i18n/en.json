@@ -403,7 +403,7 @@
     "gross_weight": "Gross Weight (kg)",
     "net_weight": "Net Weight (kg)",
     "cbm_label": "CBM (m³)",
-    "freight_share": "Freight Share",
+    "freight_share": "Client Freight Share",
     "air_dims": "Air Cargo Dimensions",
     "volumetric_weight": "Volumetric Weight (kg)",
     "chargeable_weight": "Chargeable Weight (kg)",

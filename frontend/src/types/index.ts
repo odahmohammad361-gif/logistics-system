@@ -570,6 +570,7 @@ export interface Booking {
   eta: string | null
   incoterm: string | null
   freight_cost: number | null
+  sell_freight_cost: number | null
   currency: string
   notes: string | null
   is_direct_booking: boolean
@@ -615,6 +616,7 @@ export interface BookingListItem {
   fill_percent: number | null
   agent_name: string | null
   freight_cost: number | null
+  sell_freight_cost: number | null
   max_cbm: number | null
   markup_pct: number | null
   destination: 'jordan' | 'iraq' | null

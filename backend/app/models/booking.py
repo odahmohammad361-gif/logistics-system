@@ -48,6 +48,7 @@ class Booking(Base):
     # Commercial
     incoterm     = Column(String(20),      nullable=True)
     freight_cost = Column(Numeric(14, 2),  nullable=True)
+    sell_freight_cost = Column(Numeric(14, 2), nullable=True)
     currency     = Column(String(10),      default="USD")
     notes        = Column(Text,            nullable=True)
 
