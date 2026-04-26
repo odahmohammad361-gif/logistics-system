@@ -316,10 +316,10 @@ Do not commit:
 
 Container section redesign:
 
-- Improve container archive: group export by client, include all document categories, and later add ZIP export beside print-ready HTML.
+- Improve container archive: group export by client and include all document categories. Print-ready HTML is available, and ZIP export now downloads the uploaded originals grouped by client.
 - Connect internal system invoices: if cargo source is company buying service, link PI/CI/PL/SC from the invoice section and use them to fill cargo data.
 - Add OCR foundation: extract data from uploaded PI/CI/PL/SC/CO/goods invoices, show a review modal, then fill description, HS code, cartons, weights, CBM, marks, and notes.
-- Add server temp export handling: generate ZIP/PDF exports in a temp folder and clean old temp files.
+- Add server temp export handling: ZIP exports are generated in a temp folder and deleted after download; later add PDF export/cleanup scheduling if needed.
 - Connect final cost equations: shipping agent rate + clearance agent rate + origin/destination fees + delivery.
 - Refine full-container vs LCL workflows inside container profile.
 - Keep container ETD synced from the selected shipping agent carrier vessel date unless manually adjusted later.

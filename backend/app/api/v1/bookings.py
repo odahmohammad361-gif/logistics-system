@@ -1,13 +1,17 @@
 import os
+import re
 import uuid
+import json
 import shutil
+import zipfile
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -222,6 +226,38 @@ def _validate_goods_source(source: str | None) -> str | None:
     if normalized not in GOODS_SOURCES:
         raise HTTPException(400, "goods_source must be company_buying_service or client_ready_goods")
     return normalized
+
+
+def _safe_filename(value: str | None, fallback: str = "file") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", (value or fallback).strip()).strip("-._")
+    return cleaned or fallback
+
+
+def _json_default(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return str(value)
+
+
+def _zip_json(zf: zipfile.ZipFile, arcname: str, payload: dict | list) -> None:
+    zf.writestr(
+        arcname,
+        json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default),
+    )
+
+
+def _zip_file_if_exists(zf: zipfile.ZipFile, uploads_root: str, file_path: str | None, arcname: str) -> bool:
+    if not file_path:
+        return False
+    full_path = os.path.abspath(os.path.join(uploads_root, file_path))
+    if not full_path.startswith(os.path.abspath(uploads_root) + os.sep):
+        return False
+    if not os.path.isfile(full_path):
+        return False
+    zf.write(full_path, arcname)
+    return True
 
 
 def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
@@ -546,6 +582,177 @@ def get_booking(
     if not b:
         raise HTTPException(404, "Booking not found")
     return _serialize_booking(b)
+
+
+@router.get("/{booking_id}/archive.zip")
+def download_booking_archive_zip(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    _: User     = Depends(get_current_user),
+):
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(404, "Booking not found")
+
+    archive_root = _safe_filename(b.booking_number or f"booking-{booking_id}", f"booking-{booking_id}")
+    tmp_dir = os.path.join(UPLOAD_DIR, "_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    zip_path = os.path.join(tmp_dir, f"{archive_root}-{uuid.uuid4().hex}.zip")
+    uploads_root = os.path.dirname(UPLOAD_DIR)
+    used, capacity, pct = _fill_stats(b)
+
+    container_summary = {
+        "id": b.id,
+        "booking_number": b.booking_number,
+        "mode": b.mode,
+        "status": b.status,
+        "shipping_agent": b.agent.name if b.agent else None,
+        "carrier_name": b.carrier_name,
+        "agent_carrier_rate_id": b.agent_carrier_rate_id,
+        "container_size": b.container_size,
+        "container_no": b.container_no,
+        "seal_no": b.seal_no,
+        "bl_number": b.bl_number,
+        "awb_number": b.awb_number,
+        "vessel_name": b.vessel_name,
+        "voyage_number": b.voyage_number,
+        "flight_number": b.flight_number,
+        "port_of_loading": b.port_of_loading,
+        "port_of_discharge": b.port_of_discharge,
+        "destination": b.destination,
+        "etd": b.etd,
+        "eta": b.eta,
+        "incoterm": b.incoterm,
+        "freight_cost": b.freight_cost,
+        "currency": b.currency or "USD",
+        "markup_pct": b.markup_pct,
+        "max_cbm": b.max_cbm,
+        "total_cbm_used": used,
+        "container_cbm_capacity": capacity,
+        "fill_percent": pct,
+        "branch": {
+            "id": b.branch.id,
+            "name": b.branch.name,
+            "name_ar": getattr(b.branch, "name_ar", None),
+            "code": b.branch.code,
+        } if b.branch else None,
+        "notes": b.notes,
+        "created_at": b.created_at,
+        "updated_at": b.updated_at,
+    }
+    loading_summary = {
+        "loading_warehouse_id": b.loading_warehouse_id,
+        "loading_warehouse_name": b.loading_warehouse.name if b.loading_warehouse else None,
+        "loading_warehouse_city": b.loading_warehouse.city if b.loading_warehouse else None,
+        "loading_date": b.loading_date,
+        "loading_notes": b.loading_notes,
+        "photo_count": len(b.loading_photos),
+    }
+    cargo_summary = []
+    missing_files: list[dict] = []
+    readme = [
+        f"Container archive: {b.booking_number}",
+        f"Generated at: {datetime.utcnow().isoformat()}Z",
+        "",
+        "Folders:",
+        "- 01-container-summary: booking data snapshot",
+        "- 02-packing-list: cargo packing list JSON",
+        "- 03-loading: loading warehouse/date data and loading photos",
+        "- 04-clients: each client cargo line with its files grouped separately",
+        "",
+        "This export uses the current database values and uploaded originals at download time.",
+    ]
+
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{archive_root}/README.txt", "\n".join(readme))
+            _zip_json(zf, f"{archive_root}/01-container-summary/container-summary.json", container_summary)
+            _zip_json(zf, f"{archive_root}/02-packing-list/packing-list.json", get_packing_list(booking_id, db, _))
+            _zip_json(zf, f"{archive_root}/03-loading/loading-info.json", loading_summary)
+
+            for photo in b.loading_photos:
+                filename = _safe_filename(photo.original_filename or os.path.basename(photo.file_path), f"loading-photo-{photo.id}")
+                arcname = f"{archive_root}/03-loading/photos/{photo.id}-{filename}"
+                if not _zip_file_if_exists(zf, uploads_root, photo.file_path, arcname):
+                    missing_files.append({"kind": "loading_photo", "id": photo.id, "path": photo.file_path})
+
+            for line_index, line in enumerate(b.cargo_lines, start=1):
+                client_code = line.client.client_code if line.client else f"line-{line.id}"
+                client_name = line.client.name if line.client else f"Cargo Line {line.id}"
+                client_folder = f"{line_index:02d}-{_safe_filename(client_code, f'client-{line.id}')}-{_safe_filename(client_name, 'client')}"
+                client_root = f"{archive_root}/04-clients/{client_folder}"
+                line_summary = {
+                    "id": line.id,
+                    "client": {
+                        "id": line.client.id if line.client else None,
+                        "name": line.client.name if line.client else None,
+                        "name_ar": line.client.name_ar if line.client else None,
+                        "client_code": line.client.client_code if line.client else None,
+                        "country": line.client.country if line.client else None,
+                    },
+                    "sort_order": line.sort_order,
+                    "goods_source": line.goods_source,
+                    "is_full_container_client": bool(line.is_full_container_client),
+                    "description": line.description,
+                    "description_ar": line.description_ar,
+                    "hs_code": line.hs_code,
+                    "shipping_marks": line.shipping_marks,
+                    "cartons": line.cartons,
+                    "gross_weight_kg": line.gross_weight_kg,
+                    "net_weight_kg": line.net_weight_kg,
+                    "cbm": line.cbm,
+                    "carton_length_cm": line.carton_length_cm,
+                    "carton_width_cm": line.carton_width_cm,
+                    "carton_height_cm": line.carton_height_cm,
+                    "volumetric_weight_kg": line.volumetric_weight_kg,
+                    "chargeable_weight_kg": line.chargeable_weight_kg,
+                    "freight_share": line.freight_share,
+                    "clearance_through_us": line.clearance_through_us,
+                    "clearance_agent_id": line.clearance_agent_id,
+                    "clearance_agent_name": line.clearance_agent.name if line.clearance_agent else None,
+                    "clearance_agent_rate_id": line.clearance_agent_rate_id,
+                    "manual_clearance_agent_name": line.manual_clearance_agent_name,
+                    "manual_clearance_agent_phone": line.manual_clearance_agent_phone,
+                    "manual_clearance_agent_notes": line.manual_clearance_agent_notes,
+                    "notes": line.notes,
+                    "image_count": len(line.images),
+                    "document_count": len(line.documents),
+                    "created_at": line.created_at,
+                }
+                cargo_summary.append(line_summary)
+                _zip_json(zf, f"{client_root}/cargo-line.json", line_summary)
+
+                for img in line.images:
+                    filename = _safe_filename(img.original_filename or os.path.basename(img.file_path), f"cargo-photo-{img.id}")
+                    arcname = f"{client_root}/photos/{img.id}-{filename}"
+                    if not _zip_file_if_exists(zf, uploads_root, img.file_path, arcname):
+                        missing_files.append({"kind": "cargo_image", "id": img.id, "line_id": line.id, "path": img.file_path})
+
+                for doc in line.documents:
+                    doc_folder = _safe_filename(doc.custom_file_type if doc.document_type == "other" else doc.document_type, "document")
+                    filename = _safe_filename(doc.original_filename or os.path.basename(doc.file_path), f"document-{doc.id}")
+                    arcname = f"{client_root}/documents/{doc_folder}/{doc.id}-{filename}"
+                    if not _zip_file_if_exists(zf, uploads_root, doc.file_path, arcname):
+                        missing_files.append({"kind": "cargo_document", "id": doc.id, "line_id": line.id, "path": doc.file_path})
+
+            _zip_json(zf, f"{archive_root}/04-clients/client-cargo-summary.json", cargo_summary)
+            if missing_files:
+                _zip_json(zf, f"{archive_root}/missing-files.json", missing_files)
+    except Exception:
+        if os.path.isfile(zip_path):
+            os.remove(zip_path)
+        raise
+
+    def cleanup_zip() -> None:
+        if os.path.isfile(zip_path):
+            os.remove(zip_path)
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"{archive_root}-archive.zip",
+        background=BackgroundTask(cleanup_zip),
+    )
 
 
 # ── Update ────────────────────────────────────────────────────────────────────

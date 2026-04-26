@@ -11,7 +11,7 @@ import {
   getBooking, updateBooking, deleteBooking,
   addCargoLine, updateCargoLine, deleteCargoLine,
   getPackingList, updateLoadingInfo, uploadLoadingPhotos,
-  deleteLoadingPhoto,
+  deleteLoadingPhoto, downloadBookingArchiveZip,
 } from '@/services/bookingService'
 import { getBranches } from '@/services/branchService'
 import { useAuth } from '@/hooks/useAuth'
@@ -252,6 +252,7 @@ export default function BookingDetailPage() {
   const [savingCargo, setSavingCargo]             = useState(false)
   const [confirmDelete, setConfirmDelete]         = useState(false)
   const [confirmDeleteLine, setConfirmDeleteLine] = useState<number | null>(null)
+  const [downloadingZip, setDownloadingZip]       = useState(false)
 
   // Loading info state
   const [loadingWh, setLoadingWh]       = useState<string>('')
@@ -409,6 +410,17 @@ export default function BookingDetailPage() {
     a.click()
     URL.revokeObjectURL(url)
     setShowDownloadModal(false)
+  }
+
+  async function handleDownloadZipArchive() {
+    if (!booking) return
+    setDownloadingZip(true)
+    try {
+      await downloadBookingArchiveZip(bookingId, booking.booking_number)
+      setShowDownloadModal(false)
+    } finally {
+      setDownloadingZip(false)
+    }
   }
 
   if (isLoading) {
@@ -878,6 +890,10 @@ export default function BookingDetailPage() {
               <Download size={14} />
               {isRTL ? 'تحميل ملف جاهز للطباعة' : 'Download Print-Ready File'}
             </Button>
+            <Button onClick={handleDownloadZipArchive} loading={downloadingZip}>
+              <Download size={14} />
+              {isRTL ? 'تحميل أرشيف ZIP' : 'Download ZIP Archive'}
+            </Button>
           </>
         }
       >
@@ -898,6 +914,11 @@ export default function BookingDetailPage() {
                   {isRTL
                     ? 'سيتم وضع كل صورة أو ملف مرفوع حاليًا في صفحة منفصلة داخل ملف HTML جاهز للطباعة.'
                     : 'Each currently uploaded photo/file is placed on its own page inside a print-ready HTML file.'}
+                </span>
+                <span className="block text-xs text-brand-text-muted mt-1">
+                  {isRTL
+                    ? 'خيار ZIP يحفظ ملفات العملاء الأصلية في مجلدات منفصلة حسب العميل ونوع الملف.'
+                    : 'The ZIP option saves the original client files in separate folders by client and file type.'}
                 </span>
               </span>
             </label>

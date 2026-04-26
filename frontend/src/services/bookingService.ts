@@ -122,5 +122,18 @@ export const getLoadingPhotoUrl = (bookingId: number, photoId: number): string =
 export const getPackingList = (bookingId: number) =>
   api.get<Record<string, unknown>>(`${BASE}/${bookingId}/packing-list`).then((r) => r.data)
 
+export const downloadBookingArchiveZip = async (bookingId: number, bookingNumber?: string) => {
+  const res = await api.get<Blob>(`${BASE}/${bookingId}/archive.zip`, {
+    responseType: 'blob',
+    timeout: 120000,
+  })
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${bookingNumber || `container-${bookingId}`}-archive.zip`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export const getPorts = () =>
   api.get<{ loading: string[]; discharge: string[] }>(`${BASE}/ports`).then((r) => r.data)
