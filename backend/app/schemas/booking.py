@@ -62,6 +62,8 @@ class BookingCargoDocumentResponse(BaseModel):
 class BookingCargoLineCreate(BaseModel):
     client_id: int
     sort_order: int = 0
+    goods_source: Optional[str] = None
+    is_full_container_client: bool = False
     description: Optional[str] = None
     description_ar: Optional[str] = None
     hs_code: Optional[str] = None
@@ -85,6 +87,8 @@ class BookingCargoLineCreate(BaseModel):
 
 class BookingCargoLineUpdate(BaseModel):
     sort_order: Optional[int] = None
+    goods_source: Optional[str] = None
+    is_full_container_client: Optional[bool] = None
     description: Optional[str] = None
     description_ar: Optional[str] = None
     hs_code: Optional[str] = None
@@ -111,6 +115,8 @@ class BookingCargoLineResponse(BaseModel):
     booking_id: int
     client: ClientShort
     sort_order: int
+    goods_source: Optional[str] = None
+    is_full_container_client: bool = False
     description: Optional[str] = None
     description_ar: Optional[str] = None
     hs_code: Optional[str] = None

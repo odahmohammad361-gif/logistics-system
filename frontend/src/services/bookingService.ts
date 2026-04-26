@@ -54,7 +54,7 @@ export const getCargoImageUrl = (bookingId: number, lineId: number, imgId: numbe
 export const uploadCargoDocuments = (
   bookingId: number,
   lineId: number,
-  documentType: 'pl' | 'security_approval' | 'invoice' | 'other',
+  documentType: 'pi' | 'ci' | 'pl' | 'sc' | 'co' | 'bl_copy' | 'security_approval' | 'goods_invoice' | 'other',
   files: File[],
   customFileType?: string,
 ) => {

@@ -26,6 +26,8 @@ function clearanceMode(mode: BookingMode) {
 
 interface FormValues {
   client_id:          string
+  goods_source:       string
+  is_full_container_client: boolean
   description:        string
   description_ar:     string
   hs_code:            string
@@ -135,6 +137,8 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
     if (initial) {
       reset({
         client_id:        String(initial.client.id),
+        goods_source:     initial.goods_source ?? 'client_ready_goods',
+        is_full_container_client: initial.is_full_container_client ?? false,
         description:      initial.description      ?? '',
         description_ar:   initial.description_ar   ?? '',
         hs_code:          initial.hs_code           ?? '',
@@ -157,7 +161,8 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
       })
     } else {
       reset({
-        client_id:'', description:'', description_ar:'', hs_code:'', shipping_marks:'',
+        client_id:'', goods_source:'client_ready_goods', is_full_container_client:false,
+        description:'', description_ar:'', hs_code:'', shipping_marks:'',
         cartons:'', gross_weight_kg:'', net_weight_kg:'', cbm:'',
         carton_length_cm:'', carton_width_cm:'', carton_height_cm:'',
         freight_share:'', clearance_through_us:'us', clearance_agent_id:'',
@@ -191,6 +196,8 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
   async function handleFormSubmit(vals: FormValues) {
     await onSubmit({
       client_id:          parseInt(vals.client_id),
+      goods_source:       vals.goods_source || 'client_ready_goods',
+      is_full_container_client: Boolean(vals.is_full_container_client),
       description:        vals.description      || null,
       description_ar:     vals.description_ar   || null,
       hs_code:            vals.hs_code           || null,
@@ -259,6 +266,20 @@ export default function CargoLineForm({ open, onClose, onSubmit, mode, bookingId
             disabled={!!initial}
             {...register('client_id', { required: t('common.required') })}
           />
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Select
+              label={isAr ? 'مصدر البضاعة' : 'Goods Source'}
+              options={[
+                { value: 'client_ready_goods', label: isAr ? 'بضاعة جاهزة من العميل' : 'Client ready goods' },
+                { value: 'company_buying_service', label: isAr ? 'خدمة شراء عن طريق شركتنا' : 'Company buying service' },
+              ]}
+              {...register('goods_source')}
+            />
+            <label className="flex items-center gap-2 rounded-lg border border-brand-border bg-brand-surface px-3 py-2.5 text-sm text-brand-text-muted">
+              <input type="checkbox" className="accent-brand-primary" {...register('is_full_container_client')} />
+              <span>{isAr ? 'هذا العميل حجز الحاوية كاملة' : 'Full container for this client'}</span>
+            </label>
+          </div>
         </FormSection>
 
         <FormSection title={isAr ? 'التخليص الجمركي للعميل' : 'Client Customs Clearance'}>

@@ -32,7 +32,11 @@ UPLOAD_DIR = os.path.join(
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _AIR_DIVISOR = Decimal("6000")
-DOCUMENT_TYPES = {"pl", "security_approval", "invoice", "other"}
+DOCUMENT_TYPES = {
+    "pi", "ci", "pl", "sc", "co", "bl_copy",
+    "security_approval", "goods_invoice", "invoice", "other",
+}
+GOODS_SOURCES = {"company_buying_service", "client_ready_goods"}
 
 
 # ── Destination helpers ───────────────────────────────────────────────────────
@@ -199,6 +203,15 @@ def _validate_clearance_selection(db: Session, line_data) -> None:
                 raise HTTPException(404, "Clearance agent rate not found")
 
 
+def _validate_goods_source(source: str | None) -> str | None:
+    if not source:
+        return None
+    normalized = source.strip().lower()
+    if normalized not in GOODS_SOURCES:
+        raise HTTPException(400, "goods_source must be company_buying_service or client_ready_goods")
+    return normalized
+
+
 def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
     used = sum(Decimal(str(ln.cbm)) for ln in booking.cargo_lines if ln.cbm)
     capacity = CONTAINER_CBM.get(booking.container_size) if booking.container_size else None
@@ -217,6 +230,8 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
             client_code=line.client.client_code,
         ),
         sort_order=line.sort_order,
+        goods_source=line.goods_source,
+        is_full_container_client=bool(line.is_full_container_client),
         description=line.description,
         description_ar=line.description_ar,
         hs_code=line.hs_code,
@@ -657,6 +672,8 @@ def add_cargo_line(
         booking_id=booking_id,
         client_id=payload.client_id,
         sort_order=payload.sort_order,
+        goods_source=_validate_goods_source(payload.goods_source),
+        is_full_container_client=payload.is_full_container_client,
         description=payload.description or None,
         description_ar=payload.description_ar or None,
         hs_code=payload.hs_code or None,
@@ -705,6 +722,8 @@ def update_cargo_line(
         _assert_cargo_editable(b)
 
     data = payload.model_dump(exclude_unset=True)
+    if "goods_source" in data:
+        data["goods_source"] = _validate_goods_source(data["goods_source"])
     merged = {
         "clearance_through_us": line.clearance_through_us,
         "clearance_agent_id": line.clearance_agent_id,
@@ -861,7 +880,9 @@ async def upload_cargo_documents(
 ):
     doc_type = document_type.strip().lower()
     if doc_type not in DOCUMENT_TYPES:
-        raise HTTPException(400, "document_type must be pl, security_approval, invoice or other")
+        raise HTTPException(400, "document_type must be pi, ci, pl, sc, co, bl_copy, security_approval, goods_invoice or other")
+    if doc_type == "invoice":
+        doc_type = "goods_invoice"
     if doc_type == "other" and not custom_file_type:
         raise HTTPException(400, "custom_file_type is required for other documents")
     line = db.query(BookingCargoLine).filter(
@@ -871,7 +892,8 @@ async def upload_cargo_documents(
     if not line:
         raise HTTPException(404, "Cargo line not found")
 
-    doc_dir = os.path.join(UPLOAD_DIR, str(booking_id), str(line_id), "documents", doc_type)
+    client_folder = (line.client.client_code if line.client else f"line-{line_id}").replace("/", "-")
+    doc_dir = os.path.join(UPLOAD_DIR, str(booking_id), "clients", client_folder, "documents", doc_type)
     os.makedirs(doc_dir, exist_ok=True)
 
     created: list[BookingCargoDocument] = []
@@ -885,7 +907,7 @@ async def upload_cargo_documents(
             cargo_line_id=line_id,
             document_type=doc_type,
             custom_file_type=custom_file_type if doc_type == "other" else None,
-            file_path=f"bookings/{booking_id}/{line_id}/documents/{doc_type}/{fname}",
+            file_path=f"bookings/{booking_id}/clients/{client_folder}/documents/{doc_type}/{fname}",
             original_filename=f.filename,
         )
         db.add(doc)
@@ -1087,6 +1109,8 @@ def get_packing_list(
             "client_name": ln.client.name if ln.client else "",
             "client_name_ar": ln.client.name_ar if ln.client else "",
             "client_code": ln.client.client_code if ln.client else "",
+            "goods_source": ln.goods_source,
+            "is_full_container_client": bool(ln.is_full_container_client),
             "shipping_marks": ln.shipping_marks or "",
             "description": ln.description or "",
             "description_ar": ln.description_ar or "",

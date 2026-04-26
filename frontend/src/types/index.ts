@@ -486,7 +486,7 @@ export interface BookingCargoImage {
 
 export interface BookingCargoDocument {
   id: number
-  document_type: 'pl' | 'security_approval' | 'invoice' | 'other'
+  document_type: 'pi' | 'ci' | 'pl' | 'sc' | 'co' | 'bl_copy' | 'security_approval' | 'goods_invoice' | 'other'
   custom_file_type: string | null
   file_path: string
   original_filename: string | null
@@ -498,6 +498,8 @@ export interface BookingCargoLine {
   booking_id: number
   client: { id: number; name: string; name_ar: string | null; client_code: string }
   sort_order: number
+  goods_source: 'company_buying_service' | 'client_ready_goods' | null
+  is_full_container_client: boolean
   description: string | null
   description_ar: string | null
   hs_code: string | null

@@ -98,6 +98,8 @@ class BookingCargoLine(Base):
     sort_order = Column(Integer, default=0)
 
     # Cargo description
+    goods_source   = Column(String(40),  nullable=True)   # company_buying_service | client_ready_goods
+    is_full_container_client = Column(Boolean, nullable=False, default=False)
     description    = Column(Text,        nullable=True)
     description_ar = Column(Text,        nullable=True)
     hs_code        = Column(String(30),  nullable=True)

@@ -51,19 +51,32 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
 
   const clientName = isRTL ? (line.client.name_ar ?? line.client.name) : line.client.name
   const docLabel = (doc: BookingCargoDocument) => {
+    if (doc.document_type === 'pi') return 'PI'
+    if (doc.document_type === 'ci') return 'CI'
     if (doc.document_type === 'pl') return isRTL ? 'PL / قائمة تعبئة' : 'PL / Packing List'
+    if (doc.document_type === 'sc') return 'SC'
+    if (doc.document_type === 'co') return isRTL ? 'CO / شهادة المنشأ' : 'CO / Certificate of Origin'
+    if (doc.document_type === 'bl_copy') return isRTL ? 'نسخة B/L' : 'B/L Copy'
     if (doc.document_type === 'security_approval') return isRTL ? 'موافقات أمنية' : 'Security Approval'
-    if (doc.document_type === 'invoice') return isRTL ? 'فواتير البضاعة' : 'Goods Invoice'
+    if (doc.document_type === 'goods_invoice') return isRTL ? 'فواتير البضاعة' : 'Goods Invoice'
     return doc.custom_file_type || (isRTL ? 'ملف آخر' : 'Other File')
   }
   const docsByType = {
+    pi: line.documents.filter(d => d.document_type === 'pi').length,
+    ci: line.documents.filter(d => d.document_type === 'ci').length,
     pl: line.documents.filter(d => d.document_type === 'pl').length,
+    sc: line.documents.filter(d => d.document_type === 'sc').length,
+    co: line.documents.filter(d => d.document_type === 'co').length,
+    bl_copy: line.documents.filter(d => d.document_type === 'bl_copy').length,
     security_approval: line.documents.filter(d => d.document_type === 'security_approval').length,
-    invoice: line.documents.filter(d => d.document_type === 'invoice').length,
+    goods_invoice: line.documents.filter(d => d.document_type === 'goods_invoice').length,
     other: line.documents.filter(d => d.document_type === 'other').length,
   }
 
-  async function handleDocumentUpload(type: 'pl' | 'security_approval' | 'invoice' | 'other', files: File[]) {
+  async function handleDocumentUpload(
+    type: 'pi' | 'ci' | 'pl' | 'sc' | 'co' | 'bl_copy' | 'security_approval' | 'goods_invoice' | 'other',
+    files: File[],
+  ) {
     if (!files.length) return
     if (type === 'other' && !otherFileType.trim()) return
     setUploadingDoc(type)
@@ -110,6 +123,23 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
             </button>
           )}
         </div>
+      </div>
+
+      {/* Goods source */}
+      <div className="px-4 py-2 border-b border-brand-border/50 bg-white/[0.02] flex flex-wrap items-center gap-2">
+        <span className="text-[10px] text-brand-text-muted uppercase tracking-wide">
+          {isRTL ? 'مصدر البضاعة' : 'Goods Source'}
+        </span>
+        <span className="rounded-full bg-brand-primary/10 text-brand-primary-light px-2 py-0.5 text-[10px] font-semibold">
+          {line.goods_source === 'company_buying_service'
+            ? (isRTL ? 'خدمة شراء عن طريق شركتنا' : 'Company buying service')
+            : (isRTL ? 'بضاعة جاهزة من العميل' : 'Client ready goods')}
+        </span>
+        {line.is_full_container_client && (
+          <span className="rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold">
+            {isRTL ? 'حاوية كاملة لهذا العميل' : 'Full container client'}
+          </span>
+        )}
       </div>
 
       {/* Clearance */}
@@ -207,9 +237,14 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           <div className="px-4 pb-4 space-y-3">
             <div className="grid sm:grid-cols-2 gap-2">
               {([
+                { type: 'pi' as const, label: isRTL ? 'رفع PI' : 'Upload PI', icon: Receipt, count: docsByType.pi },
+                { type: 'ci' as const, label: isRTL ? 'رفع CI' : 'Upload CI', icon: Receipt, count: docsByType.ci },
                 { type: 'pl' as const, label: isRTL ? 'رفع PL' : 'Upload PL', icon: FileText, count: docsByType.pl },
+                { type: 'sc' as const, label: isRTL ? 'رفع SC' : 'Upload SC', icon: FileText, count: docsByType.sc },
+                { type: 'co' as const, label: isRTL ? 'رفع CO' : 'Upload CO', icon: FileText, count: docsByType.co },
+                { type: 'bl_copy' as const, label: isRTL ? 'رفع نسخة B/L' : 'Upload B/L Copy', icon: FileText, count: docsByType.bl_copy },
                 { type: 'security_approval' as const, label: isRTL ? 'رفع موافقات أمنية' : 'Upload Security Approvals', icon: ShieldCheck, count: docsByType.security_approval },
-                { type: 'invoice' as const, label: isRTL ? 'رفع فواتير البضاعة' : 'Upload Goods Invoices', icon: Receipt, count: docsByType.invoice },
+                { type: 'goods_invoice' as const, label: isRTL ? 'رفع فواتير البضاعة' : 'Upload Goods Invoices', icon: Receipt, count: docsByType.goods_invoice },
               ]).map(item => {
                 const Icon = item.icon
                 return (
@@ -222,7 +257,7 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
                     <span>{item.label}{item.count > 0 ? ` (${item.count})` : ''}</span>
                     <input
                       type="file"
-                      multiple={item.type !== 'pl'}
+                      multiple={!['pi', 'ci', 'pl', 'sc', 'co', 'bl_copy'].includes(item.type)}
                       className="hidden"
                       onChange={e => {
                         handleDocumentUpload(item.type, Array.from(e.target.files ?? []))
