@@ -1,135 +1,233 @@
 # Logistics System — Jordan / China / Iraq
 
-Full-stack logistics management system for shipping, trading, and wholesale operations.
-Arabic-first UI with English toggle. Built with FastAPI + React + PostgreSQL.
+Full-stack logistics management system for shipping, clearance, trading, invoicing, clients, and operations.
+
+The UI is Arabic-first with English support. The backend is FastAPI, the frontend is React + TypeScript, and the database is PostgreSQL.
+
+---
+
+## Current Status
+
+The system is active and under fast development. Shipping agent and clearance agent pricing were recently expanded, and the next major work area is the container section.
+
+Current focus before the next round:
+
+- Keep shipping agent prices connected to carrier, container size, port, warehouse, and validity dates.
+- Keep clearance agent prices connected to clearance type, country/port, container size, and carrier when needed.
+- Prepare the container profile to become the main place where booking, shipping price, clearance price, and later final cost equations connect together.
 
 ---
 
 ## Tech Stack
 
-| Layer      | Technology                                      |
-|------------|-------------------------------------------------|
-| Backend    | FastAPI (Python 3.13), SQLAlchemy 2, Alembic    |
-| Database   | PostgreSQL 16 (Docker local / AWS Aurora prod)  |
-| Frontend   | React + TypeScript + Vite + Tailwind CSS        |
-| Auth       | JWT (access + refresh tokens), bcrypt           |
-| PDF        | WeasyPrint                                      |
-| Proxy      | Nginx (rate limiting, security headers, HTTPS)  |
-| Container  | Docker + docker-compose                         |
+| Layer | Technology |
+| --- | --- |
+| Backend | FastAPI, SQLAlchemy, Alembic, Python 3.13 |
+| Database | PostgreSQL 16 locally, AWS Aurora/PostgreSQL in production |
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| Auth | JWT access + refresh tokens, bcrypt |
+| PDF | WeasyPrint |
+| Proxy | Nginx |
+| Containers | Docker + Docker Compose |
 
 ---
 
-## Modules
+## Main Modules
 
-| Module | Description |
-|--------|-------------|
-| Clients | Core module — all others link to it. Auto-generated client codes per branch |
-| Invoices | PI / CI / PL / SC + Price Offer. PDF export (EN + AR) |
-| Containers | Sea (20GP/40FT/40HQ) + Air booking. Status flow. Link to agent |
-| Shipping Agents | Price quotes (SEA/AIR/LCL), quick-reference prices, market board display |
-| Clearance Agents | Fee tracking (clearance, service, transport, handling, storage) |
-| Market Board | Live USD exchange rates, agent prices, top clients — TV display + management page |
-| Users | Role-based access: super_admin / admin / branch_manager / staff / viewer |
-| Company | Company settings, logo, stamp for PDF generation |
+| Module | Current Behavior |
+| --- | --- |
+| Clients | Client profiles, branch assignment, generated client codes |
+| Invoices | PI, CI, PL, SC, price offers, PDF export in Arabic and English |
+| Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
+| Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
+| Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
+| Market Board | Currency rates, agent prices, top clients, public TV view |
+| Users | Role-based access |
+| Company | Company info, logo, stamp, warehouses |
+
+---
+
+## Shipping Agent Pricing
+
+Shipping agent pricing is now split between current active offers and history.
+
+Sea price fields include:
+
+- Carrier name.
+- Port of loading and port of discharge.
+- Loading warehouse.
+- Effective date and expiry date.
+- Sealing date and vessel date.
+- FCL buy/sell prices by container size: `20GP`, `40GP`, `40HQ`.
+- LCL buy/sell per CBM by container size.
+- Origin fees from loading warehouse to loading port to Aqaba/Jordan side: loading workers, B/L, trucking, and other fees.
+- Markup application and editable current rates.
+
+Air price fields include:
+
+- Multiple carrier offers.
+- Warehouse, origin/destination airport style flow.
+- Buy/sell per kg.
+- Minimum and maximum load.
+- Transit days.
+
+Expired weekly shipping offers should appear in history, while current offers stay in current rates.
+
+---
+
+## Clearance Agent Pricing
+
+Clearance agents now use profile-style cards, similar to shipping agents.
+
+Clearance prices are permanent editable rates, not weekly offers. Changes are tracked in an edit log.
+
+Each clearance quote can define:
+
+- Sea or air clearance.
+- Country and port/airport.
+- Container size when sea clearance depends on container size.
+- Carrier when a clearance price changes by carrier.
+- Clearance fees.
+- Import/export card percentage.
+- Transportation route and cost.
+- Delivery authorization fees.
+- Inspection ramp fees for sea.
+- Port inspection fees for sea.
+- Buy and sell values, with percentage markup support.
+
+The add/update clearance price modal supports multiple quote entries in the same page.
+
+---
+
+## Container Section Baseline
+
+The container section currently shows booking cards for sea and air cargo. Cards are clickable and open the container profile directly.
+
+The next big container work should connect:
+
+- Selected shipping agent current carrier rate.
+- Selected clearance agent rate.
+- Container size.
+- Carrier.
+- Ports and warehouse.
+- Sea/air booking type.
+- Future final cost equation after Aqaba/Jordan and destination-side fees.
+
+This README section is intentionally kept as a baseline before the next major container redesign.
 
 ---
 
 ## Branches
 
 | Code | Country |
-|------|---------|
-| JO   | Jordan  |
-| CN   | China   |
-| IQ   | Iraq    |
+| --- | --- |
+| JO | Jordan |
+| CN | China |
+| IQ | Iraq |
 
 ---
 
 ## Project Structure
 
-```
+```text
 logistics-system-jo/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/          # Route handlers (auth, users, clients, invoices,
-│   │   │                    #   containers, shipping_agents, clearance_agents,
-│   │   │                    #   market, company, branches)
-│   │   ├── core/            # Security, JWT, permissions, rate limiter
-│   │   ├── models/          # SQLAlchemy ORM models
-│   │   ├── schemas/         # Pydantic request/response schemas
-│   │   ├── utils/           # PDF generator, currency fetcher, number-to-words
-│   │   ├── config.py        # Settings from .env
-│   │   ├── database.py      # Engine + session + Base
-│   │   └── main.py          # FastAPI app, CORS, security headers, routers
-│   ├── alembic/             # DB migrations
-│   ├── scripts/seed.py      # Seeds branches + first super_admin
+│   │   ├── api/v1/          # FastAPI route handlers
+│   │   ├── core/            # Auth, security, permissions, rate limiter
+│   │   ├── models/          # SQLAlchemy models
+│   │   ├── schemas/         # Pydantic schemas
+│   │   ├── utils/           # PDF, currency, helper utilities
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   └── main.py
+│   ├── alembic/             # Database migrations
+│   ├── scripts/             # Seed and utility scripts
 │   ├── requirements.txt
-│   ├── Dockerfile           # Dev
-│   └── Dockerfile.prod      # Production (multi-stage, non-root)
+│   ├── Dockerfile
+│   └── Dockerfile.prod
 ├── frontend/
-│   └── src/
-│       ├── components/      # UI components (layout, ui, invoice, dashboard)
-│       ├── pages/           # All page components
-│       ├── services/        # API client functions
-│       ├── store/           # Zustand stores (auth, UI)
-│       ├── hooks/           # useAuth, useRTL
-│       ├── i18n/            # en.json + ar.json translations
-│       └── types/           # Shared TypeScript types
+│   ├── src/
+│   │   ├── components/
+│   │   ├── constants/
+│   │   ├── hooks/
+│   │   ├── i18n/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── store/
+│   │   └── types/
+│   ├── package.json
+│   └── Dockerfile.prod
 ├── nginx/
-│   └── nginx.conf           # Rate limiting, security headers, SSL template
-├── docker-compose.yml       # Local dev (DB + backend + frontend)
-├── docker-compose.prod.yml  # Production (AWS Aurora, nginx, no DB container)
-└── .env                     # Secrets — never commit
+│   └── nginx.conf
+├── docker-compose.yml
+├── docker-compose.prod.yml
+└── .env
 ```
 
 ---
 
-## Quick Start (Local Dev)
+## Local Development
 
-### Prerequisites
-- Docker + Docker Compose v2
-- Python 3.13 + venv
-- Node.js 20+
+Start the Docker services:
 
-### 1. Start the database
 ```bash
-docker compose up db -d
+docker compose up -d --build
 ```
 
-### 2. Run backend locally
+Local URLs:
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+- API docs: http://localhost:8000/api/docs
+- PostgreSQL: localhost:5433
+
+Run migrations manually if needed:
+
+```bash
+docker exec logistics_backend alembic upgrade head
+```
+
+Default seed user:
+
+```text
+admin@logistics.jo
+Admin@1234
+```
+
+---
+
+## Frontend Commands
+
+```bash
+cd frontend
+npm install
+npm run dev
+npm run build
+```
+
+---
+
+## Backend Commands
+
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-export SECRET_KEY="your-dev-secret"
-export DATABASE_URL="postgresql://logistics_user:logistics_pass@localhost:5432/logistics_db"
-
 alembic upgrade head
-python scripts/seed.py          # creates branches + first admin
 uvicorn app.main:app --reload --port 8000
 ```
 
-Default credentials: `admin@logistics.jo` / `Admin@1234`
-
-### 3. Run frontend locally
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open: http://localhost:5173
-
-### 4. API Docs (dev only)
-Open: http://localhost:8000/api/docs
-
 ---
 
-## Environment Variables (`.env`)
+## Environment Variables
+
+Example development values:
 
 ```env
 APP_ENV=development
-SECRET_KEY=change-this-in-production-use-openssl-rand-hex-32
+SECRET_KEY=change-this-in-production
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
@@ -140,130 +238,87 @@ POSTGRES_HOST=db
 POSTGRES_PORT=5432
 DATABASE_URL=postgresql://logistics_user:logistics_pass@db:5432/logistics_db
 
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8000
 ALLOWED_HOSTS=*
 
 CURRENCY_API_KEY=your-exchangerate-api-key
 MIN_PASSWORD_LENGTH=8
 ```
 
+Never commit real `.env` secrets.
+
 ---
 
-## Production Deployment
+## Production / VPS Deployment
+
+The current production compose is configured for development access by IP on port `8000`, because ports `80` and `443` are used by another official website on the same server.
+
+Production app URL example:
+
+```text
+http://SERVER_IP:8000/
+```
+
+Deploy from the server:
 
 ```bash
-# 1. Set .env with production values:
-#    APP_ENV=production
-#    DATABASE_URL=postgresql://user:pass@aurora-endpoint:5432/logistics_db
-#    SECRET_KEY=$(openssl rand -hex 32)
-#    ALLOWED_ORIGINS=https://yourdomain.com
-#    ALLOWED_HOSTS=yourdomain.com
-
-# 2. Place SSL certs (Let's Encrypt / ACM):
-#    nginx/certs/fullchain.pem
-#    nginx/certs/privkey.pem
-
-# 3. Run migrations against Aurora:
-cd backend
-export DATABASE_URL="postgresql://..."
-alembic upgrade head
-
-# 4. Build and start all services:
+git pull
 docker compose -f docker-compose.prod.yml up -d --build
+docker exec logistics_backend alembic upgrade head
+docker compose -f docker-compose.prod.yml restart backend nginx
 ```
 
-**Services started:** nginx (80/443) → backend (internal :8000). No DB container — uses Aurora.
-
----
-
-## Build Log
-
-### Phase 1 — Docker + PostgreSQL ✓
-- `docker-compose.yml` with PostgreSQL 16, backend, frontend services
-- `docker-compose.prod.yml` for production (no DB — AWS Aurora)
-- `.env` configuration
-- **Fix:** Docker Compose v2 manual install on Kali Linux via GitHub releases
-
-### Phase 2 — Backend Core ✓
-- All ORM models, Alembic migrations, FastAPI app skeleton
-- **Fix:** `pillow==11.0.0` for Python 3.13; `alembic/script.py.mako` template fix
-
-### Phase 3 — Auth System ✓
-- JWT (access + refresh), bcrypt, role hierarchy, seed script
-- **Fix:** Replaced `passlib` with direct `bcrypt` calls (passlib broken on Python 3.13)
-
-### Phase 4 — Client Module ✓
-- Full CRUD, soft delete, auto client codes (JO-0001, CN-0001, IQ-0001), branch assignment
-
-### Phase 5 — Invoicing System ✓
-- PI / CI / PL / SC / Price Offer, WeasyPrint PDF (EN + AR), company settings
-- Auto invoice numbering, item images, stamp uploads
-
-### Phase 6 — Container Booking ✓
-- Sea + air bookings, status flow (BOOKING → DELIVERED), link to client + agent
-- Auto booking numbers: `SEA-2026-0001` / `AIR-2026-0001`
-
-### Phase 7 — Shipping Agents ✓
-- Quote model (SEA_FCL/AIR/LCL), all charge types, auto quote numbers
-- Compare endpoint: cheapest-first sorted by route/mode/type
-
-### Phase 8 — Clearance Agents ✓
-- Full CRUD, fee fields, `total_fixed_fees` computed field
-
-### Phase 9 — Market Board ✓
-- Live USD rates (exchangerate-api.com), 30-min DB cache, 6 currencies
-- Top clients by revenue (CI invoices) + by shipments (containers)
-- Agent quick prices + active quote comparison — single `/board` endpoint (no auth)
-
-### Phase 10 — Frontend Foundation ✓
-- Vite + React + TypeScript + Tailwind CSS
-- Zustand state management, React Query, axios with JWT interceptor
-- i18n RTL/LTR (Arabic/English), Cairo + Inter fonts
-- All API services, protected routes, login page
-
-### Phase 11 — Frontend Theme ✓
-- Premium dark design system: brand colors, card shadows, animations
-- Sidebar (collapsible, RTL-aware, mobile overlay), TopBar (lang toggle, avatar)
-- Table (skeleton loading, empty state with icon), Modal (mobile slide-up, Escape key)
-- StatCard with color variants, Dashboard with live stats + welcome message
-
-### Phase 12 — Frontend Pages ✓
-All pages implemented:
-- Dashboard, Clients, Invoices, Containers, Shipping Agents, Clearance Agents
-- Market Board, Users, Company Settings, Login
-- TV Display (Portal) — fullscreen, no auth, auto-refresh 30s
-
-### Phase 13 — Market Board TV Display ✓
-- Portal page: currency ticker (animated), exchange rates, top clients
-- Agent quick prices (container + air), detailed active quotes
-- Live clock + date in Arabic, company branding
-
-### Phase 14 — Security Hardening ✓
-- **Rate limiting:** 10 req/min on `/login` (brute force protection), 30 req/s general API
-- **Security headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `HSTS` (production)
-- **CORS:** explicit methods/headers, no wildcard in production
-- **TrustedHostMiddleware:** production-only host validation
-- **Password validation:** minimum length enforced on create + update
-- **Nginx:** rate limiting zones, `server_tokens off`, CSP header, hidden backend headers
-- **Limiter module:** extracted to `app/core/limiter.py` (no circular imports)
-
-### Phase 15 — Production Config ✓
-- `Dockerfile.prod` (backend): multi-stage build, Python 3.13-slim, non-root user (uid 1001)
-- `Dockerfile.prod` (frontend): `npm ci --omit=dev`, `VITE_API_URL` ARG
-- `docker-compose.prod.yml`: healthchecks, `--proxy-headers`, nginx with SSL template
-- `nginx.conf`: rate limiting zones (login: 5/min, api: 30/s), gzip, static asset caching, HTTPS template
-
----
-
-## Restart Backend (Local Dev)
+If the frontend still shows an old UI after rebuild, clear the frontend build volume and rebuild:
 
 ```bash
-cd ~/Desktop/logistics-system-jo/backend
-source .venv/bin/activate
-export SECRET_KEY="dev-secret-key"
-export DATABASE_URL="postgresql://logistics_user:logistics_pass@localhost:5432/logistics_db"
-uvicorn app.main:app --reload --port 8000
+docker compose -f docker-compose.prod.yml down
+docker volume rm logistics-system_frontend_dist
+docker compose -f docker-compose.prod.yml up -d --build
+docker exec logistics_backend alembic upgrade head
+docker compose -f docker-compose.prod.yml restart backend nginx
 ```
 
-API docs: http://localhost:8000/api/docs
-Admin: `admin@logistics.jo` / `Admin@1234`
+Check running containers and ports:
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+```
+
+Expected logistics ports:
+
+```text
+logistics_nginx     0.0.0.0:8000->80/tcp
+logistics_backend   8000/tcp
+```
+
+---
+
+## Git Notes
+
+Before pulling on the server, make sure local server edits are committed or stashed:
+
+```bash
+git status
+git stash push -m "server local changes"
+git pull
+```
+
+Do not commit:
+
+- `.env`
+- Local notes such as `log.txt`
+- Temporary files
+- Docker volumes or build output
+
+---
+
+## Next Planned Work
+
+Container section redesign:
+
+- Click container card to profile as the normal workflow.
+- Move edit, price selection, documents, status actions, and cost details inside the profile.
+- Connect container bookings with shipping agent current rates.
+- Connect container bookings with clearance agent rates.
+- Use container size and carrier as key references for sea workflows.
+- Prepare later equations for full cost from origin warehouse through port, Aqaba/Jordan, clearance, destination transport, and final delivery.
