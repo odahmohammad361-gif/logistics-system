@@ -15,6 +15,7 @@ from app.models.user import User, UserRole
 from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingLoadingPhoto, CONTAINER_CBM
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
+from app.models.shipping_agent import AgentCarrierRate
 from app.schemas.booking import (
     BookingCreate, BookingUpdate, BookingResponse, BookingListResponse, BookingListItem,
     BookingCargoLineCreate, BookingCargoLineUpdate, BookingCargoLineResponse,
@@ -48,6 +49,60 @@ def _port_to_destination(port: str | None) -> str | None:
     if any(kw in p for kw in IRAQ_KEYWORDS):
         return 'iraq'
     return None
+
+
+def _margin_pct(buy: Decimal | None, sell: Decimal | None) -> Decimal:
+    if not buy or not sell or buy <= 0:
+        return Decimal("0")
+    return ((sell - buy) / buy * Decimal("100")).quantize(Decimal("0.01"))
+
+
+def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str | None) -> dict:
+    """Return the immutable booking pricing/routing values from a forwarder rate."""
+    size = (container_size or "").upper()
+    if mode == "AIR":
+        return {
+            "carrier_name": rate.carrier_name,
+            "port_of_loading": rate.pol,
+            "port_of_discharge": rate.pod,
+            "freight_cost": rate.buy_air_kg,
+            "max_cbm": None,
+            "markup_pct": _margin_pct(rate.buy_air_kg, rate.sell_air_kg),
+            "container_size": None,
+        }
+
+    if mode == "LCL":
+        lcl = {
+            "20GP": (rate.buy_lcl_20gp or rate.buy_lcl_cbm, rate.sell_lcl_20gp or rate.sell_lcl_cbm, rate.cbm_20gp or Decimal("28")),
+            "40GP": (rate.buy_lcl_40ft or rate.buy_lcl_cbm, rate.sell_lcl_40ft or rate.sell_lcl_cbm, rate.cbm_40ft or Decimal("67")),
+            "40HQ": (rate.buy_lcl_40hq or rate.buy_lcl_cbm, rate.sell_lcl_40hq or rate.sell_lcl_cbm, rate.cbm_40hq or Decimal("76")),
+        }
+        buy, sell, cap = lcl.get(size, (None, None, None))
+        return {
+            "carrier_name": rate.carrier_name,
+            "port_of_loading": rate.pol,
+            "port_of_discharge": rate.pod,
+            "freight_cost": buy,
+            "max_cbm": cap,
+            "markup_pct": _margin_pct(buy, sell),
+            "container_size": size or None,
+        }
+
+    fcl = {
+        "20GP": (rate.buy_20gp, rate.sell_20gp, rate.cbm_20gp or Decimal("28")),
+        "40GP": (rate.buy_40ft, rate.sell_40ft, rate.cbm_40ft or Decimal("67")),
+        "40HQ": (rate.buy_40hq, rate.sell_40hq, rate.cbm_40hq or Decimal("76")),
+    }
+    buy, sell, cap = fcl.get(size, (None, None, None))
+    return {
+        "carrier_name": rate.carrier_name,
+        "port_of_loading": rate.pol,
+        "port_of_discharge": rate.pod,
+        "freight_cost": buy,
+        "max_cbm": cap,
+        "markup_pct": _margin_pct(buy, sell),
+        "container_size": size or None,
+    }
 
 
 def _client_destination(client: Client) -> str | None:
@@ -329,6 +384,19 @@ def create_booking(
     if mode not in ("LCL", "FCL", "AIR"):
         raise HTTPException(400, "mode must be LCL, FCL or AIR")
 
+    rate_snapshot = None
+    if payload.agent_carrier_rate_id:
+        rate = db.query(AgentCarrierRate).filter(
+            AgentCarrierRate.id == payload.agent_carrier_rate_id,
+            AgentCarrierRate.is_active == True,  # noqa: E712
+        ).first()
+        if not rate:
+            raise HTTPException(404, "Agent carrier rate not found")
+        if payload.shipping_agent_id and rate.agent_id != payload.shipping_agent_id:
+            raise HTTPException(400, "Selected carrier rate does not belong to this shipping agent")
+        rate_snapshot = _rate_snapshot_values(rate, mode, payload.container_size)
+        payload.shipping_agent_id = rate.agent_id
+
     booking = Booking(
         booking_number=_generate_booking_number(db, mode),
         mode=mode,
@@ -336,7 +404,7 @@ def create_booking(
         shipping_agent_id=payload.shipping_agent_id,
         agent_carrier_rate_id=payload.agent_carrier_rate_id,
         branch_id=payload.branch_id,
-        container_size=payload.container_size,
+        container_size=(rate_snapshot["container_size"] if rate_snapshot else payload.container_size),
         container_no=payload.container_no or None,
         seal_no=payload.seal_no or None,
         bl_number=payload.bl_number or None,
@@ -344,19 +412,19 @@ def create_booking(
         vessel_name=payload.vessel_name or None,
         voyage_number=payload.voyage_number or None,
         flight_number=payload.flight_number or None,
-        port_of_loading=payload.port_of_loading or None,
-        port_of_discharge=payload.port_of_discharge or None,
+        port_of_loading=(rate_snapshot["port_of_loading"] if rate_snapshot and rate_snapshot["port_of_loading"] else payload.port_of_loading) or None,
+        port_of_discharge=(rate_snapshot["port_of_discharge"] if rate_snapshot and rate_snapshot["port_of_discharge"] else payload.port_of_discharge) or None,
         etd=payload.etd,
         eta=payload.eta,
         incoterm=payload.incoterm or None,
-        freight_cost=payload.freight_cost,
-        currency=payload.currency or "USD",
+        freight_cost=(rate_snapshot["freight_cost"] if rate_snapshot else payload.freight_cost),
+        currency="USD",
         notes=payload.notes or None,
         is_direct_booking="1" if payload.is_direct_booking else "0",
-        carrier_name=payload.carrier_name or None,
-        max_cbm=payload.max_cbm,
-        markup_pct=payload.markup_pct,
-        destination=_port_to_destination(payload.port_of_discharge),
+        carrier_name=(rate_snapshot["carrier_name"] if rate_snapshot else payload.carrier_name) or None,
+        max_cbm=(rate_snapshot["max_cbm"] if rate_snapshot else payload.max_cbm),
+        markup_pct=(rate_snapshot["markup_pct"] if rate_snapshot else payload.markup_pct),
+        destination=_port_to_destination((rate_snapshot["port_of_discharge"] if rate_snapshot and rate_snapshot["port_of_discharge"] else payload.port_of_discharge)),
     )
     # Mark snapshot if created from an agent carrier rate
     if payload.agent_carrier_rate_id:
