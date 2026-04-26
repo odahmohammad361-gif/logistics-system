@@ -22,6 +22,7 @@ import CapacityMeter from '@/components/booking/CapacityMeter'
 import CargoLineCard from '@/components/booking/CargoLineCard'
 import CargoLineForm from '@/components/booking/CargoLineForm'
 import BookingForm from '@/components/booking/BookingForm'
+import FilePreviewModal from '@/components/booking/FilePreviewModal'
 import type { Booking, BookingCargoLine, BookingMode } from '@/types'
 import clsx from 'clsx'
 
@@ -254,6 +255,7 @@ export default function BookingDetailPage() {
   const [confirmDelete, setConfirmDelete]         = useState(false)
   const [confirmDeleteLine, setConfirmDeleteLine] = useState<number | null>(null)
   const [downloadingZip, setDownloadingZip]       = useState(false)
+  const [previewFile, setPreviewFile]             = useState<{ title: string; url: string; filename?: string | null } | null>(null)
 
   // Loading info state
   const [loadingWh, setLoadingWh]       = useState<string>('')
@@ -757,7 +759,15 @@ export default function BookingDetailPage() {
           {booking.loading_photos.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {booking.loading_photos.map(photo => (
-                <div key={photo.id} className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border">
+                <div
+                  key={photo.id}
+                  onClick={() => setPreviewFile({
+                    title: photo.original_filename || (isRTL ? 'صورة تحميل' : 'Loading photo'),
+                    url: `/uploads/${photo.file_path}`,
+                    filename: photo.original_filename,
+                  })}
+                  className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border cursor-pointer"
+                >
                   <img
                     src={`/uploads/${photo.file_path}`}
                     alt={photo.original_filename ?? ''}
@@ -769,7 +779,8 @@ export default function BookingDetailPage() {
                     </div>
                   )}
                   <button
-                    onClick={() => handleDeletePhoto(photo.id)}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id) }}
                     disabled={deletingPhoto === photo.id}
                     className="absolute top-1 end-1 p-1 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                   >
@@ -1017,6 +1028,15 @@ export default function BookingDetailPage() {
         saving={savingCargo}
         errorMessage={cargoError}
       />
+      {previewFile && (
+        <FilePreviewModal
+          open={!!previewFile}
+          onClose={() => setPreviewFile(null)}
+          title={previewFile.title}
+          url={previewFile.url}
+          filename={previewFile.filename}
+        />
+      )}
     </div>
   )
 }

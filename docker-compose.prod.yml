@@ -29,6 +29,8 @@ services:
     env_file: .env
     environment:
       APP_ENV: production
+    volumes:
+      - uploads_data:/app/uploads
     expose:
       - "8000"
     healthcheck:
@@ -71,3 +73,4 @@ services:
 volumes:
   frontend_dist:
   nginx_logs:
+  uploads_data:

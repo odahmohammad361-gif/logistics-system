@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus } from 'lucide-react'
+import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus, Eye, Download } from 'lucide-react'
 import clsx from 'clsx'
 import type { BookingCargoDocument, BookingCargoLine, BookingMode } from '@/types'
-import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments, getCargoDocumentUrl } from '@/services/bookingService'
+import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments } from '@/services/bookingService'
+import FilePreviewModal from './FilePreviewModal'
 
 const SLICE_COLORS = [
   'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
   'bg-pink-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500',
 ]
+
+function uploadUrl(path: string) {
+  return `/uploads/${path}`
+}
 
 interface Props {
   line: BookingCargoLine
@@ -29,6 +34,7 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   const [uploading, setUploading]   = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
   const [otherFileType, setOtherFileType] = useState('')
+  const [preview, setPreview] = useState<{ title: string; url: string; filename?: string | null } | null>(null)
   const color = SLICE_COLORS[index % SLICE_COLORS.length]
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -297,16 +303,34 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
 
             {line.documents.length > 0 && (
               <div className="space-y-1.5">
-                {line.documents.map(doc => (
+                {line.documents.map(doc => {
+                  const title = `${docLabel(doc)} · ${doc.original_filename || 'file'}`
+                  const url = uploadUrl(doc.file_path)
+                  return (
                   <div key={doc.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] border border-brand-border/50 px-3 py-2">
                     <FileText size={13} className="text-brand-primary-light" />
-                    <a
-                      href={getCargoDocumentUrl(bookingId, line.id, doc.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-w-0 flex-1 text-xs text-brand-text hover:text-brand-primary-light truncate"
+                    <button
+                      type="button"
+                      onClick={() => setPreview({ title, url, filename: doc.original_filename })}
+                      className="min-w-0 flex-1 text-start text-xs text-brand-text hover:text-brand-primary-light truncate"
                     >
-                      {docLabel(doc)} · {doc.original_filename || 'file'}
+                      {title}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreview({ title, url, filename: doc.original_filename })}
+                      className="p-1 rounded text-brand-text-muted hover:text-brand-primary-light hover:bg-brand-primary/10 transition-colors"
+                      title={isRTL ? 'عرض' : 'Preview'}
+                    >
+                      <Eye size={12} />
+                    </button>
+                    <a
+                      href={url}
+                      download={doc.original_filename || undefined}
+                      className="p-1 rounded text-brand-text-muted hover:text-brand-primary-light hover:bg-brand-primary/10 transition-colors"
+                      title={isRTL ? 'تحميل' : 'Download'}
+                    >
+                      <Download size={12} />
                     </a>
                     <button
                       onClick={() => handleDeleteDocument(doc.id)}
@@ -315,7 +339,8 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
                       <X size={12} />
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -341,14 +366,23 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
             {line.images.length > 0 && (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {line.images.map((img) => (
-                  <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border">
+                  <div
+                    key={img.id}
+                    onClick={() => setPreview({
+                      title: img.original_filename || (isRTL ? 'صورة بضاعة' : 'Cargo photo'),
+                      url: uploadUrl(img.file_path),
+                      filename: img.original_filename,
+                    })}
+                    className="relative group aspect-square rounded-lg overflow-hidden border border-brand-border cursor-pointer"
+                  >
                     <img
-                      src={`/uploads/${img.file_path}`}
+                      src={uploadUrl(img.file_path)}
                       alt={img.original_filename ?? ''}
                       className="w-full h-full object-cover"
                     />
                     <button
-                      onClick={() => handleDeleteImage(img.id)}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id) }}
                       className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X size={10} />
@@ -371,6 +405,15 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           </div>
         )}
       </div>
+      {preview && (
+        <FilePreviewModal
+          open={!!preview}
+          onClose={() => setPreview(null)}
+          title={preview.title}
+          url={preview.url}
+          filename={preview.filename}
+        />
+      )}
     </div>
   )
 }
