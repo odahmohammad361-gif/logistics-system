@@ -149,8 +149,14 @@ def _generate_booking_number(db: Session, mode: str) -> str:
     year = datetime.now().year
     prefix = mode.upper()
     pattern = f"{prefix}-{year}-%"
-    count = db.query(Booking).filter(Booking.booking_number.like(pattern)).count()
-    return f"{prefix}-{year}-{str(count + 1).zfill(4)}"
+    rows = db.query(Booking.booking_number).filter(Booking.booking_number.like(pattern)).all()
+    max_seq = 0
+    for (booking_number,) in rows:
+        try:
+            max_seq = max(max_seq, int(str(booking_number).rsplit("-", 1)[-1]))
+        except (TypeError, ValueError):
+            continue
+    return f"{prefix}-{year}-{str(max_seq + 1).zfill(4)}"
 
 
 def _compute_air_weights(line: BookingCargoLine) -> None:
