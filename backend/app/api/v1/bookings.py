@@ -71,11 +71,13 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
             "carrier_name": rate.carrier_name,
             "port_of_loading": rate.pol,
             "port_of_discharge": rate.pod,
-            "freight_cost": rate.buy_air_kg,
-            "max_cbm": None,
-            "markup_pct": _margin_pct(rate.buy_air_kg, rate.sell_air_kg),
-            "container_size": None,
-        }
+        "freight_cost": rate.buy_air_kg,
+        "max_cbm": None,
+        "markup_pct": _margin_pct(rate.buy_air_kg, rate.sell_air_kg),
+        "container_size": None,
+        "etd": rate.vessel_day,
+        "loading_warehouse_id": rate.loading_warehouse_id,
+    }
 
     if mode == "LCL":
         lcl = {
@@ -92,6 +94,8 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
             "max_cbm": cap,
             "markup_pct": _margin_pct(buy, sell),
             "container_size": size or None,
+            "etd": rate.vessel_day,
+            "loading_warehouse_id": rate.loading_warehouse_id,
         }
 
     fcl = {
@@ -108,6 +112,8 @@ def _rate_snapshot_values(rate: AgentCarrierRate, mode: str, container_size: str
         "max_cbm": cap,
         "markup_pct": _margin_pct(buy, sell),
         "container_size": size or None,
+        "etd": rate.vessel_day,
+        "loading_warehouse_id": rate.loading_warehouse_id,
     }
 
 
@@ -478,7 +484,7 @@ def create_booking(
         flight_number=payload.flight_number or None,
         port_of_loading=(rate_snapshot["port_of_loading"] if rate_snapshot and rate_snapshot["port_of_loading"] else payload.port_of_loading) or None,
         port_of_discharge=(rate_snapshot["port_of_discharge"] if rate_snapshot and rate_snapshot["port_of_discharge"] else payload.port_of_discharge) or None,
-        etd=payload.etd,
+        etd=(rate_snapshot["etd"] if rate_snapshot and rate_snapshot["etd"] else payload.etd),
         eta=payload.eta,
         incoterm=payload.incoterm or None,
         freight_cost=(rate_snapshot["freight_cost"] if rate_snapshot else payload.freight_cost),
@@ -489,6 +495,7 @@ def create_booking(
         max_cbm=(rate_snapshot["max_cbm"] if rate_snapshot else payload.max_cbm),
         markup_pct=(rate_snapshot["markup_pct"] if rate_snapshot else payload.markup_pct),
         destination=_port_to_destination((rate_snapshot["port_of_discharge"] if rate_snapshot and rate_snapshot["port_of_discharge"] else payload.port_of_discharge)),
+        loading_warehouse_id=(rate_snapshot["loading_warehouse_id"] if rate_snapshot else None),
     )
     # Mark snapshot if created from an agent carrier rate
     if payload.agent_carrier_rate_id:

@@ -89,6 +89,10 @@ function marginPct(buy: number | null | undefined, sell: number | null | undefin
   return ((s - b) / b) * 100
 }
 
+function setAgentDates(rate: AgentCarrierRate, setValue: ReturnType<typeof useForm<FormValues>>['setValue']) {
+  if (rate.vessel_day) setValue('etd', rate.vessel_day)
+}
+
 export default function BookingForm({ open, onClose, onSubmit, initial, saving }: Props) {
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
@@ -163,6 +167,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     if (!rate) { setLockedFromAgent(false); return }
     if (rate.pol) setValue('port_of_loading', rate.pol)
     if (rate.pod) setValue('port_of_discharge', rate.pod)
+    setAgentDates(rate, setValue)
     setValue('agent_carrier_rate_id', String(rate.id))
     setValue('carrier_name', rate.carrier_name)
 
@@ -214,6 +219,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     if (!selectedRate) return
     if (selectedRate.pol) setValue('port_of_loading', selectedRate.pol)
     if (selectedRate.pod) setValue('port_of_discharge', selectedRate.pod)
+    setAgentDates(selectedRate, setValue)
     setValue('carrier_name', selectedRate.carrier_name)
 
     const size = mode === 'AIR' ? '' : (containerSize || '40HQ')

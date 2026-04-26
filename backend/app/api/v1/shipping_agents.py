@@ -15,6 +15,7 @@ from app.models.user import User, UserRole
 from app.models.shipping_agent import ShippingAgent, AgentPriceHistory, AgentCarrierRate, AgentContract, AgentEditLog
 from app.models.shipping_quote import ShippingQuote, QuoteServiceMode, QuoteStatus
 from app.models.client import Client
+from app.models.booking import Booking
 from app.schemas.agent import (
     AgentCreate, AgentUpdate, AgentResponse, AgentListResponse,
     QuoteCreate, QuoteUpdate, QuoteResponse, QuoteListResponse,
@@ -674,6 +675,19 @@ def update_carrier_rate(
             setattr(rate, field, value)
 
     if changes:
+        if "vessel_day" in payload.model_fields_set:
+            db.query(Booking).filter(
+                Booking.agent_carrier_rate_id == rate.id,
+                Booking.is_agent_snapshot == True,  # noqa: E712
+                Booking.status.in_(["draft", "confirmed"]),
+            ).update({Booking.etd: rate.vessel_day}, synchronize_session=False)
+        if "loading_warehouse_id" in payload.model_fields_set:
+            db.query(Booking).filter(
+                Booking.agent_carrier_rate_id == rate.id,
+                Booking.is_agent_snapshot == True,  # noqa: E712
+                Booking.loading_warehouse_id.is_(None),
+                Booking.status.in_(["draft", "confirmed"]),
+            ).update({Booking.loading_warehouse_id: rate.loading_warehouse_id}, synchronize_session=False)
         db.add(AgentEditLog(
             agent_id=agent_id,
             action="current_rate_edit",

@@ -316,9 +316,10 @@ Do not commit:
 
 Container section redesign:
 
-- Click container card to profile as the normal workflow.
-- Move edit, price selection, documents, status actions, and cost details inside the profile.
-- Connect container bookings with shipping agent current rates.
-- Connect container bookings with clearance agent rates.
-- Use container size and carrier as key references for sea workflows.
-- Prepare later equations for full cost from origin warehouse through port, Aqaba/Jordan, clearance, destination transport, and final delivery.
+- Improve container archive: group export by client, include all document categories, and later add ZIP export beside print-ready HTML.
+- Connect internal system invoices: if cargo source is company buying service, link PI/CI/PL/SC from the invoice section and use them to fill cargo data.
+- Add OCR foundation: extract data from uploaded PI/CI/PL/SC/CO/goods invoices, show a review modal, then fill description, HS code, cartons, weights, CBM, marks, and notes.
+- Add server temp export handling: generate ZIP/PDF exports in a temp folder and clean old temp files.
+- Connect final cost equations: shipping agent rate + clearance agent rate + origin/destination fees + delivery.
+- Refine full-container vs LCL workflows inside container profile.
+- Keep container ETD synced from the selected shipping agent carrier vessel date unless manually adjusted later.
