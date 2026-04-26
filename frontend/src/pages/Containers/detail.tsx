@@ -11,17 +11,18 @@ import {
   getBooking, updateBooking, deleteBooking,
   addCargoLine, updateCargoLine, deleteCargoLine,
   getPackingList, updateLoadingInfo, uploadLoadingPhotos,
-  deleteLoadingPhoto, getLoadingPhotoUrl,
+  deleteLoadingPhoto,
 } from '@/services/bookingService'
 import { getBranches } from '@/services/branchService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
+import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import CapacityMeter from '@/components/booking/CapacityMeter'
 import CargoLineCard from '@/components/booking/CargoLineCard'
 import CargoLineForm from '@/components/booking/CargoLineForm'
 import BookingForm from '@/components/booking/BookingForm'
-import type { BookingCargoLine, BookingMode, BookingLoadingPhoto } from '@/types'
+import type { Booking, BookingCargoLine, BookingMode } from '@/types'
 import clsx from 'clsx'
 
 const MODE_ICONS: Record<BookingMode, React.ReactNode> = {
@@ -36,6 +37,169 @@ const MODE_COLORS: Record<BookingMode, string> = {
   AIR: 'text-violet-400 bg-violet-500/10',
 }
 
+type ExportSection = 'summary' | 'cargo' | 'loading' | 'loadingPhotos' | 'cargoImages'
+type ExportOptions = Record<ExportSection, boolean>
+
+const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  summary: true,
+  cargo: true,
+  loading: true,
+  loadingPhotos: true,
+  cargoImages: true,
+}
+
+function esc(value: unknown) {
+  return String(value ?? '—')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function money(value: number | null | undefined, currency = 'USD') {
+  if (value == null) return '—'
+  return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`
+}
+
+function fileUrl(path: string) {
+  return new URL(`/uploads/${path}`, window.location.origin).href
+}
+
+function infoRow(label: string, value: unknown) {
+  return `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`
+}
+
+function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isRTL: boolean) {
+  const dir = isRTL ? 'rtl' : 'ltr'
+  const title = isRTL ? 'أرشيف بيانات الحاوية' : 'Container Data Archive'
+  const generated = new Date().toLocaleString()
+  const lineClient = (line: BookingCargoLine) => isRTL ? (line.client.name_ar ?? line.client.name) : line.client.name
+  const totalCargoImages = booking.cargo_lines.reduce((sum, line) => sum + line.images.length, 0)
+
+  const summaryRows = [
+    infoRow(isRTL ? 'رقم الحجز' : 'Booking No.', booking.booking_number),
+    infoRow(isRTL ? 'نوع الشحن' : 'Mode', booking.mode),
+    infoRow(isRTL ? 'الحالة' : 'Status', booking.status),
+    infoRow(isRTL ? 'وكيل الشحن' : 'Shipping Agent', booking.agent?.name),
+    infoRow(isRTL ? 'الناقل' : 'Carrier', booking.carrier_name),
+    infoRow(isRTL ? 'حجم الحاوية' : 'Container Size', booking.container_size),
+    infoRow(isRTL ? 'رقم الحاوية' : 'Container No.', booking.container_no),
+    infoRow(isRTL ? 'رقم الختم' : 'Seal No.', booking.seal_no),
+    infoRow(isRTL ? 'رقم بوليصة الشحن' : 'B/L No.', booking.bl_number),
+    infoRow(isRTL ? 'رقم AWB' : 'AWB No.', booking.awb_number),
+    infoRow(isRTL ? 'السفينة / الرحلة' : 'Vessel / Flight', booking.vessel_name ?? booking.flight_number),
+    infoRow(isRTL ? 'الرحلة البحرية' : 'Voyage No.', booking.voyage_number),
+    infoRow(isRTL ? 'ميناء التحميل' : 'Port of Loading', booking.port_of_loading),
+    infoRow(isRTL ? 'ميناء التفريغ' : 'Port of Discharge', booking.port_of_discharge),
+    infoRow(isRTL ? 'ETD' : 'ETD', booking.etd),
+    infoRow(isRTL ? 'ETA' : 'ETA', booking.eta),
+    infoRow(isRTL ? 'شرط التسليم' : 'Incoterm', booking.incoterm),
+    infoRow(isRTL ? 'تكلفة الشحن' : 'Freight Cost', money(booking.freight_cost, booking.currency)),
+    infoRow(isRTL ? 'نسبة الربح' : 'Markup', booking.markup_pct != null ? `${booking.markup_pct}%` : '—'),
+    infoRow(isRTL ? 'السعة' : 'Capacity', booking.container_cbm_capacity != null ? `${booking.container_cbm_capacity} CBM` : '—'),
+    infoRow(isRTL ? 'الحجم المستخدم' : 'Used CBM', booking.total_cbm_used != null ? `${booking.total_cbm_used} CBM` : '—'),
+    infoRow(isRTL ? 'نسبة الامتلاء' : 'Fill Percent', booking.fill_percent != null ? `${booking.fill_percent}%` : '—'),
+  ].join('')
+
+  const cargoRows = booking.cargo_lines.map((line, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${esc(line.client.client_code)}</td>
+      <td>${esc(lineClient(line))}</td>
+      <td>${esc(isRTL ? (line.description_ar ?? line.description) : line.description)}</td>
+      <td>${esc(line.cartons)}</td>
+      <td>${esc(line.gross_weight_kg)}</td>
+      <td>${esc(line.net_weight_kg)}</td>
+      <td>${esc(line.cbm)}</td>
+      <td>${esc(line.hs_code)}</td>
+      <td>${esc(line.images.length)}</td>
+    </tr>
+  `).join('')
+
+  const loadingRows = [
+    infoRow(isRTL ? 'مستودع التحميل' : 'Loading Warehouse', booking.loading_warehouse_name),
+    infoRow(isRTL ? 'مدينة المستودع' : 'Warehouse City', booking.loading_warehouse_city),
+    infoRow(isRTL ? 'تاريخ التحميل' : 'Loading Date', booking.loading_date),
+    infoRow(isRTL ? 'ملاحظات التحميل' : 'Loading Notes', booking.loading_notes),
+    infoRow(isRTL ? 'عدد صور التحميل' : 'Loading Photo Count', booking.loading_photos.length),
+  ].join('')
+
+  const loadingPhotoPages = booking.loading_photos.map((photo, idx) => `
+    <section class="page photo-page">
+      <h2>${esc(isRTL ? 'صور التحميل' : 'Loading Photos')} ${idx + 1}/${booking.loading_photos.length}</h2>
+      <p class="muted">${esc(photo.original_filename ?? '')}</p>
+      <img src="${fileUrl(photo.file_path)}" alt="${esc(photo.original_filename ?? '')}" />
+      ${photo.caption ? `<p class="caption">${esc(photo.caption)}</p>` : ''}
+    </section>
+  `).join('')
+
+  const cargoImagePages = booking.cargo_lines.flatMap(line => line.images.map((img, idx) => `
+    <section class="page photo-page">
+      <h2>${esc(isRTL ? 'صور بضاعة العميل' : 'Client Cargo Photos')}</h2>
+      <p class="muted">${esc(line.client.client_code)} · ${esc(lineClient(line))} · ${idx + 1}/${line.images.length}</p>
+      <img src="${fileUrl(img.file_path)}" alt="${esc(img.original_filename ?? '')}" />
+      <p class="caption">${esc(img.original_filename ?? '')}</p>
+    </section>
+  `)).join('')
+
+  return `<!doctype html>
+<html lang="${isRTL ? 'ar' : 'en'}" dir="${dir}">
+<head>
+  <meta charset="utf-8" />
+  <title>${esc(title)} - ${esc(booking.booking_number)}</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Tahoma, sans-serif; color: #111827; background: #fff; }
+    .page { min-height: 260mm; page-break-after: always; padding: 8mm 0; }
+    .page:last-child { page-break-after: auto; }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    h2 { margin: 0 0 12px; font-size: 18px; color: #0f172a; }
+    .cover { display: flex; flex-direction: column; justify-content: center; border: 2px solid #0f172a; padding: 18mm; }
+    .cover .code { font: 700 30px monospace; margin: 10px 0; color: #0f172a; }
+    .muted { color: #64748b; font-size: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+    .stat { border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; }
+    .stat strong { display: block; font-size: 18px; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+    th, td { border: 1px solid #cbd5e1; padding: 7px; vertical-align: top; text-align: ${isRTL ? 'right' : 'left'}; }
+    th { background: #f1f5f9; width: 28%; }
+    .data-table th { width: auto; white-space: nowrap; }
+    .photo-page { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .photo-page img { max-width: 100%; max-height: 215mm; object-fit: contain; border: 1px solid #cbd5e1; }
+    .caption { margin-top: 10px; font-size: 12px; color: #334155; }
+    .future { color: #94a3b8; font-size: 11px; margin-top: 8px; }
+    @media print {
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .page { break-after: page; }
+      .page:last-child { break-after: auto; }
+    }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <p class="muted">${esc(generated)}</p>
+    <h1>${esc(title)}</h1>
+    <div class="code">${esc(booking.booking_number)}</div>
+    <p>${esc(booking.port_of_loading)} → ${esc(booking.port_of_discharge)}</p>
+    <div class="stats">
+      <div class="stat">${esc(isRTL ? 'العملاء' : 'Clients')}<strong>${booking.cargo_lines.length}</strong></div>
+      <div class="stat">${esc(isRTL ? 'صور التحميل' : 'Loading Photos')}<strong>${booking.loading_photos.length}</strong></div>
+      <div class="stat">${esc(isRTL ? 'صور البضاعة' : 'Cargo Photos')}<strong>${totalCargoImages}</strong></div>
+      <div class="stat">${esc(isRTL ? 'الحالة' : 'Status')}<strong>${esc(booking.status)}</strong></div>
+    </div>
+    <p class="future">${esc(isRTL ? 'هذا الأرشيف قابل للتوسعة لاحقاً ليشمل B/L و CO والفواتير والتخليص والتسليم.' : 'This archive is ready to expand later with B/L, CO, invoices, clearance and delivery files.')}</p>
+  </section>
+
+  ${options.summary ? `<section class="page"><h2>${esc(isRTL ? 'ملخص الحاوية' : 'Container Summary')}</h2><table>${summaryRows}</table></section>` : ''}
+  ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="10">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
+  ${options.loading ? `<section class="page"><h2>${esc(isRTL ? 'معلومات التحميل' : 'Loading Information')}</h2><table>${loadingRows}</table></section>` : ''}
+  ${options.loadingPhotos ? loadingPhotoPages : ''}
+  ${options.cargoImages ? cargoImagePages : ''}
+</body>
+</html>`
+}
+
 export default function BookingDetailPage() {
   const { t, i18n } = useTranslation()
   const isRTL       = i18n.language === 'ar'
@@ -46,6 +210,8 @@ export default function BookingDetailPage() {
   const bookingId   = parseInt(id!)
 
   const [showEditBooking, setShowEditBooking]     = useState(false)
+  const [showDownloadModal, setShowDownloadModal] = useState(false)
+  const [exportOptions, setExportOptions]         = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS)
   const [showCargoForm, setShowCargoForm]         = useState(false)
   const [editingLine, setEditingLine]             = useState<BookingCargoLine | null>(null)
   const [savingHeader, setSavingHeader]           = useState(false)
@@ -184,6 +350,33 @@ export default function BookingDetailPage() {
     URL.revokeObjectURL(url)
   }
 
+  function toggleExportOption(key: ExportSection, checked: boolean) {
+    setExportOptions(prev => ({ ...prev, [key]: checked }))
+  }
+
+  function setAllExportOptions(checked: boolean) {
+    setExportOptions({
+      summary: checked,
+      cargo: checked,
+      loading: checked,
+      loadingPhotos: checked,
+      cargoImages: checked,
+    })
+  }
+
+  function handleDownloadContainerArchive() {
+    if (!booking) return
+    const html = buildContainerArchiveHtml(booking, exportOptions, isRTL)
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${booking.booking_number}-container-archive.html`
+    a.click()
+    URL.revokeObjectURL(url)
+    setShowDownloadModal(false)
+  }
+
   if (isLoading) {
     return <div className="text-center py-20 text-brand-text-muted text-sm">{t('common.loading')}</div>
   }
@@ -205,6 +398,38 @@ export default function BookingDetailPage() {
       cbm:        Number(l.cbm),
       color:      '',
     }))
+  const allExportSelected = Object.values(exportOptions).every(Boolean)
+  const cargoImageCount = booking.cargo_lines.reduce((sum, line) => sum + line.images.length, 0)
+  const exportSections: Array<{ key: ExportSection; label: string; hint: string; count?: number }> = [
+    {
+      key: 'summary',
+      label: isRTL ? 'ملخص بيانات الحاوية' : 'Container summary',
+      hint: isRTL ? 'المسار، التواريخ، الناقل، السعر، السعة والمراجع' : 'Route, dates, carrier, price, capacity and references',
+    },
+    {
+      key: 'cargo',
+      label: isRTL ? 'بضاعة العملاء' : 'Client cargo lines',
+      hint: isRTL ? 'تفاصيل العملاء، الكراتين، الوزن، CBM و HS' : 'Clients, cartons, weights, CBM and HS data',
+      count: booking.cargo_lines.length,
+    },
+    {
+      key: 'loading',
+      label: isRTL ? 'معلومات التحميل' : 'Loading information',
+      hint: isRTL ? 'المستودع، تاريخ التحميل وملاحظات التحميل' : 'Warehouse, loading date and loading notes',
+    },
+    {
+      key: 'loadingPhotos',
+      label: isRTL ? 'صور التحميل' : 'Loading photos',
+      hint: isRTL ? 'كل صورة في صفحة منفصلة جاهزة للطباعة' : 'Each photo on a separate print-ready page',
+      count: booking.loading_photos.length,
+    },
+    {
+      key: 'cargoImages',
+      label: isRTL ? 'صور بضاعة العملاء' : 'Client cargo photos',
+      hint: isRTL ? 'صور البضاعة حسب العميل، كل صورة في صفحة منفصلة' : 'Cargo photos grouped by client, each on its own page',
+      count: cargoImageCount,
+    },
+  ]
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -243,6 +468,10 @@ export default function BookingDetailPage() {
                 {t('common.edit')}
               </Button>
             )}
+            <Button variant="ghost" size="sm" onClick={() => setShowDownloadModal(true)}>
+              <Download size={13} />
+              {isRTL ? 'تحميل بيانات الحاوية' : 'Download Container Data'}
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleDownloadPackingList}>
               <Download size={13} />
               {t('bookings.download_packing_list')}
@@ -600,6 +829,80 @@ export default function BookingDetailPage() {
         initial={booking}
         saving={savingHeader}
       />
+
+      <Modal
+        open={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+        title={isRTL ? 'تحميل بيانات الحاوية' : 'Download Container Data'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowDownloadModal(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleDownloadContainerArchive}>
+              <Download size={14} />
+              {isRTL ? 'تحميل ملف جاهز للطباعة' : 'Download Print-Ready File'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 accent-brand-primary"
+                checked={allExportSelected}
+                onChange={e => setAllExportOptions(e.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-brand-text">
+                  {isRTL ? 'تحميل جميع بيانات وملفات الحاوية' : 'Download all container data and files'}
+                </span>
+                <span className="block text-xs text-brand-text-muted mt-1">
+                  {isRTL
+                    ? 'سيتم وضع كل صورة أو ملف مرفوع حاليًا في صفحة منفصلة داخل ملف HTML جاهز للطباعة.'
+                    : 'Each currently uploaded photo/file is placed on its own page inside a print-ready HTML file.'}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            {exportSections.map(section => (
+              <label
+                key={section.key}
+                className="flex items-start gap-3 rounded-xl border border-brand-border bg-brand-card/60 p-3 cursor-pointer hover:border-brand-border-focus transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-brand-primary"
+                  checked={exportOptions[section.key]}
+                  onChange={e => toggleExportOption(section.key, e.target.checked)}
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-center gap-2 text-sm font-medium text-brand-text">
+                    {section.label}
+                    {section.count != null && (
+                      <span className="rounded-full bg-white/8 px-2 py-0.5 text-[10px] font-bold text-brand-text-muted">
+                        {section.count}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-xs text-brand-text-muted mt-1">{section.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="rounded-xl border border-dashed border-brand-border p-3 text-xs text-brand-text-muted">
+            {isRTL
+              ? 'لاحقًا سنضيف هنا B/L و CO والفواتير وملفات التخليص والتسليم وملفات كل عميل، وستدخل في نفس أرشيف الحاوية.'
+              : 'Later we will plug in B/L, CO, invoices, clearance files, delivery files and client-specific documents into this same container archive.'}
+          </div>
+        </div>
+      </Modal>
 
       {/* Cargo line form */}
       <CargoLineForm
