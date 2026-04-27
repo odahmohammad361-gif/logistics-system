@@ -74,7 +74,7 @@ def list_clients(
     page_size: int = Query(20, ge=1, le=500),
     search: str = Query("", description="Search by name, code, phone"),
     branch_id: int = Query(None),
-    is_active: bool = Query(None),
+    is_active: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
