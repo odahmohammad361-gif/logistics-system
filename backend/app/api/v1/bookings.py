@@ -489,6 +489,112 @@ def _zip_file_if_exists(zf: zipfile.ZipFile, uploads_root: str, file_path: str |
     return True
 
 
+def _enum_value(value):
+    return getattr(value, "value", value)
+
+
+def _product_snapshot(product) -> dict | None:
+    if not product:
+        return None
+    return {
+        "id": product.id,
+        "code": product.code,
+        "name": product.name,
+        "name_ar": product.name_ar,
+        "category": product.category,
+        "hs_code": product.hs_code,
+        "customs_unit_basis": product.customs_unit_basis,
+        "customs_estimated_value_usd": product.customs_estimated_value_usd,
+        "customs_duty_pct": product.customs_duty_pct,
+        "sales_tax_pct": product.sales_tax_pct,
+        "other_tax_pct": product.other_tax_pct,
+    }
+
+
+def _invoice_item_snapshot(item) -> dict:
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "product": _product_snapshot(item.product),
+        "description": item.description,
+        "description_ar": item.description_ar,
+        "details": item.details,
+        "details_ar": item.details_ar,
+        "hs_code": item.hs_code,
+        "quantity": item.quantity,
+        "unit": item.unit,
+        "unit_price": item.unit_price,
+        "total_price": item.total_price,
+        "cartons": item.cartons,
+        "gross_weight": item.gross_weight,
+        "net_weight": item.net_weight,
+        "cbm": item.cbm,
+        "sort_order": item.sort_order,
+    }
+
+
+def _invoice_snapshot(invoice: Invoice | None) -> dict | None:
+    if not invoice:
+        return None
+    return {
+        "id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "invoice_type": _enum_value(invoice.invoice_type),
+        "status": _enum_value(invoice.status),
+        "client_id": invoice.client_id,
+        "buyer_name": invoice.buyer_name,
+        "issue_date": invoice.issue_date,
+        "due_date": invoice.due_date,
+        "origin": invoice.origin,
+        "shipping_term": invoice.shipping_term,
+        "port_of_loading": invoice.port_of_loading,
+        "port_of_discharge": invoice.port_of_discharge,
+        "shipping_marks": invoice.shipping_marks,
+        "container_no": invoice.container_no,
+        "seal_no": invoice.seal_no,
+        "bl_number": invoice.bl_number,
+        "vessel_name": invoice.vessel_name,
+        "voyage_number": invoice.voyage_number,
+        "subtotal": invoice.subtotal,
+        "discount": invoice.discount,
+        "total": invoice.total,
+        "currency": invoice.currency,
+        "items": [_invoice_item_snapshot(item) for item in invoice.items],
+    }
+
+
+def _cargo_goods_payload(line: BookingCargoLine) -> dict:
+    extracted = line.extracted_goods if isinstance(line.extracted_goods, dict) else {}
+    goods = extracted.get("goods") if isinstance(extracted.get("goods"), list) else []
+    return {
+        "source": "cargo_line.extracted_goods",
+        "client": {
+            "id": line.client.id if line.client else None,
+            "name": line.client.name if line.client else None,
+            "name_ar": line.client.name_ar if line.client else None,
+            "client_code": line.client.client_code if line.client else None,
+        },
+        "linked_invoice": {
+            "invoice_id": line.invoice_id or extracted.get("invoice_id"),
+            "invoice_number": line.invoice.invoice_number if line.invoice else extracted.get("invoice_number") or extracted.get("invoice_no"),
+        },
+        "summary": {
+            "description": line.description,
+            "description_ar": line.description_ar,
+            "hs_code": line.hs_code,
+            "cartons": line.cartons,
+            "gross_weight_kg": line.gross_weight_kg,
+            "net_weight_kg": line.net_weight_kg,
+            "cbm": line.cbm,
+            "shipping_marks": line.shipping_marks,
+        },
+        "goods": goods,
+        "source_documents": extracted.get("source_documents", []),
+        "confidence": extracted.get("confidence"),
+        "raw_extracted_goods": line.extracted_goods,
+    }
+
+
 def _doc_full_path(file_path: str) -> str:
     uploads_root = os.path.dirname(UPLOAD_DIR)
     full_path = os.path.abspath(os.path.join(uploads_root, file_path))
@@ -1059,6 +1165,10 @@ def download_booking_archive_zip(
         "- 02-packing-list: cargo packing list JSON",
         "- 03-loading: loading warehouse/date data and loading photos",
         "- 04-clients: each client cargo line with its files grouped separately",
+        "  - cargo-line.json: client cargo summary",
+        "  - goods-list.json: detailed OCR/manual/invoice-imported goods list when available",
+        "  - linked-invoice.json: invoice snapshot when the cargo line is connected to an invoice",
+        "  - documents/photos: uploaded originals grouped by document type",
         "",
         "This export uses the current database values and uploaded originals at download time.",
     ]
@@ -1108,6 +1218,11 @@ def download_booking_archive_zip(
                     "chargeable_weight_kg": line.chargeable_weight_kg,
                     "freight_share": line.freight_share,
                     "extracted_goods": line.extracted_goods,
+                    "goods_rows_count": len(line.extracted_goods.get("goods", [])) if isinstance(line.extracted_goods, dict) and isinstance(line.extracted_goods.get("goods"), list) else 0,
+                    "linked_invoice": {
+                        "invoice_id": line.invoice_id,
+                        "invoice_number": line.invoice.invoice_number if line.invoice else None,
+                    },
                     "clearance_through_us": line.clearance_through_us,
                     "clearance_agent_id": line.clearance_agent_id,
                     "clearance_agent_name": line.clearance_agent.name if line.clearance_agent else None,
@@ -1122,6 +1237,10 @@ def download_booking_archive_zip(
                 }
                 cargo_summary.append(line_summary)
                 _zip_json(zf, f"{client_root}/cargo-line.json", line_summary)
+                if line.extracted_goods:
+                    _zip_json(zf, f"{client_root}/goods-list.json", _cargo_goods_payload(line))
+                if line.invoice:
+                    _zip_json(zf, f"{client_root}/linked-invoice.json", _invoice_snapshot(line.invoice))
 
                 for img in line.images:
                     filename = _safe_filename(img.original_filename or os.path.basename(img.file_path), f"cargo-photo-{img.id}")

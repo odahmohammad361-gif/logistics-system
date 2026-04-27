@@ -115,6 +115,8 @@ Invoice item lines can link back to a product as their source while storing inde
 
 Container cargo lines can import linked invoice items into the editable goods list, including product references for later customs calculator matching.
 
+Container archive downloads now include the same detailed goods list, linked invoice snapshot, product references, and uploaded originals grouped per client so each container can be archived separately.
+
 ## Tax & Customs Calculator
 
 The calculator is a first operational stage for estimating customs and taxes before the final accounting equation is connected.

@@ -127,6 +127,50 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
     </tr>
   `).join('')
 
+  const cargoGoodsSections = booking.cargo_lines.map((line) => {
+    const goods = line.extracted_goods?.goods ?? []
+    if (!goods.length) return ''
+    const invoiceNumber = line.invoice_number ?? line.extracted_goods?.invoice_number ?? line.extracted_goods?.invoice_no
+    const goodsRows = goods.map((item, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${esc(item.product_id != null ? `#${item.product_id}` : '')}</td>
+        <td>${esc(item.description)}</td>
+        <td>${esc(item.cartons)}</td>
+        <td>${esc(item.quantity)}</td>
+        <td>${esc(item.gross_weight_kg)}</td>
+        <td>${esc(item.cbm)}</td>
+        <td>${esc(item.hs_code ?? line.hs_code)}</td>
+        <td>${esc(item.source)}</td>
+      </tr>
+    `).join('')
+    return `
+      <section class="page">
+        <h2>${esc(isRTL ? 'قائمة بضاعة العميل' : 'Client Goods List')}</h2>
+        <p class="muted">
+          ${esc(line.client.client_code)} · ${esc(lineClient(line))}
+          ${invoiceNumber ? ` · ${esc(isRTL ? 'فاتورة' : 'Invoice')} ${esc(invoiceNumber)}` : ''}
+        </p>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>${esc(isRTL ? 'مرجع المنتج' : 'Product Ref')}</th>
+              <th>${esc(isRTL ? 'الوصف' : 'Description')}</th>
+              <th>${esc(isRTL ? 'كراتين' : 'CTNS')}</th>
+              <th>${esc(isRTL ? 'الكمية' : 'QTY')}</th>
+              <th>${esc(isRTL ? 'الوزن' : 'KG')}</th>
+              <th>CBM</th>
+              <th>HS</th>
+              <th>${esc(isRTL ? 'المصدر' : 'Source')}</th>
+            </tr>
+          </thead>
+          <tbody>${goodsRows}</tbody>
+        </table>
+      </section>
+    `
+  }).join('')
+
   const loadingRows = [
     infoRow(isRTL ? 'مستودع التحميل' : 'Loading Warehouse', booking.loading_warehouse_name),
     infoRow(isRTL ? 'مدينة المستودع' : 'Warehouse City', booking.loading_warehouse_city),
@@ -224,11 +268,12 @@ function buildContainerArchiveHtml(booking: Booking, options: ExportOptions, isR
       <div class="stat">${esc(isRTL ? 'صور البضاعة' : 'Cargo Photos')}<strong>${totalCargoImages}</strong></div>
       <div class="stat">${esc(isRTL ? 'ملفات العملاء' : 'Client Files')}<strong>${totalCargoDocs}</strong></div>
     </div>
-    <p class="future">${esc(isRTL ? 'هذا الأرشيف قابل للتوسعة لاحقاً ليشمل B/L و CO والفواتير والتخليص والتسليم.' : 'This archive is ready to expand later with B/L, CO, invoices, clearance and delivery files.')}</p>
+    <p class="future">${esc(isRTL ? 'يشمل هذا الأرشيف بيانات الحاوية والبضاعة والملفات المرفوعة، ويمكن توسيعه لاحقاً للتخليص والتسليم.' : 'This archive includes container data, cargo data and uploaded files, and can expand later with clearance and delivery files.')}</p>
   </section>
 
   ${options.summary ? `<section class="page"><h2>${esc(isRTL ? 'ملخص الحاوية' : 'Container Summary')}</h2><table>${summaryRows}</table></section>` : ''}
   ${options.cargo ? `<section class="page"><h2>${esc(isRTL ? 'بضاعة العملاء' : 'Client Cargo')}</h2><table class="data-table"><thead><tr><th>#</th><th>${esc(isRTL ? 'كود العميل' : 'Client Code')}</th><th>${esc(isRTL ? 'العميل' : 'Client')}</th><th>${esc(isRTL ? 'مصدر البضاعة' : 'Source')}</th><th>${esc(isRTL ? 'حاوية كاملة' : 'Full Container')}</th><th>${esc(isRTL ? 'الوصف' : 'Description')}</th><th>${esc(isRTL ? 'كراتين' : 'Cartons')}</th><th>GW</th><th>NW</th><th>CBM</th><th>HS</th><th>${esc(isRTL ? 'حصة الشحن' : 'Freight Share')}</th><th>${esc(isRTL ? 'صور' : 'Photos')}</th><th>${esc(isRTL ? 'ملفات' : 'Files')}</th></tr></thead><tbody>${cargoRows || `<tr><td colspan="14">${esc(isRTL ? 'لا توجد بضاعة' : 'No cargo')}</td></tr>`}</tbody></table></section>` : ''}
+  ${options.cargo ? cargoGoodsSections : ''}
   ${options.loading ? `<section class="page"><h2>${esc(isRTL ? 'معلومات التحميل' : 'Loading Information')}</h2><table>${loadingRows}</table></section>` : ''}
   ${options.loadingPhotos ? loadingPhotoPages : ''}
   ${options.cargoImages ? cargoImagePages : ''}

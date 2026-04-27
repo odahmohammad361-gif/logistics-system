@@ -522,6 +522,8 @@ export interface BookingCargoLine {
     version?: number
     extracted_at?: string
     confidence?: string
+    invoice_id?: number | null
+    invoice_number?: string | null
     invoice_no?: string | null
     source_documents?: Array<{ id: number; type: string; filename: string | null; characters?: number }>
     goods?: Array<{
