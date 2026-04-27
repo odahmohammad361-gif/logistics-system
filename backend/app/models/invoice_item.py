@@ -8,6 +8,7 @@ class InvoiceItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Product info
     description = Column(Text, nullable=False)           # English name
@@ -40,3 +41,4 @@ class InvoiceItem(Base):
     sort_order = Column(Integer, nullable=False, default=0)
 
     invoice = relationship("Invoice", back_populates="items")
+    product = relationship("Product", foreign_keys=[product_id])

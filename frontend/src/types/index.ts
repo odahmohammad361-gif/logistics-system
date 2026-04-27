@@ -58,6 +58,7 @@ export type InvoiceStatus = 'draft' | 'sent' | 'approved' | 'paid' | 'cancelled'
 
 export interface InvoiceItem {
   id?: number
+  product_id?: number | null
   description: string
   description_ar?: string | null
   details?: string | null

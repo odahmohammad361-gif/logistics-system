@@ -111,6 +111,8 @@ Products now have a reference tree in addition to the legacy text category:
 
 The old product `category`, `hs_code`, and customs fields remain populated for compatibility with shop, invoice, container, and customs-calculator flows.
 
+Invoice item lines can link back to a product as their source while storing independent snapshot data for description, HS code, price, packing, and weights.
+
 ## Tax & Customs Calculator
 
 The calculator is a first operational stage for estimating customs and taxes before the final accounting equation is connected.

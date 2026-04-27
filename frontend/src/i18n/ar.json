@@ -567,6 +567,8 @@
     "import_excel": "استيراد من Excel",
     "import_excel_title": "استيراد الأصناف من Excel",
     "new_item_placeholder": "صنف جديد",
+    "product_source": "مصدر المنتج",
+    "manual_product": "صنف يدوي / خارجي",
     "item_details_toggle": "تفاصيل إضافية",
     "item_name": "اسم البضاعة",
     "item_name_placeholder": "مثال: قمصان قطنية رجالية",

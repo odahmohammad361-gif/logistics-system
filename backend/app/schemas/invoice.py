@@ -8,6 +8,7 @@ from app.models.invoice import InvoiceType, InvoiceStatus
 # ── Invoice Item ────────────────────────────────────────────────────────────
 
 class InvoiceItemCreate(BaseModel):
+    product_id: Optional[int] = None
     description: str
     description_ar: Optional[str] = None
     details: Optional[str] = None
@@ -28,6 +29,7 @@ class InvoiceItemCreate(BaseModel):
 
 
 class InvoiceItemUpdate(BaseModel):
+    product_id: Optional[int] = None
     description: Optional[str] = None
     description_ar: Optional[str] = None
     details: Optional[str] = None
@@ -48,6 +50,7 @@ class InvoiceItemUpdate(BaseModel):
 
 class InvoiceItemResponse(BaseModel):
     id: int
+    product_id: Optional[int]
     description: str
     description_ar: Optional[str]
     details: Optional[str]
@@ -137,6 +140,7 @@ class InvoiceUpdate(BaseModel):
     discount: Optional[Decimal] = None
     notes: Optional[str] = None
     notes_ar: Optional[str] = None
+    items: Optional[list[InvoiceItemCreate]] = None
 
 
 class ClientShort(BaseModel):

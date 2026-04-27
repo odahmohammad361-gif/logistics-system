@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
+import { useQuery } from '@tanstack/react-query'
 import {
   Plus, Trash2, FileSpreadsheet, ChevronDown, ChevronUp,
   Package, Ship, Banknote, FileText,
@@ -9,7 +10,8 @@ import {
 import { Input, Select, Textarea, FormRow } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import type { Invoice } from '@/types'
+import type { Invoice, Product } from '@/types'
+import { listProducts } from '@/services/productService'
 import {
   SHIPPING_TERMS, PAYMENT_TERMS, getFlatPortOptions,
   calcVolumetricWeight, calcChargeableWeight,
@@ -38,6 +40,7 @@ const TAB_ICONS: Record<TabId, React.ElementType> = {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ItemFormValues {
+  product_id: number | null
   description: string
   description_ar: string
   details: string
@@ -103,6 +106,7 @@ interface Props {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function defaultItem(): ItemFormValues {
   return {
+    product_id: null,
     description: '', description_ar: '', details: '', details_ar: '',
     hs_code: '', quantity: 1, unit: 'pcs', unit_price: 0,
     cartons: null, gross_weight: null, net_weight: null, cbm: null,
@@ -184,6 +188,11 @@ export default function InvoiceForm({
   // No toggle needed — both client dropdown and buyer_name field are always shown (both optional)
   const [clientError, setClientError] = useState<string | null>(null)
 
+  const { data: productsData } = useQuery({
+    queryKey: ['invoice-products'],
+    queryFn: () => listProducts({ page: 1, page_size: 100 }),
+  })
+
   const {
     register, control, handleSubmit, watch, setValue,
     formState: { errors },
@@ -217,6 +226,7 @@ export default function InvoiceForm({
       notes:            initial?.notes ?? '',
       notes_ar:         initial?.notes_ar ?? '',
       items: initial?.items?.map((item) => ({
+        product_id:      item.product_id ?? null,
         description:    item.description,
         description_ar: item.description_ar ?? '',
         details:        item.details ?? '',
@@ -249,9 +259,43 @@ export default function InvoiceForm({
 
   const isAir = watchType === 'AIR'
   const portOptions = isAir ? AIR_PORT_OPTIONS : SEA_PORT_OPTIONS
+  const products = productsData?.results ?? []
+
+  function productLabel(product: Product) {
+    const name = isRTL ? product.name_ar || product.name : product.name
+    return `${product.code} — ${name}${product.hs_code ? ` — HS ${product.hs_code}` : ''}`
+  }
+
+  function applyProductToItem(index: number, productId: string) {
+    const product = products.find((item) => String(item.id) === productId)
+    if (!product) {
+      setValue(`items.${index}.product_id`, null)
+      return
+    }
+
+    const current = watchItems[index]
+    const cartons = Number(current?.cartons || 0)
+    setValue(`items.${index}.product_id`, product.id)
+    setValue(`items.${index}.description`, product.name)
+    setValue(`items.${index}.description_ar`, product.name_ar ?? '')
+    setValue(`items.${index}.details`, product.description ?? '')
+    setValue(`items.${index}.details_ar`, product.description_ar ?? '')
+    setValue(`items.${index}.hs_code`, product.hs_code ?? '')
+    setValue(`items.${index}.unit`, 'pcs')
+    if (watchCurrency === 'USD' && product.price_usd) setValue(`items.${index}.unit_price`, Number(product.price_usd))
+    if (watchCurrency === 'CNY' && product.price_cny) setValue(`items.${index}.unit_price`, Number(product.price_cny))
+    if (product.gross_weight_kg_per_carton) setValue(`items.${index}.gross_weight`, Number(product.gross_weight_kg_per_carton))
+    if (product.net_weight_kg_per_carton) setValue(`items.${index}.net_weight`, Number(product.net_weight_kg_per_carton))
+    if (product.carton_length_cm) setValue(`items.${index}.carton_length_cm`, Number(product.carton_length_cm))
+    if (product.carton_width_cm) setValue(`items.${index}.carton_width_cm`, Number(product.carton_width_cm))
+    if (product.carton_height_cm) setValue(`items.${index}.carton_height_cm`, Number(product.carton_height_cm))
+    if (cartons > 0 && product.pcs_per_carton) setValue(`items.${index}.quantity`, cartons * Number(product.pcs_per_carton))
+    if (cartons > 0 && product.cbm_per_carton) setValue(`items.${index}.cbm`, Number((cartons * Number(product.cbm_per_carton)).toFixed(4)))
+  }
 
   function handleExcelImport(items: ParsedItem[]) {
     replace(items.map((item, idx) => ({
+      product_id: null,
       description: item.description, description_ar: '',
       details: item.details,        details_ar: '',
       hs_code: item.hs_code,
@@ -602,8 +646,22 @@ export default function InvoiceForm({
                     {/* Item Body */}
                     <div className="p-4 space-y-3">
 
-                      {/* Description */}
-                      <FormRow>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="label-base">{t('invoices.product_source')}</label>
+                          <select
+                            className="input-base w-full"
+                            value={item.product_id ? String(item.product_id) : ''}
+                            onChange={(e) => applyProductToItem(i, e.target.value)}
+                          >
+                            <option value="">{t('invoices.manual_product')}</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.id} style={{ background: '#061220' }}>
+                                {productLabel(product)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <Input
                           label={t('invoices.item_name')}
                           placeholder={t('invoices.item_name_placeholder')}
@@ -615,7 +673,7 @@ export default function InvoiceForm({
                           placeholder={t('invoices.item_details_placeholder')}
                           {...register(`items.${i}.details`)}
                         />
-                      </FormRow>
+                      </div>
 
                       {/* Qty + Unit + Price */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -567,6 +567,8 @@
     "import_excel": "Import from Excel",
     "import_excel_title": "Import Items from Excel",
     "new_item_placeholder": "New Item",
+    "product_source": "Product Source",
+    "manual_product": "Manual / External Item",
     "item_details_toggle": "Additional Details",
     "item_name": "Item Name",
     "item_name_placeholder": "e.g. Men's Cotton T-Shirts",

@@ -15,6 +15,7 @@ from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
 from app.models.invoice_item import InvoiceItem
 from app.models.client import Client
 from app.models.company_settings import CompanySettings
+from app.models.product import Product
 from app.schemas.invoice import (
     InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
 )
@@ -72,6 +73,55 @@ def _compute_air_weights(item_data) -> tuple[Decimal | None, Decimal | None]:
     return volumetric.quantize(Decimal("0.001")), chargeable.quantize(Decimal("0.001"))
 
 
+def _validate_product_ids(db: Session, items_data: list) -> None:
+    product_ids = {it.product_id for it in items_data if getattr(it, "product_id", None)}
+    if not product_ids:
+        return
+    found_ids = {
+        row[0]
+        for row in db.query(Product.id).filter(Product.id.in_(product_ids)).all()
+    }
+    missing = product_ids - found_ids
+    if missing:
+        raise HTTPException(404, f"Product not found: {sorted(missing)[0]}")
+
+
+def _add_invoice_item(
+    db: Session,
+    invoice_id: int,
+    item_data,
+    index: int,
+    product_image_path: str | None = None,
+) -> None:
+    tp = Decimal(str(item_data.unit_price)) * Decimal(str(item_data.quantity))
+    vol_w, chrg_w = _compute_air_weights(item_data)
+    item = InvoiceItem(
+        invoice_id=invoice_id,
+        product_id=item_data.product_id,
+        description=item_data.description,
+        description_ar=item_data.description_ar,
+        details=item_data.details,
+        details_ar=item_data.details_ar,
+        product_image_path=product_image_path,
+        hs_code=item_data.hs_code,
+        quantity=item_data.quantity,
+        unit=item_data.unit,
+        unit_price=item_data.unit_price,
+        total_price=tp,
+        cartons=item_data.cartons,
+        gross_weight=item_data.gross_weight,
+        net_weight=item_data.net_weight,
+        cbm=item_data.cbm,
+        carton_length_cm=item_data.carton_length_cm,
+        carton_width_cm=item_data.carton_width_cm,
+        carton_height_cm=item_data.carton_height_cm,
+        volumetric_weight_kg=vol_w,
+        chargeable_weight_kg=chrg_w,
+        sort_order=item_data.sort_order or index,
+    )
+    db.add(item)
+
+
 @router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 def create_invoice(
     payload: InvoiceCreate,
@@ -94,6 +144,7 @@ def create_invoice(
     inv_number = _generate_invoice_number(db, payload.invoice_type, client_code, year)
 
     subtotal, total = _calc_totals(payload.items, payload.discount)
+    _validate_product_ids(db, payload.items)
 
     # Dummy invoices are always status=DUMMY
     initial_status = InvoiceStatus.DUMMY if not payload.client_id else InvoiceStatus.DRAFT
@@ -136,31 +187,7 @@ def create_invoice(
     db.flush()
 
     for idx, it in enumerate(payload.items):
-        tp = Decimal(str(it.unit_price)) * Decimal(str(it.quantity))
-        vol_w, chrg_w = _compute_air_weights(it)
-        item = InvoiceItem(
-            invoice_id=inv.id,
-            description=it.description,
-            description_ar=it.description_ar,
-            details=it.details,
-            details_ar=it.details_ar,
-            hs_code=it.hs_code,
-            quantity=it.quantity,
-            unit=it.unit,
-            unit_price=it.unit_price,
-            total_price=tp,
-            cartons=it.cartons,
-            gross_weight=it.gross_weight,
-            net_weight=it.net_weight,
-            cbm=it.cbm,
-            carton_length_cm=it.carton_length_cm,
-            carton_width_cm=it.carton_width_cm,
-            carton_height_cm=it.carton_height_cm,
-            volumetric_weight_kg=vol_w,
-            chargeable_weight_kg=chrg_w,
-            sort_order=it.sort_order or idx,
-        )
-        db.add(item)
+        _add_invoice_item(db, inv.id, it, idx)
 
     db.commit()
     db.refresh(inv)
@@ -225,8 +252,28 @@ def update_invoice(
     if not inv:
         raise HTTPException(404, "Invoice not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    items_data = update_data.pop("items", None)
+
+    for field, value in update_data.items():
         setattr(inv, field, value)
+
+    if items_data is not None:
+        _validate_product_ids(db, payload.items or [])
+        old_images = {
+            idx: item.product_image_path
+            for idx, item in enumerate(sorted(inv.items, key=lambda row: (row.sort_order, row.id)))
+        }
+        inv.items.clear()
+        db.flush()
+        for idx, it in enumerate(payload.items or []):
+            _add_invoice_item(db, inv.id, it, idx, old_images.get(idx))
+        subtotal, total = _calc_totals(payload.items or [], inv.discount)
+        inv.subtotal = subtotal
+        inv.total = total
+    elif payload.discount is not None:
+        inv.subtotal, inv.total = _calc_totals(inv.items, inv.discount)
+
     db.commit()
     db.refresh(inv)
     return inv
