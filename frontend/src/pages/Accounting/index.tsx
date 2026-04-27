@@ -7,8 +7,6 @@ import {
   Banknote,
   BarChart3,
   BrainCircuit,
-  Building2,
-  CheckCircle2,
   Download,
   Eye,
   FileText,
@@ -45,8 +43,6 @@ import { getClients } from '@/services/clientService'
 import { getInvoices } from '@/services/invoiceService'
 import { getSuppliers } from '@/services/supplierService'
 import type { AccountingDirection, AccountingEntry, AccountingStatus, BankLineMatchStatus } from '@/types'
-
-type StageStatus = 'ready' | 'next' | 'later'
 
 type EntryForm = {
   direction: AccountingDirection
@@ -119,7 +115,7 @@ function MoneyCard({
 }: {
   title: string
   value: string
-  subtitle: string
+  subtitle?: string
   icon: ElementType
   tone: 'green' | 'red' | 'blue' | 'amber'
 }) {
@@ -135,7 +131,7 @@ function MoneyCard({
         <div>
           <p className="text-xs uppercase tracking-wide text-brand-text-muted">{title}</p>
           <p className="mt-2 text-2xl font-black text-brand-text font-mono">{value}</p>
-          <p className="mt-1 text-xs text-brand-text-muted">{subtitle}</p>
+          {subtitle && <p className="mt-1 text-xs text-brand-text-muted">{subtitle}</p>}
         </div>
         <div className={`rounded-lg border p-2 ${tones[tone]}`}>
           <Icon size={18} />
@@ -145,45 +141,12 @@ function MoneyCard({
   )
 }
 
-function StageCard({
-  title,
-  description,
-  status,
-  label,
-}: {
-  title: string
-  description: string
-  status: StageStatus
-  label: string
-}) {
-  const styles: Record<StageStatus, string> = {
-    ready: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400',
-    next: 'border-blue-500/25 bg-blue-500/10 text-blue-400',
-    later: 'border-brand-border bg-white/[0.03] text-brand-text-muted',
-  }
-  return (
-    <div className="rounded-xl border border-brand-border bg-brand-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-brand-text">{title}</h3>
-          <p className="mt-2 text-xs leading-5 text-brand-text-muted">{description}</p>
-        </div>
-        <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${styles[status]}`}>
-          {label}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 function ActionButton({
   title,
-  subtitle,
   icon: Icon,
   onClick,
 }: {
   title: string
-  subtitle: string
   icon: ElementType
   onClick: () => void
 }) {
@@ -199,7 +162,6 @@ function ActionButton({
         </div>
         <div>
           <p className="text-sm font-semibold text-brand-text group-hover:text-brand-primary-light">{title}</p>
-          <p className="mt-1 text-xs leading-5 text-brand-text-muted">{subtitle}</p>
         </div>
       </div>
     </button>
@@ -469,33 +431,6 @@ export default function AccountingPage() {
     label: `${statement.original_filename || statement.bank_name || `#${statement.id}`} — ${statement.line_count} ${t('accounting.bank.lines', 'lines')}`,
   }))
 
-  const stages = [
-    {
-      title: t('accounting.stages.stage1_title'),
-      description: t('accounting.stages.stage1_desc'),
-      label: t('accounting.stage_badges.stage1'),
-      status: 'ready' as StageStatus,
-    },
-    {
-      title: t('accounting.stages.stage2_title'),
-      description: t('accounting.stages.stage2_desc'),
-      label: t('accounting.stage_badges.stage2', 'Stage 2'),
-      status: 'ready' as StageStatus,
-    },
-    {
-      title: t('accounting.stages.stage3_title'),
-      description: t('accounting.stages.stage3_desc'),
-      label: t('accounting.stage_badges.stage3', 'Stage 3'),
-      status: 'ready' as StageStatus,
-    },
-    {
-      title: t('accounting.stages.stage4_title'),
-      description: t('accounting.stages.stage4_desc'),
-      label: t('accounting.stage_badges.later'),
-      status: 'later' as StageStatus,
-    },
-  ]
-
   const openEntryModal = (direction: AccountingDirection) => {
     setForm(emptyForm(direction))
     setFiles([])
@@ -611,18 +546,6 @@ export default function AccountingPage() {
               {t('accounting.badge')}
             </div>
             <h1 className="mt-4 text-2xl font-black text-brand-text">{t('accounting.title')}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-brand-text-muted">
-              {t('accounting.subtitle')}
-            </p>
-          </div>
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-xs leading-5 text-emerald-200">
-            <div className="flex items-center gap-2 font-semibold text-emerald-300">
-              <ShieldCheck size={14} />
-              {t('accounting.stage2_live_title', 'Stage 2 is live')}
-            </div>
-            <p className="mt-1 max-w-sm">
-              {t('accounting.stage2_live_note', 'Manual money in/out entries now save to the database with audit-friendly links and proof files.')}
-            </p>
           </div>
         </div>
       </div>
@@ -631,88 +554,58 @@ export default function AccountingPage() {
         <MoneyCard
           title={t('accounting.cards.money_in')}
           value={summaryLoading ? '...' : money(summary?.money_in)}
-          subtitle={t('accounting.cards.money_in_sub')}
           icon={TrendingUp}
           tone="green"
         />
         <MoneyCard
           title={t('accounting.cards.money_out')}
           value={summaryLoading ? '...' : money(summary?.money_out)}
-          subtitle={t('accounting.cards.money_out_sub')}
           icon={TrendingDown}
           tone="red"
         />
         <MoneyCard
           title={t('accounting.cards.bank_balance')}
           value={summaryLoading ? '...' : money(summary?.balance)}
-          subtitle={t('accounting.cards.bank_balance_sub')}
           icon={Landmark}
           tone="blue"
         />
         <MoneyCard
           title={t('accounting.cards.needs_review')}
           value={summaryLoading ? '...' : String(summary?.needs_review ?? 0)}
-          subtitle={t('accounting.cards.needs_review_sub')}
           icon={AlertTriangle}
           tone="amber"
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_0.9fr] gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-xl border border-brand-border bg-brand-surface p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-brand-text">{t('accounting.quick_actions')}</h2>
-              <p className="mt-1 text-xs text-brand-text-muted">{t('accounting.quick_actions_sub')}</p>
             </div>
             <BrainCircuit size={18} className="text-brand-primary-light" />
           </div>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             <ActionButton
               title={t('accounting.actions.money_in')}
-              subtitle={t('accounting.actions.money_in_sub')}
               icon={Wallet}
               onClick={() => openEntryModal('money_in')}
             />
             <ActionButton
               title={t('accounting.actions.money_out')}
-              subtitle={t('accounting.actions.money_out_sub')}
               icon={Banknote}
               onClick={() => openEntryModal('money_out')}
             />
             <ActionButton
               title={t('accounting.actions.upload_receipt')}
-              subtitle={t('accounting.actions.upload_receipt_sub')}
               icon={ReceiptText}
               onClick={() => openEntryModal('money_out')}
             />
             <ActionButton
               title={t('accounting.actions.upload_statement')}
-              subtitle={t('accounting.actions.upload_statement_sub')}
               icon={Upload}
               onClick={() => setBankModalOpen(true)}
             />
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-brand-border bg-brand-surface p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-300" />
-            <h2 className="text-sm font-semibold text-brand-text">{t('accounting.accountant_alerts')}</h2>
-          </div>
-          <div className="mt-4 space-y-2">
-            <div className="flex items-start gap-2 rounded-lg border border-brand-border/60 bg-white/[0.03] p-3">
-              <CheckCircle2 size={14} className="mt-0.5 text-brand-text-muted" />
-              <p className="text-xs leading-5 text-brand-text-muted">
-                {t('accounting.alerts.receipt_not_posted')}
-              </p>
-            </div>
-            <div className="flex items-start gap-2 rounded-lg border border-brand-border/60 bg-white/[0.03] p-3">
-              <CheckCircle2 size={14} className="mt-0.5 text-brand-text-muted" />
-              <p className="text-xs leading-5 text-brand-text-muted">
-                {t('accounting.alerts.missing_tax_invoice')}
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -721,7 +614,6 @@ export default function AccountingPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-brand-text">{t('accounting.ledger_title', 'Recent accounting entries')}</h2>
-            <p className="mt-1 text-xs text-brand-text-muted">{t('accounting.ledger_subtitle', 'Search and review the latest manual money movement records.')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Input
@@ -831,9 +723,6 @@ export default function AccountingPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-brand-text">{t('accounting.bank.title', 'Bank reconciliation')}</h2>
-            <p className="mt-1 text-xs text-brand-text-muted">
-              {t('accounting.bank.subtitle', 'Upload CSV/XLSX statements, extract lines, and compare them with accounting entries.')}
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Select
@@ -960,9 +849,6 @@ export default function AccountingPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-brand-text">{t('accounting.reports.title', 'Reports and tax control')}</h2>
-            <p className="mt-1 text-xs text-brand-text-muted">
-              {t('accounting.reports.subtitle', 'Period summary, category totals, missing official invoices, and print-ready accountant review.')}
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Input
@@ -997,28 +883,24 @@ export default function AccountingPage() {
           <MoneyCard
             title={t('accounting.reports.net', 'Net')}
             value={reportLoading ? '...' : money(report?.net)}
-            subtitle={t('accounting.reports.net_sub', 'Money in minus money out')}
             icon={BarChart3}
             tone="blue"
           />
           <MoneyCard
             title={t('accounting.reports.tax_net', 'Tax net')}
             value={reportLoading ? '...' : money(report?.tax_net)}
-            subtitle={t('accounting.reports.tax_net_sub', 'Recorded tax on income minus expenses')}
             icon={ShieldCheck}
             tone="green"
           />
           <MoneyCard
             title={t('accounting.reports.missing_invoices', 'Missing proof')}
             value={reportLoading ? '...' : String(report?.missing_official_invoice_count ?? 0)}
-            subtitle={t('accounting.reports.missing_invoices_sub', 'Expenses without official invoice flag')}
             icon={AlertTriangle}
             tone="amber"
           />
           <MoneyCard
             title={t('accounting.reports.unmatched_bank', 'Unmatched bank lines')}
             value={reportLoading ? '...' : String(report?.unmatched_bank_lines ?? 0)}
-            subtitle={t('accounting.reports.unmatched_bank_sub', 'Bank movements still not matched')}
             icon={Landmark}
             tone="red"
           />
@@ -1072,44 +954,6 @@ export default function AccountingPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-3 flex items-center gap-2">
-          <BarChart3 size={16} className="text-brand-primary-light" />
-          <h2 className="text-sm font-semibold text-brand-text">{t('accounting.implementation_stages')}</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {stages.map((stage) => (
-            <StageCard key={stage.title} {...stage} />
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-brand-border bg-brand-surface p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-brand-text">
-              <FileText size={16} className="text-blue-400" />
-              <h3 className="text-sm font-semibold">{t('accounting.documents_title')}</h3>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-brand-text-muted">{t('accounting.documents_desc')}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-brand-text">
-              <Building2 size={16} className="text-emerald-400" />
-              <h3 className="text-sm font-semibold">{t('accounting.reconciliation_title')}</h3>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-brand-text-muted">{t('accounting.reconciliation_desc')}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-brand-text">
-              <ShieldCheck size={16} className="text-amber-400" />
-              <h3 className="text-sm font-semibold">{t('accounting.tax_title')}</h3>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-brand-text-muted">{t('accounting.tax_desc')}</p>
           </div>
         </div>
       </div>
