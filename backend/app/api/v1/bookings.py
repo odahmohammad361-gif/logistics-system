@@ -22,6 +22,7 @@ from app.models.user import User, UserRole
 from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingCargoDocument, BookingLoadingPhoto, CONTAINER_CBM
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
+from app.models.invoice import Invoice
 from app.models.shipping_agent import AgentCarrierRate
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate
 from app.schemas.booking import (
@@ -436,6 +437,17 @@ def _validate_clearance_selection(db: Session, line_data, booking: Booking | Non
                     raise HTTPException(400, f"Selected clearance rate is for {rate.country}, but this container is going to {booking_dest}")
 
 
+def _validate_invoice_selection(db: Session, invoice_id: int | None, client_id: int | None) -> Invoice | None:
+    if not invoice_id:
+        return None
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+    if invoice.client_id and client_id and invoice.client_id != client_id:
+        raise HTTPException(400, "Selected invoice belongs to a different client")
+    return invoice
+
+
 def _validate_goods_source(source: str | None) -> str | None:
     if not source:
         return None
@@ -631,6 +643,8 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
             name_ar=line.client.name_ar,
             client_code=line.client.client_code,
         ),
+        invoice_id=line.invoice_id,
+        invoice_number=line.invoice.invoice_number if line.invoice else None,
         sort_order=line.sort_order,
         goods_source=line.goods_source,
         is_full_container_client=bool(line.is_full_container_client),
@@ -1279,11 +1293,13 @@ def add_cargo_line(
             )
     _assert_full_container_rules(b, payload.is_full_container_client)
     _assert_cargo_capacity(b, payload.cbm)
+    _validate_invoice_selection(db, payload.invoice_id, payload.client_id)
     _validate_clearance_selection(db, payload, b)
 
     line = BookingCargoLine(
         booking_id=booking_id,
         client_id=payload.client_id,
+        invoice_id=payload.invoice_id,
         sort_order=payload.sort_order,
         goods_source=_validate_goods_source(payload.goods_source),
         is_full_container_client=payload.is_full_container_client,
@@ -1343,6 +1359,8 @@ def update_cargo_line(
     data.pop("freight_share", None)
     if "goods_source" in data:
         data["goods_source"] = _validate_goods_source(data["goods_source"])
+    effective_invoice_id = data.get("invoice_id", line.invoice_id)
+    _validate_invoice_selection(db, effective_invoice_id, line.client_id)
     merged = {
         "clearance_through_us": line.clearance_through_us,
         "clearance_agent_id": line.clearance_agent_id,

@@ -19,6 +19,7 @@ class CustomsEstimate(Base):
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True, index=True)
+    booking_cargo_line_id = Column(Integer, ForeignKey("booking_cargo_lines.id"), nullable=True, index=True)
 
     product_value_usd = Column(Numeric(14, 2), nullable=False, default=0)
     shipping_cost_usd = Column(Numeric(14, 2), nullable=False, default=0)
@@ -37,6 +38,7 @@ class CustomsEstimate(Base):
     client = relationship("Client", foreign_keys=[client_id])
     invoice = relationship("Invoice", foreign_keys=[invoice_id])
     booking = relationship("Booking", foreign_keys=[booking_id])
+    cargo_line = relationship("BookingCargoLine", foreign_keys=[booking_cargo_line_id])
     created_by = relationship("User", foreign_keys=[created_by_id])
     lines = relationship(
         "CustomsEstimateLine",

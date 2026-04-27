@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Calculator, FolderOpen, Plus, Printer, RefreshCw, Save, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { FormSection, Input } from '@/components/ui/Form'
-import { getBookings } from '@/services/bookingService'
+import { getBooking, getBookings } from '@/services/bookingService'
 import { getClients } from '@/services/clientService'
 import { getInvoice, getInvoices } from '@/services/invoiceService'
 import { listProducts } from '@/services/productService'
@@ -14,7 +15,7 @@ import {
   createCustomsEstimate,
   listCustomsEstimates,
 } from '@/services/customsCalculatorService'
-import type { CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Invoice, InvoiceItem, Product } from '@/types'
+import type { BookingCargoLine, CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Invoice, InvoiceItem, Product } from '@/types'
 
 type UnitBasis = 'dozen' | 'piece' | 'kg' | 'carton'
 
@@ -178,6 +179,27 @@ function isUnitBasis(value: unknown): value is UnitBasis {
   return value === 'dozen' || value === 'piece' || value === 'kg' || value === 'carton'
 }
 
+function findProductByText(products: Product[], hsCode?: string | null, ...texts: Array<string | null | undefined>) {
+  const hs = normalized(hsCode)
+  if (hs) {
+    const match = products.find((product) => normalized(product.hs_code) === hs)
+    if (match) return match
+  }
+
+  const itemText = texts.map(normalized).filter(Boolean).join(' ')
+  if (!itemText) return undefined
+
+  return products.find((product) => {
+    const names = [
+      normalized(product.name),
+      normalized(product.name_ar),
+      normalized(product.description),
+      normalized(product.description_ar),
+    ].filter(Boolean)
+    return names.some((name) => itemText.includes(name) || name.includes(itemText))
+  })
+}
+
 function inferUnitBasis(item: InvoiceItem, product?: Product): UnitBasis {
   if (isUnitBasis(product?.customs_unit_basis)) return product.customs_unit_basis
   const unit = normalized(item.unit)
@@ -216,24 +238,7 @@ function productValueFor(item: InvoiceItem, basis: UnitBasis, customsUnits: numb
 }
 
 function findProductForInvoiceItem(item: InvoiceItem, products: Product[]) {
-  const hs = normalized(item.hs_code)
-  if (hs) {
-    const match = products.find((product) => normalized(product.hs_code) === hs)
-    if (match) return match
-  }
-
-  const itemText = `${normalized(item.description)} ${normalized(item.description_ar)}`.trim()
-  if (!itemText) return undefined
-
-  return products.find((product) => {
-    const names = [
-      normalized(product.name),
-      normalized(product.name_ar),
-      normalized(product.description),
-      normalized(product.description_ar),
-    ].filter(Boolean)
-    return names.some((name) => itemText.includes(name) || name.includes(itemText))
-  })
+  return findProductByText(products, item.hs_code, item.description, item.description_ar)
 }
 
 function invoiceItemToRow(item: InvoiceItem, products: Product[]): CalcRow {
@@ -270,8 +275,51 @@ function invoiceTitle(invoice: Invoice) {
   return name ? `${invoice.invoice_number} - ${name}` : invoice.invoice_number
 }
 
+type ExtractedCargoGoods = NonNullable<NonNullable<BookingCargoLine['extracted_goods']>['goods']>[number]
+
+function cargoProductValue(product?: Product) {
+  const productCustomsValue = numeric(product?.customs_estimated_value_usd)
+  if (productCustomsValue > 0) return productCustomsValue
+  return numeric(product?.price_usd)
+}
+
+function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoLine, products: Product[]): CalcRow {
+  const product = findProductByText(products, item.hs_code ?? line.hs_code, item.description, line.description, line.description_ar)
+  const basis = isUnitBasis(product?.customs_unit_basis) ? product.customs_unit_basis : 'dozen'
+  const cartons = numeric(item.cartons ?? line.cartons)
+  const quantity = numeric(item.quantity)
+  const piecesPerCarton = cartons > 0 && quantity > 0 ? quantity / cartons : numeric(product?.pcs_per_carton)
+
+  return {
+    id: makeRowId(),
+    product_id: product ? String(product.id) : '',
+    description: item.description ?? line.description ?? product?.name ?? '',
+    description_ar: line.description_ar ?? product?.name_ar ?? '',
+    hs_code: item.hs_code ?? line.hs_code ?? product?.hs_code ?? '',
+    customs_category: product?.customs_category ?? product?.category ?? '',
+    unit_basis: basis,
+    cartons: valueString(item.cartons ?? line.cartons),
+    pieces_per_carton: piecesPerCarton > 0 ? String(Number(piecesPerCarton.toFixed(4))) : '',
+    quantity_pieces: valueString(item.quantity),
+    gross_weight_kg: valueString(item.gross_weight_kg ?? line.gross_weight_kg),
+    estimated_value_usd: valueString(cargoProductValue(product)),
+    shipping_cost_per_unit_usd: '',
+    shipping_cost_total_usd: '',
+    customs_duty_pct: product?.customs_duty_pct ?? '',
+    sales_tax_pct: product?.sales_tax_pct ?? '',
+    other_tax_pct: product?.other_tax_pct ?? '',
+  }
+}
+
+function cargoLineToRows(line: BookingCargoLine, products: Product[]): CalcRow[] {
+  const goods = line.extracted_goods?.goods ?? []
+  if (goods.length) return goods.map((item) => cargoGoodsToRow(item, line, products))
+  return [cargoGoodsToRow({}, line, products)]
+}
+
 export default function CustomsCalculatorPage() {
   const { t, i18n } = useTranslation()
+  const [searchParams] = useSearchParams()
   const qc = useQueryClient()
   const isAr = i18n.language === 'ar'
   const [country, setCountry] = useState('Jordan')
@@ -279,7 +327,8 @@ export default function CustomsCalculatorPage() {
   const [notes, setNotes] = useState('')
   const [clientId, setClientId] = useState('')
   const [invoiceId, setInvoiceId] = useState('')
-  const [bookingId, setBookingId] = useState('')
+  const [bookingId, setBookingId] = useState(searchParams.get('booking_id') ?? '')
+  const [bookingCargoLineId, setBookingCargoLineId] = useState(searchParams.get('cargo_line_id') ?? '')
   const [rows, setRows] = useState<CalcRow[]>([newRow()])
   const [result, setResult] = useState<CustomsCalculatorResponse | null>(null)
 
@@ -308,7 +357,16 @@ export default function CustomsCalculatorPage() {
     queryFn: () => getBookings({ page: 1, page_size: 100 }),
   })
 
+  const selectedBookingId = Number(bookingId)
+  const { data: selectedBooking } = useQuery({
+    queryKey: ['customs-link-booking-detail', selectedBookingId],
+    queryFn: () => getBooking(selectedBookingId),
+    enabled: Number.isFinite(selectedBookingId) && selectedBookingId > 0,
+  })
+
   const products = productsData?.results ?? []
+  const bookingCargoLines = selectedBooking?.cargo_lines ?? []
+  const selectedCargoLine = bookingCargoLines.find((line) => String(line.id) === bookingCargoLineId)
   const productById = useMemo(() => {
     const map = new Map<number, Product>()
     products.forEach((product) => map.set(product.id, product))
@@ -342,6 +400,7 @@ export default function CustomsCalculatorPage() {
       client_id: optionalId(clientId),
       invoice_id: optionalId(invoiceId),
       booking_id: optionalId(bookingId),
+      booking_cargo_line_id: optionalId(bookingCargoLineId),
     }),
     onSuccess: (estimate) => {
       setResult(estimateToResult(estimate))
@@ -350,6 +409,7 @@ export default function CustomsCalculatorPage() {
       setClientId(estimate.client_id ? String(estimate.client_id) : '')
       setInvoiceId(estimate.invoice_id ? String(estimate.invoice_id) : '')
       setBookingId(estimate.booking_id ? String(estimate.booking_id) : '')
+      setBookingCargoLineId(estimate.booking_cargo_line_id ? String(estimate.booking_cargo_line_id) : '')
       qc.invalidateQueries({ queryKey: ['customs-estimates'] })
     },
   })
@@ -396,6 +456,32 @@ export default function CustomsCalculatorPage() {
     patchRow(id, { customs_duty_pct: '30', sales_tax_pct: '', other_tax_pct: '' })
   }
 
+  function changeBooking(nextBookingId: string) {
+    setBookingId(nextBookingId)
+    setBookingCargoLineId('')
+  }
+
+  function changeCargoLine(nextLineId: string) {
+    setBookingCargoLineId(nextLineId)
+    const line = bookingCargoLines.find((item) => String(item.id) === nextLineId)
+    if (!line) return
+    setClientId(String(line.client.id))
+    if (line.invoice_id) setInvoiceId(String(line.invoice_id))
+  }
+
+  function importCargoLine(line: BookingCargoLine | undefined) {
+    if (!line) return
+    setRows(cargoLineToRows(line, products))
+    setResult(null)
+    setBookingId(String(line.booking_id))
+    setBookingCargoLineId(String(line.id))
+    setClientId(String(line.client.id))
+    if (line.invoice_id) setInvoiceId(String(line.invoice_id))
+    if (!title) {
+      setTitle(`${selectedBooking?.booking_number ?? t('containers.title')} - ${line.client.client_code}`)
+    }
+  }
+
   function loadEstimate(estimate: CustomsEstimate) {
     setCountry(estimate.country)
     setTitle(estimate.title || estimate.estimate_number)
@@ -403,6 +489,7 @@ export default function CustomsCalculatorPage() {
     setClientId(estimate.client_id ? String(estimate.client_id) : '')
     setInvoiceId(estimate.invoice_id ? String(estimate.invoice_id) : '')
     setBookingId(estimate.booking_id ? String(estimate.booking_id) : '')
+    setBookingCargoLineId(estimate.booking_cargo_line_id ? String(estimate.booking_cargo_line_id) : '')
     setRows(estimateToRows(estimate))
     setResult(estimateToResult(estimate))
   }
@@ -527,7 +614,7 @@ export default function CustomsCalculatorPage() {
           />
         </div>
         <FormSection title={t('tax_customs.linked_records')}>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <label className="label-base">{t('clients.title')}</label>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="input-base w-full">
@@ -562,7 +649,7 @@ export default function CustomsCalculatorPage() {
             </div>
             <div className="space-y-1.5">
               <label className="label-base">{t('containers.title')}</label>
-              <select value={bookingId} onChange={(e) => setBookingId(e.target.value)} className="input-base w-full">
+              <select value={bookingId} onChange={(e) => changeBooking(e.target.value)} className="input-base w-full">
                 <option value="">{t('tax_customs.no_link')}</option>
                 {(bookingsData?.results ?? []).map((booking) => (
                   <option key={booking.id} value={booking.id}>
@@ -570,6 +657,33 @@ export default function CustomsCalculatorPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-base">{t('tax_customs.cargo_line')}</label>
+              <select
+                value={bookingCargoLineId}
+                onChange={(e) => changeCargoLine(e.target.value)}
+                className="input-base w-full"
+                disabled={!bookingId}
+              >
+                <option value="">{bookingId ? t('tax_customs.no_link') : t('tax_customs.select_container_first')}</option>
+                {bookingCargoLines.map((line) => (
+                  <option key={line.id} value={line.id}>
+                    {line.client.client_code} — {isAr ? line.client.name_ar || line.client.name : line.client.name}
+                    {line.cbm != null ? ` — ${Number(line.cbm).toFixed(3)} CBM` : ''}
+                    {line.invoice_number ? ` — ${line.invoice_number}` : ''}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => importCargoLine(selectedCargoLine)}
+                disabled={!selectedCargoLine}
+              >
+                {t('tax_customs.import_cargo_goods')}
+              </Button>
             </div>
           </div>
         </FormSection>
@@ -608,6 +722,11 @@ export default function CustomsCalculatorPage() {
                       {estimate.booking && (
                         <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300">
                           {estimate.booking.booking_number}
+                        </span>
+                      )}
+                      {estimate.cargo_line && (
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+                          {estimate.cargo_line.client_code || estimate.cargo_line.client_name || `#${estimate.cargo_line.id}`}
                         </span>
                       )}
                     </div>

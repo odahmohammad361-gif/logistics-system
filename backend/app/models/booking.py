@@ -96,6 +96,7 @@ class BookingCargoLine(Base):
     id         = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
     client_id  = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     sort_order = Column(Integer, default=0)
 
     # Cargo description
@@ -137,6 +138,7 @@ class BookingCargoLine(Base):
     # Relationships
     booking = relationship("Booking",         back_populates="cargo_lines")
     client  = relationship("Client",          foreign_keys=[client_id])
+    invoice = relationship("Invoice",         foreign_keys=[invoice_id])
     clearance_agent = relationship("ClearanceAgent", foreign_keys=[clearance_agent_id])
     clearance_agent_rate = relationship("ClearanceAgentRate", foreign_keys=[clearance_agent_rate_id])
     images  = relationship(

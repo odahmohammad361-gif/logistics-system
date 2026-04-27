@@ -497,6 +497,8 @@ export interface BookingCargoLine {
   id: number
   booking_id: number
   client: { id: number; name: string; name_ar: string | null; client_code: string }
+  invoice_id: number | null
+  invoice_number: string | null
   sort_order: number
   goods_source: 'company_buying_service' | 'client_ready_goods' | null
   is_full_container_client: boolean
@@ -820,6 +822,7 @@ export interface CustomsEstimate {
   client_id: number | null
   invoice_id: number | null
   booking_id: number | null
+  booking_cargo_line_id: number | null
   client: AccountingClientShort | null
   invoice: {
     id: number
@@ -829,6 +832,15 @@ export interface CustomsEstimate {
     currency: string
   } | null
   booking: AccountingBookingShort | null
+  cargo_line: {
+    id: number
+    booking_id: number
+    client_id: number
+    client_code: string | null
+    client_name: string | null
+    cartons: string | null
+    cbm: string | null
+  } | null
   product_value_usd: string
   shipping_cost_usd: string
   customs_base_usd: string

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { getEligibleClients } from '@/services/bookingService'
 import { getClearanceAgents } from '@/services/agentService'
+import { getInvoices } from '@/services/invoiceService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -52,6 +53,7 @@ function clearanceMode(mode: BookingMode) {
 
 interface FormValues {
   client_id:          string
+  invoice_id:         string
   goods_source:       string
   is_full_container_client: boolean
   description:        string
@@ -129,6 +131,12 @@ export default function CargoLineForm({
     enabled: open,
   })
 
+  const { data: invoicesData } = useQuery({
+    queryKey: ['cargo-line-invoices'],
+    queryFn: () => getInvoices({ page: 1, page_size: 100 }),
+    enabled: open,
+  })
+
   const bookingDest = eligibleData?.booking_destination ?? null
 
   const clientOptions = useMemo(() => {
@@ -141,6 +149,7 @@ export default function CargoLineForm({
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const [goodsRows, setGoodsRows] = useState<GoodsRow[]>([])
+  const selectedClientId = watch('client_id')
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
@@ -161,6 +170,16 @@ export default function CargoLineForm({
       label: `${isAr && a.name_ar ? a.name_ar : a.name}${a.country ? ` — ${a.country}` : ''}`,
     }))
   }, [clearanceAgentsData, bookingDest, isAr])
+
+  const invoiceOptions = useMemo(() => {
+    const invoices = invoicesData?.results ?? []
+    return invoices
+      .filter(inv => !selectedClientId || !inv.client_id || String(inv.client_id) === selectedClientId)
+      .map(inv => ({
+        value: String(inv.id),
+        label: `${inv.invoice_number} — ${inv.invoice_type} — ${Number(inv.total || 0).toFixed(2)} ${inv.currency || 'USD'}`,
+      }))
+  }, [invoicesData, selectedClientId])
 
   const clearanceRateOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
@@ -231,6 +250,7 @@ export default function CargoLineForm({
     if (initial) {
       reset({
         client_id:        String(initial.client.id),
+        invoice_id:       initial.invoice_id != null ? String(initial.invoice_id) : '',
         goods_source:     initial.goods_source ?? 'client_ready_goods',
         is_full_container_client: initial.is_full_container_client ?? false,
         description:      initial.extracted_goods?.goods?.length && initial.description?.trim().startsWith('1.') ? '' : (initial.description ?? ''),
@@ -254,7 +274,7 @@ export default function CargoLineForm({
       })
     } else {
       reset({
-        client_id:'', goods_source:'client_ready_goods', is_full_container_client:false,
+        client_id:'', invoice_id:'', goods_source:'client_ready_goods', is_full_container_client:false,
         description:'', description_ar:'', hs_code:'', shipping_marks:'',
         cartons:'', gross_weight_kg:'', net_weight_kg:'', cbm:'',
         carton_length_cm:'', carton_width_cm:'', carton_height_cm:'',
@@ -309,6 +329,7 @@ export default function CargoLineForm({
       .filter(row => row.description || row.cartons != null || row.quantity != null || row.gross_weight_kg != null || row.cbm != null || row.hs_code)
     await onSubmit({
       client_id:          parseInt(vals.client_id),
+      invoice_id:         vals.invoice_id ? parseInt(vals.invoice_id) : null,
       goods_source:       vals.goods_source || 'client_ready_goods',
       is_full_container_client: Boolean(vals.is_full_container_client),
       description:        vals.description      || null,
@@ -407,6 +428,14 @@ export default function CargoLineForm({
             error={errors.client_id?.message}
             disabled={!!initial}
             {...register('client_id', { required: t('common.required') })}
+          />
+          <Select
+            label={isAr ? 'الفاتورة المرتبطة' : 'Linked Invoice'}
+            options={invoiceOptions}
+            placeholder={invoiceOptions.length
+              ? (isAr ? 'اختياري: اختر فاتورة العميل' : 'Optional: select client invoice')
+              : (isAr ? 'لا توجد فواتير مطابقة' : 'No matching invoices')}
+            {...register('invoice_id')}
           />
           <div className="grid sm:grid-cols-2 gap-3">
             <Select

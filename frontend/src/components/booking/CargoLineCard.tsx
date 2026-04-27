@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus, Eye, Download, FileSearch } from 'lucide-react'
+import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, FileText, ShieldCheck, Receipt, FolderPlus, Eye, Download, FileSearch, Calculator } from 'lucide-react'
 import clsx from 'clsx'
 import type { BookingCargoDocument, BookingCargoLine, BookingMode } from '@/types'
 import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments, extractCargoDocuments } from '@/services/bookingService'
@@ -138,6 +138,13 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
               <Pencil size={14} />
             </button>
           )}
+          <a
+            href={`/customs-calculator?booking_id=${bookingId}&cargo_line_id=${line.id}`}
+            className="p-1.5 rounded-lg text-brand-text-muted hover:text-brand-primary hover:bg-brand-primary/10 transition-colors"
+            title={isRTL ? 'حاسبة الجمارك' : 'Customs calculator'}
+          >
+            <Calculator size={14} />
+          </a>
           {!locked && onDelete && (
             <button
               onClick={onDelete}
@@ -163,6 +170,11 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
         {line.is_full_container_client && (
           <span className="rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold">
             {isRTL ? 'حاوية كاملة لهذا العميل' : 'Full container client'}
+          </span>
+        )}
+        {line.invoice_number && (
+          <span className="rounded-full bg-yellow-500/10 text-yellow-300 px-2 py-0.5 text-[10px] font-semibold">
+            {isRTL ? 'فاتورة' : 'Invoice'} {line.invoice_number}
           </span>
         )}
       </div>

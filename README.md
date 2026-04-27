@@ -114,6 +114,7 @@ Current behavior:
 - Saves estimates with line-item history and soft archive.
 - Links saved estimates to client, invoice, and container records when available.
 - Imports selected invoice items into editable customs calculator lines and tries to match products by HS code/name.
+- Links estimates to a specific container client cargo line, and can import that cargo line's goods list into the calculator.
 
 Later this section should connect to product import lists, client invoices, packing lists, containers, clearance agent rates, and accounting reports.
 

@@ -86,6 +86,7 @@ class CustomsEstimateCreate(CustomsCalculatorRequest):
     client_id: Optional[int] = None
     invoice_id: Optional[int] = None
     booking_id: Optional[int] = None
+    booking_cargo_line_id: Optional[int] = None
 
 
 class CustomsEstimateLineResponse(CustomsCalculatorItemResult):
@@ -124,6 +125,16 @@ class CustomsEstimateBookingShort(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CustomsEstimateCargoLineShort(BaseModel):
+    id: int
+    booking_id: int
+    client_id: int
+    client_code: Optional[str] = None
+    client_name: Optional[str] = None
+    cartons: Optional[Decimal] = None
+    cbm: Optional[Decimal] = None
+
+
 class CustomsEstimateResponse(BaseModel):
     id: int
     estimate_number: str
@@ -135,9 +146,11 @@ class CustomsEstimateResponse(BaseModel):
     client_id: Optional[int] = None
     invoice_id: Optional[int] = None
     booking_id: Optional[int] = None
+    booking_cargo_line_id: Optional[int] = None
     client: Optional[CustomsEstimateClientShort] = None
     invoice: Optional[CustomsEstimateInvoiceShort] = None
     booking: Optional[CustomsEstimateBookingShort] = None
+    cargo_line: Optional[CustomsEstimateCargoLineShort] = None
     product_value_usd: Decimal
     shipping_cost_usd: Decimal
     customs_base_usd: Decimal

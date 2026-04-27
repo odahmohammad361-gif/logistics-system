@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
 from app.database import get_db
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingCargoLine
 from app.models.client import Client
 from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 from app.models.invoice import Invoice
@@ -225,6 +225,7 @@ def _serialize_line(line: CustomsEstimateLine) -> dict:
 
 
 def _serialize_estimate(estimate: CustomsEstimate) -> dict:
+    cargo_line = estimate.cargo_line
     return {
         "id": estimate.id,
         "estimate_number": estimate.estimate_number,
@@ -236,9 +237,19 @@ def _serialize_estimate(estimate: CustomsEstimate) -> dict:
         "client_id": estimate.client_id,
         "invoice_id": estimate.invoice_id,
         "booking_id": estimate.booking_id,
+        "booking_cargo_line_id": estimate.booking_cargo_line_id,
         "client": estimate.client,
         "invoice": estimate.invoice,
         "booking": estimate.booking,
+        "cargo_line": {
+            "id": cargo_line.id,
+            "booking_id": cargo_line.booking_id,
+            "client_id": cargo_line.client_id,
+            "client_code": cargo_line.client.client_code if cargo_line.client else None,
+            "client_name": cargo_line.client.name if cargo_line.client else None,
+            "cartons": cargo_line.cartons,
+            "cbm": cargo_line.cbm,
+        } if cargo_line else None,
         "product_value_usd": estimate.product_value_usd,
         "shipping_cost_usd": estimate.shipping_cost_usd,
         "customs_base_usd": estimate.customs_base_usd,
@@ -263,7 +274,7 @@ def _get_estimate(db: Session, estimate_id: int) -> CustomsEstimate:
     return estimate
 
 
-def _ensure_linked_records_exist(db: Session, payload: CustomsEstimateCreate) -> None:
+def _ensure_linked_records_exist(db: Session, payload: CustomsEstimateCreate) -> BookingCargoLine | None:
     checks = (
         ("client_id", Client, "Client"),
         ("invoice_id", Invoice, "Invoice"),
@@ -275,6 +286,22 @@ def _ensure_linked_records_exist(db: Session, payload: CustomsEstimateCreate) ->
             continue
         if not db.query(model).filter(model.id == value).first():
             raise HTTPException(404, f"{label} not found")
+    if payload.booking_cargo_line_id is None:
+        return None
+    cargo_line = db.query(BookingCargoLine).filter(BookingCargoLine.id == payload.booking_cargo_line_id).first()
+    if not cargo_line:
+        raise HTTPException(404, "Container cargo line not found")
+    if payload.booking_id and cargo_line.booking_id != payload.booking_id:
+        raise HTTPException(400, "Selected cargo line does not belong to the selected container")
+    if payload.client_id and cargo_line.client_id != payload.client_id:
+        raise HTTPException(400, "Selected cargo line belongs to a different client")
+    if payload.invoice_id and cargo_line.invoice_id and cargo_line.invoice_id != payload.invoice_id:
+        raise HTTPException(400, "Selected cargo line is linked to a different invoice")
+    if payload.invoice_id:
+        invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
+        if invoice and invoice.client_id and invoice.client_id != cargo_line.client_id:
+            raise HTTPException(400, "Selected invoice belongs to a different cargo-line client")
+    return cargo_line
 
 
 @router.get("/estimates", response_model=CustomsEstimateListResponse)
@@ -313,8 +340,11 @@ def create_estimate(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
-    _ensure_linked_records_exist(db, payload)
+    linked_cargo_line = _ensure_linked_records_exist(db, payload)
     result = _calculate_payload(payload, db)
+    client_id = payload.client_id or (linked_cargo_line.client_id if linked_cargo_line else None)
+    invoice_id = payload.invoice_id or (linked_cargo_line.invoice_id if linked_cargo_line else None)
+    booking_id = payload.booking_id or (linked_cargo_line.booking_id if linked_cargo_line else None)
     estimate = CustomsEstimate(
         estimate_number=_generate_estimate_number(db),
         title=payload.title or None,
@@ -322,9 +352,10 @@ def create_estimate(
         currency=result.currency,
         status="estimated",
         notes=payload.notes or None,
-        client_id=payload.client_id,
-        invoice_id=payload.invoice_id,
-        booking_id=payload.booking_id,
+        client_id=client_id,
+        invoice_id=invoice_id,
+        booking_id=booking_id,
+        booking_cargo_line_id=payload.booking_cargo_line_id,
         product_value_usd=result.totals.product_value_usd,
         shipping_cost_usd=result.totals.shipping_cost_usd,
         customs_base_usd=result.totals.customs_base_usd,

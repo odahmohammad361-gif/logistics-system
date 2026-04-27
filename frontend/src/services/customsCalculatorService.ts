@@ -21,6 +21,7 @@ export const createCustomsEstimate = (data: CustomsCalculatorRequest & {
   client_id?: number | null
   invoice_id?: number | null
   booking_id?: number | null
+  booking_cargo_line_id?: number | null
 }) =>
   api.post<CustomsEstimate>('/customs-calculator/estimates', data).then((r) => r.data)
 
