@@ -95,6 +95,35 @@ class CustomsEstimateLineResponse(CustomsCalculatorItemResult):
     model_config = {"from_attributes": True}
 
 
+class CustomsEstimateClientShort(BaseModel):
+    id: int
+    client_code: str
+    name: str
+    name_ar: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CustomsEstimateInvoiceShort(BaseModel):
+    id: int
+    invoice_number: str
+    invoice_type: str
+    total: Decimal
+    currency: str
+
+    model_config = {"from_attributes": True}
+
+
+class CustomsEstimateBookingShort(BaseModel):
+    id: int
+    booking_number: str
+    mode: str
+    container_size: Optional[str] = None
+    container_no: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class CustomsEstimateResponse(BaseModel):
     id: int
     estimate_number: str
@@ -106,6 +135,9 @@ class CustomsEstimateResponse(BaseModel):
     client_id: Optional[int] = None
     invoice_id: Optional[int] = None
     booking_id: Optional[int] = None
+    client: Optional[CustomsEstimateClientShort] = None
+    invoice: Optional[CustomsEstimateInvoiceShort] = None
+    booking: Optional[CustomsEstimateBookingShort] = None
     product_value_usd: Decimal
     shipping_cost_usd: Decimal
     customs_base_usd: Decimal

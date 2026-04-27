@@ -112,6 +112,7 @@ Current behavior:
 - Applies customs, sales tax, and other tax percentages.
 - Prints a simple estimate report.
 - Saves estimates with line-item history and soft archive.
+- Links saved estimates to client, invoice, and container records when available.
 
 Later this section should connect to product import lists, client invoices, packing lists, containers, clearance agent rates, and accounting reports.
 

@@ -820,6 +820,15 @@ export interface CustomsEstimate {
   client_id: number | null
   invoice_id: number | null
   booking_id: number | null
+  client: AccountingClientShort | null
+  invoice: {
+    id: number
+    invoice_number: string
+    invoice_type: string
+    total: string
+    currency: string
+  } | null
+  booking: AccountingBookingShort | null
   product_value_usd: string
   shipping_cost_usd: string
   customs_base_usd: string

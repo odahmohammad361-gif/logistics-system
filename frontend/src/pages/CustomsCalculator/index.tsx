@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Calculator, FolderOpen, Plus, Printer, RefreshCw, Save, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { FormSection, Input } from '@/components/ui/Form'
+import { getBookings } from '@/services/bookingService'
+import { getClients } from '@/services/clientService'
+import { getInvoices } from '@/services/invoiceService'
 import { listProducts } from '@/services/productService'
 import {
   archiveCustomsEstimate,
@@ -111,6 +114,10 @@ function buildRequest(country: string, rows: CalcRow[]): CustomsCalculatorReques
   }
 }
 
+function optionalId(value: string) {
+  return value ? Number(value) : null
+}
+
 function estimateToResult(estimate: CustomsEstimate): CustomsCalculatorResponse {
   return {
     country: estimate.country,
@@ -160,6 +167,9 @@ export default function CustomsCalculatorPage() {
   const [country, setCountry] = useState('Jordan')
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [invoiceId, setInvoiceId] = useState('')
+  const [bookingId, setBookingId] = useState('')
   const [rows, setRows] = useState<CalcRow[]>([newRow()])
   const [result, setResult] = useState<CustomsCalculatorResponse | null>(null)
 
@@ -171,6 +181,21 @@ export default function CustomsCalculatorPage() {
   const { data: estimatesData } = useQuery({
     queryKey: ['customs-estimates'],
     queryFn: () => listCustomsEstimates({ page: 1, page_size: 8 }),
+  })
+
+  const { data: clientsData } = useQuery({
+    queryKey: ['customs-link-clients'],
+    queryFn: () => getClients({ page: 1, page_size: 100 }),
+  })
+
+  const { data: invoicesData } = useQuery({
+    queryKey: ['customs-link-invoices'],
+    queryFn: () => getInvoices({ page: 1, page_size: 100 }),
+  })
+
+  const { data: bookingsData } = useQuery({
+    queryKey: ['customs-link-bookings'],
+    queryFn: () => getBookings({ page: 1, page_size: 100 }),
   })
 
   const products = productsData?.results ?? []
@@ -190,11 +215,17 @@ export default function CustomsCalculatorPage() {
       ...buildRequest(country, rows),
       title: compact(title),
       notes: compact(notes),
+      client_id: optionalId(clientId),
+      invoice_id: optionalId(invoiceId),
+      booking_id: optionalId(bookingId),
     }),
     onSuccess: (estimate) => {
       setResult(estimateToResult(estimate))
       setTitle(estimate.title || estimate.estimate_number)
       setNotes(estimate.notes || '')
+      setClientId(estimate.client_id ? String(estimate.client_id) : '')
+      setInvoiceId(estimate.invoice_id ? String(estimate.invoice_id) : '')
+      setBookingId(estimate.booking_id ? String(estimate.booking_id) : '')
       qc.invalidateQueries({ queryKey: ['customs-estimates'] })
     },
   })
@@ -245,6 +276,9 @@ export default function CustomsCalculatorPage() {
     setCountry(estimate.country)
     setTitle(estimate.title || estimate.estimate_number)
     setNotes(estimate.notes || '')
+    setClientId(estimate.client_id ? String(estimate.client_id) : '')
+    setInvoiceId(estimate.invoice_id ? String(estimate.invoice_id) : '')
+    setBookingId(estimate.booking_id ? String(estimate.booking_id) : '')
     setRows(estimateToRows(estimate))
     setResult(estimateToResult(estimate))
   }
@@ -368,6 +402,43 @@ export default function CustomsCalculatorPage() {
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
+        <FormSection title={t('tax_customs.linked_records')}>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="label-base">{t('clients.title')}</label>
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="input-base w-full">
+                <option value="">{t('tax_customs.no_link')}</option>
+                {(clientsData?.results ?? []).map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.client_code} — {isAr ? client.name_ar || client.name : client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-base">{t('invoices.title')}</label>
+              <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} className="input-base w-full">
+                <option value="">{t('tax_customs.no_link')}</option>
+                {(invoicesData?.results ?? []).map((invoice) => (
+                  <option key={invoice.id} value={invoice.id}>
+                    {invoice.invoice_number} — {invoice.invoice_type} — {money(invoice.total)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-base">{t('containers.title')}</label>
+              <select value={bookingId} onChange={(e) => setBookingId(e.target.value)} className="input-base w-full">
+                <option value="">{t('tax_customs.no_link')}</option>
+                {(bookingsData?.results ?? []).map((booking) => (
+                  <option key={booking.id} value={booking.id}>
+                    {booking.booking_number} — {booking.mode}{booking.container_size ? ` / ${booking.container_size}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </FormSection>
       </div>
 
       <div className="rounded-xl border border-brand-border bg-brand-surface/60 p-4">
@@ -389,6 +460,23 @@ export default function CustomsCalculatorPage() {
                     <p className="text-xs text-brand-text-muted mt-0.5">
                       {estimate.estimate_number} · {estimate.country} · {new Date(estimate.created_at).toLocaleDateString()}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {estimate.client && (
+                        <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 text-[11px] text-brand-primary-light">
+                          {estimate.client.client_code} · {isAr ? estimate.client.name_ar || estimate.client.name : estimate.client.name}
+                        </span>
+                      )}
+                      {estimate.invoice && (
+                        <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] text-yellow-300">
+                          {estimate.invoice.invoice_number}
+                        </span>
+                      )}
+                      {estimate.booking && (
+                        <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300">
+                          {estimate.booking.booking_number}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm font-black text-brand-green tabular-nums">{money(estimate.landed_estimate_usd)}</p>
                 </div>

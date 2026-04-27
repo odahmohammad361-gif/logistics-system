@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
 from app.database import get_db
+from app.models.booking import Booking
+from app.models.client import Client
 from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
+from app.models.invoice import Invoice
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.customs_calculator import (
@@ -233,6 +236,9 @@ def _serialize_estimate(estimate: CustomsEstimate) -> dict:
         "client_id": estimate.client_id,
         "invoice_id": estimate.invoice_id,
         "booking_id": estimate.booking_id,
+        "client": estimate.client,
+        "invoice": estimate.invoice,
+        "booking": estimate.booking,
         "product_value_usd": estimate.product_value_usd,
         "shipping_cost_usd": estimate.shipping_cost_usd,
         "customs_base_usd": estimate.customs_base_usd,
@@ -255,6 +261,20 @@ def _get_estimate(db: Session, estimate_id: int) -> CustomsEstimate:
     if not estimate:
         raise HTTPException(404, "Customs estimate not found")
     return estimate
+
+
+def _ensure_linked_records_exist(db: Session, payload: CustomsEstimateCreate) -> None:
+    checks = (
+        ("client_id", Client, "Client"),
+        ("invoice_id", Invoice, "Invoice"),
+        ("booking_id", Booking, "Container"),
+    )
+    for field, model, label in checks:
+        value = getattr(payload, field, None)
+        if value is None:
+            continue
+        if not db.query(model).filter(model.id == value).first():
+            raise HTTPException(404, f"{label} not found")
 
 
 @router.get("/estimates", response_model=CustomsEstimateListResponse)
@@ -293,6 +313,7 @@ def create_estimate(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
+    _ensure_linked_records_exist(db, payload)
     result = _calculate_payload(payload, db)
     estimate = CustomsEstimate(
         estimate_number=_generate_estimate_number(db),

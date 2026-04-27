@@ -297,6 +297,8 @@
     "print": "Print",
     "save_estimate": "Save estimate",
     "estimate_title": "Estimate title",
+    "linked_records": "Linked Records",
+    "no_link": "No link",
     "saved_estimates": "Saved estimates",
     "no_saved_estimates": "No saved estimates yet.",
     "load_estimate": "Load",

@@ -297,6 +297,8 @@
     "print": "طباعة",
     "save_estimate": "حفظ التقدير",
     "estimate_title": "عنوان التقدير",
+    "linked_records": "الربط مع السجلات",
+    "no_link": "بدون ربط",
     "saved_estimates": "التقديرات المحفوظة",
     "no_saved_estimates": "لا توجد تقديرات محفوظة بعد.",
     "load_estimate": "فتح",
