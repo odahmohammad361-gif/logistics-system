@@ -14,6 +14,10 @@ from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, Boo
 from app.models.supplier import Supplier
 from app.models.product import Product, ProductPhoto
 from app.models.customer import Customer
+from app.models.accounting import (
+    AccountingEntry, AccountingAttachment, AccountingDirection, AccountingStatus,
+    BankStatementImport, BankStatementLine, BankLineMatchStatus,
+)
 
 __all__ = [
     "Base", "Branch", "User", "Client",
@@ -23,4 +27,6 @@ __all__ = [
     "CompanySettings", "CompanyWarehouse",
     "Booking", "BookingCargoLine", "BookingCargoImage", "BookingCargoDocument",
     "Supplier", "Product", "ProductPhoto", "Customer",
+    "AccountingEntry", "AccountingAttachment", "AccountingDirection", "AccountingStatus",
+    "BankStatementImport", "BankStatementLine", "BankLineMatchStatus",
 ]

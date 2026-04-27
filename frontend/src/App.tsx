@@ -17,6 +17,7 @@ import Login           from '@/pages/Login'
 import Dashboard       from '@/pages/Dashboard'
 import Clients         from '@/pages/Clients'
 import ClientProfile   from '@/pages/Clients/profile'
+import Accounting      from '@/pages/Accounting'
 import Invoices        from '@/pages/Invoices'
 import InvoiceEdit     from '@/pages/Invoices/edit'
 import ShippingAgents       from '@/pages/ShippingAgents'
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="/dashboard"           element={<AppLayout><Dashboard /></AppLayout>} />
             <Route path="/clients"             element={<AppLayout><Clients /></AppLayout>} />
             <Route path="/clients/:id"         element={<AppLayout><ClientProfile /></AppLayout>} />
+            <Route path="/accounting"          element={<AppLayout><Accounting /></AppLayout>} />
             <Route path="/invoices"            element={<AppLayout><Invoices /></AppLayout>} />
             <Route path="/invoices/:id/edit"   element={<AppLayout><InvoiceEdit /></AppLayout>} />
             <Route path="/shipping-agents"          element={<AppLayout><ShippingAgents /></AppLayout>} />

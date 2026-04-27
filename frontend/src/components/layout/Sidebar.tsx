@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, FileText, Ship,
   Anchor, TrendingUp, UserCog, ChevronLeft, ChevronRight,
   LogOut, Building2, Container, Warehouse, Store, Package, FolderInput,
+  Landmark,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
@@ -13,6 +14,7 @@ import { useRTL } from '@/hooks/useRTL'
 const NAV = [
   { to: '/dashboard',        icon: LayoutDashboard, key: 'dashboard' },
   { to: '/clients',          icon: Users,           key: 'clients' },
+  { to: '/accounting',       icon: Landmark,        key: 'accounting' },
   { to: '/invoices',         icon: FileText,        key: 'invoices' },
   { to: '/containers',       icon: Container,       key: 'containers' },
   { to: '/shipping-agents',  icon: Ship,            key: 'shipping_agents' },

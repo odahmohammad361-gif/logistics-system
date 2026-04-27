@@ -775,3 +775,179 @@ export interface ShippingCalculatorResult {
   usd_to_cny_rate: number
   options: ShippingOption[]
 }
+
+// ── Accounting ───────────────────────────────────────────────────────────────
+export type AccountingDirection = 'money_in' | 'money_out'
+export type AccountingStatus = 'draft' | 'posted' | 'needs_review' | 'void'
+
+export interface AccountingClientShort {
+  id: number
+  client_code: string
+  name: string
+  name_ar: string | null
+}
+
+export interface AccountingInvoiceShort {
+  id: number
+  invoice_number: string
+  total: string
+  currency: string
+}
+
+export interface AccountingBookingShort {
+  id: number
+  booking_number: string
+  mode: string
+  container_size: string | null
+  container_no: string | null
+}
+
+export interface AccountingNamedShort {
+  id: number
+  name: string
+  name_ar: string | null
+}
+
+export interface AccountingAttachment {
+  id: number
+  document_type: string
+  file_path: string
+  original_filename: string | null
+  content_type: string | null
+  file_size: number | null
+  created_at: string
+}
+
+export interface AccountingEntry {
+  id: number
+  entry_number: string
+  direction: AccountingDirection
+  status: AccountingStatus
+  entry_date: string
+  amount: string
+  currency: string
+  payment_method: string
+  category: string
+  counterparty_type: string | null
+  counterparty_name: string | null
+  reference_no: string | null
+  description: string | null
+  notes: string | null
+  client: AccountingClientShort | null
+  invoice: AccountingInvoiceShort | null
+  booking: AccountingBookingShort | null
+  shipping_agent: AccountingNamedShort | null
+  clearance_agent: AccountingNamedShort | null
+  supplier: AccountingNamedShort | null
+  tax_rate_pct: string | null
+  tax_amount: string | null
+  has_official_tax_invoice: boolean
+  attachments: AccountingAttachment[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AccountingEntryListResponse {
+  total: number
+  page: number
+  page_size: number
+  results: AccountingEntry[]
+}
+
+export interface AccountingSummary {
+  money_in: string
+  money_out: string
+  balance: string
+  needs_review: number
+  recent_count: number
+}
+
+export type BankLineMatchStatus = 'matched' | 'possible' | 'unmatched' | 'ignored'
+
+export interface BankStatementImport {
+  id: number
+  bank_name: string | null
+  account_name: string | null
+  account_no: string | null
+  statement_from: string | null
+  statement_to: string | null
+  original_filename: string | null
+  file_path: string
+  currency: string
+  line_count: number
+  status: string
+  notes: string | null
+  created_at: string
+}
+
+export interface BankStatementImportListResponse {
+  total: number
+  results: BankStatementImport[]
+}
+
+export interface BankStatementLine {
+  id: number
+  statement_id: number
+  transaction_date: string
+  direction: AccountingDirection
+  amount: string
+  currency: string
+  description: string | null
+  reference_no: string | null
+  balance: string | null
+  match_status: BankLineMatchStatus
+  matched_entry_id: number | null
+  matched_entry: AccountingEntry | null
+  match_confidence: number | null
+  match_reason: string | null
+}
+
+export interface BankStatementLineListResponse {
+  total: number
+  results: BankStatementLine[]
+}
+
+export interface BankStatementUploadResponse {
+  statement: BankStatementImport
+  total_lines: number
+  matched: number
+  possible: number
+  unmatched: number
+}
+
+export interface AccountingCategoryTotal {
+  direction: AccountingDirection
+  category: string
+  amount: string
+  count: number
+}
+
+export interface AccountingTaxAlert {
+  id: number
+  entry_number: string
+  entry_date: string
+  amount: string
+  currency: string
+  category: string
+  counterparty_name: string | null
+  description: string | null
+  reason: string
+}
+
+export interface AccountingReportSummary {
+  date_from: string | null
+  date_to: string | null
+  currency: string
+  money_in: string
+  money_out: string
+  net: string
+  tax_on_income: string
+  tax_on_expenses: string
+  tax_net: string
+  needs_review_count: number
+  missing_official_invoice_count: number
+  missing_official_invoice_amount: string
+  unmatched_bank_lines: number
+  category_totals: AccountingCategoryTotal[]
+  tax_alerts: AccountingTaxAlert[]
+}
