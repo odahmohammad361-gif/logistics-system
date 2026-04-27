@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db, SessionLocal
 from app.core.dependencies import get_current_user, require_role
@@ -15,7 +16,25 @@ from app.models.product import (
     Product, ProductPhoto, ProductMainCategory, ProductSubcategory,
     ProductType, HSCodeReference,
 )
-from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse, ProductListResponse, ProductReferenceDataResponse
+from app.schemas.product import (
+    ProductCreate,
+    ProductUpdate,
+    ProductResponse,
+    ProductListResponse,
+    ProductReferenceDataResponse,
+    ProductMainCategoryCreate,
+    ProductMainCategoryUpdate,
+    ProductMainCategoryResponse,
+    ProductSubcategoryCreate,
+    ProductSubcategoryUpdate,
+    ProductSubcategoryResponse,
+    ProductTypeCreate,
+    ProductTypeUpdate,
+    ProductTypeResponse,
+    HSCodeReferenceCreate,
+    HSCodeReferenceUpdate,
+    HSCodeReferenceResponse,
+)
 
 router = APIRouter()
 
@@ -110,6 +129,41 @@ def _apply_reference_defaults(product: Product, db: Session) -> None:
         product.category = main_category.name
 
 
+def _commit_reference(db: Session, duplicate_message: str) -> None:
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(400, duplicate_message) from exc
+
+
+def _patch_model(obj, payload: BaseModel) -> None:
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, key, value)
+
+
+def _validate_subcategory_parent(db: Session, main_category_id: int) -> None:
+    if not db.query(ProductMainCategory).filter(ProductMainCategory.id == main_category_id).first():
+        raise HTTPException(404, "Product main category not found")
+
+
+def _validate_product_type_tree(
+    db: Session,
+    main_category_id: int,
+    subcategory_id: int,
+    hs_code_ref_id: Optional[int],
+) -> None:
+    if not db.query(ProductMainCategory).filter(ProductMainCategory.id == main_category_id).first():
+        raise HTTPException(404, "Product main category not found")
+    subcategory = db.query(ProductSubcategory).filter(ProductSubcategory.id == subcategory_id).first()
+    if not subcategory:
+        raise HTTPException(404, "Product subcategory not found")
+    if subcategory.main_category_id != main_category_id:
+        raise HTTPException(400, "Selected subcategory does not belong to the selected main category")
+    if hs_code_ref_id and not db.query(HSCodeReference).filter(HSCodeReference.id == hs_code_ref_id).first():
+        raise HTTPException(404, "HS code reference not found")
+
+
 # ── Admin endpoints (require auth) ────────────────────────────────────────────
 
 @router.get("/admin", response_model=ProductListResponse)
@@ -137,27 +191,157 @@ def admin_list_products(
 @router.get("/taxonomy", response_model=ProductReferenceDataResponse)
 def list_product_taxonomy(
     country: str = "",
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    hs_q = db.query(HSCodeReference).filter(HSCodeReference.is_active == True)  # noqa: E712
+    hs_q = db.query(HSCodeReference)
+    main_q = db.query(ProductMainCategory)
+    sub_q = db.query(ProductSubcategory)
+    type_q = db.query(ProductType)
+    if not include_inactive:
+        hs_q = hs_q.filter(HSCodeReference.is_active == True)  # noqa: E712
+        main_q = main_q.filter(ProductMainCategory.is_active == True)  # noqa: E712
+        sub_q = sub_q.filter(ProductSubcategory.is_active == True)  # noqa: E712
+        type_q = type_q.filter(ProductType.is_active == True)  # noqa: E712
     if country:
         hs_q = hs_q.filter(HSCodeReference.country == country)
     return {
-        "main_categories": db.query(ProductMainCategory)
-        .filter(ProductMainCategory.is_active == True)  # noqa: E712
+        "main_categories": main_q
         .order_by(ProductMainCategory.sort_order, ProductMainCategory.name)
         .all(),
-        "subcategories": db.query(ProductSubcategory)
-        .filter(ProductSubcategory.is_active == True)  # noqa: E712
+        "subcategories": sub_q
         .order_by(ProductSubcategory.main_category_id, ProductSubcategory.sort_order, ProductSubcategory.name)
         .all(),
-        "product_types": db.query(ProductType)
-        .filter(ProductType.is_active == True)  # noqa: E712
+        "product_types": type_q
         .order_by(ProductType.main_category_id, ProductType.subcategory_id, ProductType.sort_order, ProductType.name)
         .all(),
         "hs_codes": hs_q.order_by(HSCodeReference.country, HSCodeReference.hs_code, HSCodeReference.description).all(),
     }
+
+
+@router.post("/taxonomy/main-categories", response_model=ProductMainCategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_product_main_category(
+    payload: ProductMainCategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    category = ProductMainCategory(**payload.model_dump())
+    db.add(category)
+    _commit_reference(db, "Main category code already exists")
+    db.refresh(category)
+    return category
+
+
+@router.patch("/taxonomy/main-categories/{category_id}", response_model=ProductMainCategoryResponse)
+def update_product_main_category(
+    category_id: int,
+    payload: ProductMainCategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    category = db.query(ProductMainCategory).filter(ProductMainCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(404, "Product main category not found")
+    _patch_model(category, payload)
+    _commit_reference(db, "Main category code already exists")
+    db.refresh(category)
+    return category
+
+
+@router.post("/taxonomy/subcategories", response_model=ProductSubcategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_product_subcategory(
+    payload: ProductSubcategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    _validate_subcategory_parent(db, payload.main_category_id)
+    subcategory = ProductSubcategory(**payload.model_dump())
+    db.add(subcategory)
+    _commit_reference(db, "Subcategory code already exists for this main category")
+    db.refresh(subcategory)
+    return subcategory
+
+
+@router.patch("/taxonomy/subcategories/{subcategory_id}", response_model=ProductSubcategoryResponse)
+def update_product_subcategory(
+    subcategory_id: int,
+    payload: ProductSubcategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    subcategory = db.query(ProductSubcategory).filter(ProductSubcategory.id == subcategory_id).first()
+    if not subcategory:
+        raise HTTPException(404, "Product subcategory not found")
+    next_main_category_id = payload.main_category_id if payload.main_category_id is not None else subcategory.main_category_id
+    _validate_subcategory_parent(db, next_main_category_id)
+    _patch_model(subcategory, payload)
+    _commit_reference(db, "Subcategory code already exists for this main category")
+    db.refresh(subcategory)
+    return subcategory
+
+
+@router.post("/taxonomy/hs-codes", response_model=HSCodeReferenceResponse, status_code=status.HTTP_201_CREATED)
+def create_hs_code_reference(
+    payload: HSCodeReferenceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    hs_ref = HSCodeReference(**payload.model_dump())
+    db.add(hs_ref)
+    _commit_reference(db, "HS code reference already exists for this country/code/description")
+    db.refresh(hs_ref)
+    return hs_ref
+
+
+@router.patch("/taxonomy/hs-codes/{hs_code_id}", response_model=HSCodeReferenceResponse)
+def update_hs_code_reference(
+    hs_code_id: int,
+    payload: HSCodeReferenceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    hs_ref = db.query(HSCodeReference).filter(HSCodeReference.id == hs_code_id).first()
+    if not hs_ref:
+        raise HTTPException(404, "HS code reference not found")
+    _patch_model(hs_ref, payload)
+    _commit_reference(db, "HS code reference already exists for this country/code/description")
+    db.refresh(hs_ref)
+    return hs_ref
+
+
+@router.post("/taxonomy/product-types", response_model=ProductTypeResponse, status_code=status.HTTP_201_CREATED)
+def create_product_type(
+    payload: ProductTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    _validate_product_type_tree(db, payload.main_category_id, payload.subcategory_id, payload.hs_code_ref_id)
+    product_type = ProductType(**payload.model_dump())
+    db.add(product_type)
+    _commit_reference(db, "Product type code already exists for this subcategory")
+    db.refresh(product_type)
+    return product_type
+
+
+@router.patch("/taxonomy/product-types/{product_type_id}", response_model=ProductTypeResponse)
+def update_product_type(
+    product_type_id: int,
+    payload: ProductTypeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    product_type = db.query(ProductType).filter(ProductType.id == product_type_id).first()
+    if not product_type:
+        raise HTTPException(404, "Product type not found")
+    next_main_category_id = payload.main_category_id if payload.main_category_id is not None else product_type.main_category_id
+    next_subcategory_id = payload.subcategory_id if payload.subcategory_id is not None else product_type.subcategory_id
+    next_hs_code_ref_id = payload.hs_code_ref_id if payload.hs_code_ref_id is not None else product_type.hs_code_ref_id
+    _validate_product_type_tree(db, next_main_category_id, next_subcategory_id, next_hs_code_ref_id)
+    _patch_model(product_type, payload)
+    _commit_reference(db, "Product type code already exists for this subcategory")
+    db.refresh(product_type)
+    return product_type
 
 
 @router.post("/admin", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)

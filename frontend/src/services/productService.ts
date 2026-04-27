@@ -1,5 +1,13 @@
 import api from './api'
-import type { Product, ProductListResponse, ProductReferenceData } from '@/types'
+import type {
+  HSCodeReference,
+  Product,
+  ProductListResponse,
+  ProductMainCategory,
+  ProductReferenceData,
+  ProductSubcategory,
+  ProductTypeReference,
+} from '@/types'
 
 // Admin endpoints
 export const adminListProducts = (params?: Record<string, unknown>) =>
@@ -7,6 +15,30 @@ export const adminListProducts = (params?: Record<string, unknown>) =>
 
 export const listProductTaxonomy = (params?: Record<string, unknown>) =>
   api.get<ProductReferenceData>('/products/taxonomy', { params }).then((r) => r.data)
+
+export const createProductMainCategory = (data: unknown) =>
+  api.post<ProductMainCategory>('/products/taxonomy/main-categories', data).then((r) => r.data)
+
+export const updateProductMainCategory = (id: number, data: unknown) =>
+  api.patch<ProductMainCategory>(`/products/taxonomy/main-categories/${id}`, data).then((r) => r.data)
+
+export const createProductSubcategory = (data: unknown) =>
+  api.post<ProductSubcategory>('/products/taxonomy/subcategories', data).then((r) => r.data)
+
+export const updateProductSubcategory = (id: number, data: unknown) =>
+  api.patch<ProductSubcategory>(`/products/taxonomy/subcategories/${id}`, data).then((r) => r.data)
+
+export const createProductTypeReference = (data: unknown) =>
+  api.post<ProductTypeReference>('/products/taxonomy/product-types', data).then((r) => r.data)
+
+export const updateProductTypeReference = (id: number, data: unknown) =>
+  api.patch<ProductTypeReference>(`/products/taxonomy/product-types/${id}`, data).then((r) => r.data)
+
+export const createHSCodeReference = (data: unknown) =>
+  api.post<HSCodeReference>('/products/taxonomy/hs-codes', data).then((r) => r.data)
+
+export const updateHSCodeReference = (id: number, data: unknown) =>
+  api.patch<HSCodeReference>(`/products/taxonomy/hs-codes/${id}`, data).then((r) => r.data)
 
 export const createProduct = (data: unknown) =>
   api.post<Product>('/products/admin', data).then((r) => r.data)

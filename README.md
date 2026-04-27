@@ -107,6 +107,7 @@ Products now have a reference tree in addition to the legacy text category:
 - Subcategory/frame, such as men, women, children, mobile accessories, lighting, or kitchenware.
 - Product type, such as men trousers, men shirts, LED lamps, backpacks, toys, or hand tools.
 - HS/customs reference rows for Jordan and Iraq starter data, including HS code, description, customs unit, estimated value, and editable duty/tax defaults.
+- Staff can maintain this reference data from the Products page, including main categories, subcategories, product types, and HS/customs rows.
 
 The old product `category`, `hs_code`, and customs fields remain populated for compatibility with shop, invoice, container, and customs-calculator flows.
 

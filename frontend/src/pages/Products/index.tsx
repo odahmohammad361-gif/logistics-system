@@ -1,10 +1,14 @@
 import { useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Pencil, Trash2, ImagePlus, X, Package } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, ImagePlus, X, Package, Database, Save } from 'lucide-react'
 import {
   adminListProducts, createProduct, updateProduct, deleteProduct,
   uploadProductPhoto, deleteProductPhoto, listProductTaxonomy,
+  createProductMainCategory, updateProductMainCategory,
+  createProductSubcategory, updateProductSubcategory,
+  createProductTypeReference, updateProductTypeReference,
+  createHSCodeReference, updateHSCodeReference,
 } from '@/services/productService'
 import { getSuppliers } from '@/services/supplierService'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,7 +17,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
-import type { Product } from '@/types'
+import type { HSCodeReference, Product, ProductMainCategory, ProductSubcategory, ProductTypeReference } from '@/types'
 
 interface FormValues {
   code: string
@@ -50,6 +54,55 @@ interface FormValues {
   is_active: boolean
 }
 
+type ReferenceTab = 'main' | 'sub' | 'type' | 'hs'
+type ReferenceItem = ProductMainCategory | ProductSubcategory | ProductTypeReference | HSCodeReference
+
+interface ReferenceForm {
+  main_category_id: string
+  subcategory_id: string
+  hs_code_ref_id: string
+  code: string
+  name: string
+  name_ar: string
+  description: string
+  country: string
+  hs_code: string
+  chapter: string
+  customs_unit_basis: string
+  customs_estimated_value_usd: string
+  customs_duty_pct: string
+  sales_tax_pct: string
+  other_tax_pct: string
+  source_url: string
+  notes: string
+  sort_order: string
+  import_allowed: boolean
+  is_active: boolean
+}
+
+const emptyReferenceForm: ReferenceForm = {
+  main_category_id: '',
+  subcategory_id: '',
+  hs_code_ref_id: '',
+  code: '',
+  name: '',
+  name_ar: '',
+  description: '',
+  country: 'Jordan',
+  hs_code: '',
+  chapter: '',
+  customs_unit_basis: 'dozen',
+  customs_estimated_value_usd: '',
+  customs_duty_pct: '',
+  sales_tax_pct: '',
+  other_tax_pct: '',
+  source_url: '',
+  notes: '',
+  sort_order: '0',
+  import_allowed: true,
+  is_active: true,
+}
+
 export default function ProductsPage() {
   const { t, i18n } = useTranslation()
   const { isAdmin } = useAuth()
@@ -58,6 +111,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)
+  const [referenceOpen, setReferenceOpen] = useState(false)
+  const [referenceTab, setReferenceTab] = useState<ReferenceTab>('main')
+  const [editingReference, setEditingReference] = useState<ReferenceItem | null>(null)
+  const [referenceForm, setReferenceForm] = useState<ReferenceForm>(emptyReferenceForm)
   const [editing, setEditing] = useState<Product | null>(null)
   const [deleting, setDeleting] = useState<Product | null>(null)
   const [photosProduct, setPhotosProduct] = useState<Product | null>(null)
@@ -78,12 +135,19 @@ export default function ProductsPage() {
     queryFn: () => listProductTaxonomy(),
   })
 
+  const { data: referenceTaxonomyData } = useQuery({
+    queryKey: ['product-taxonomy', 'manager'],
+    queryFn: () => listProductTaxonomy({ include_inactive: true }),
+    enabled: referenceOpen,
+  })
+
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const selectedMainCategoryId = watch('main_category_id')
   const selectedSubcategoryId = watch('subcategory_id')
   const selectedProductTypeId = watch('product_type_id')
   const selectedHsCodeRefId = watch('hs_code_ref_id')
   const isAr = i18n.language === 'ar'
+  const managerTaxonomyData = referenceTaxonomyData ?? taxonomyData
 
   const subcategoryOptions = useMemo(
     () => (taxonomyData?.subcategories ?? []).filter((item) => !selectedMainCategoryId || String(item.main_category_id) === selectedMainCategoryId),
@@ -101,9 +165,199 @@ export default function ProductsPage() {
       .filter((item) => !typeHs || item.hs_code === typeHs)
       .sort((a, b) => countryPriority(a.country) - countryPriority(b.country) || a.hs_code.localeCompare(b.hs_code))
   }, [taxonomyData, selectedProductTypeId])
+  const referenceSubcategoryOptions = useMemo(
+    () => (managerTaxonomyData?.subcategories ?? []).filter((item) => !referenceForm.main_category_id || String(item.main_category_id) === referenceForm.main_category_id),
+    [managerTaxonomyData, referenceForm.main_category_id],
+  )
 
   function refLabel(item: { name: string; name_ar?: string | null }) {
     return isAr && item.name_ar ? item.name_ar : item.name
+  }
+
+  function setRefField<K extends keyof ReferenceForm>(field: K, value: ReferenceForm[K]) {
+    setReferenceForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function switchReferenceTab(tab: ReferenceTab) {
+    setReferenceTab(tab)
+    setEditingReference(null)
+    setReferenceForm({ ...emptyReferenceForm })
+  }
+
+  function referenceTabTitle(tab: ReferenceTab) {
+    if (tab === 'main') return t('products.main_categories')
+    if (tab === 'sub') return t('products.subcategories')
+    if (tab === 'type') return t('products.product_types')
+    return t('products.hs_codes')
+  }
+
+  function referenceRows() {
+    if (referenceTab === 'main') return managerTaxonomyData?.main_categories ?? []
+    if (referenceTab === 'sub') return managerTaxonomyData?.subcategories ?? []
+    if (referenceTab === 'type') return managerTaxonomyData?.product_types ?? []
+    return managerTaxonomyData?.hs_codes ?? []
+  }
+
+  function referenceRowTitle(item: ReferenceItem) {
+    if (referenceTab === 'hs') {
+      const row = item as HSCodeReference
+      return `${row.country} · ${row.hs_code} · ${isAr && row.description_ar ? row.description_ar : row.description}`
+    }
+    const row = item as ProductMainCategory | ProductSubcategory | ProductTypeReference
+    return refLabel(row)
+  }
+
+  function referenceRowMeta(item: ReferenceItem) {
+    if (referenceTab === 'main') return (item as ProductMainCategory).code
+    if (referenceTab === 'sub') {
+      const row = item as ProductSubcategory
+      const main = managerTaxonomyData?.main_categories.find((m) => m.id === row.main_category_id)
+      return `${row.code} · ${main ? refLabel(main) : t('products.main_category')}`
+    }
+    if (referenceTab === 'type') {
+      const row = item as ProductTypeReference
+      const sub = managerTaxonomyData?.subcategories.find((s) => s.id === row.subcategory_id)
+      return `${row.code} · ${sub ? refLabel(sub) : t('products.subcategory')}${row.hs_code_ref ? ` · HS ${row.hs_code_ref.hs_code}` : ''}`
+    }
+    const row = item as HSCodeReference
+    return `${row.customs_unit_basis || 'unit'} · ${row.customs_duty_pct ?? '0'}% + ${row.sales_tax_pct ?? '0'}%`
+  }
+
+  function startCreateReference() {
+    setEditingReference(null)
+    setReferenceForm({ ...emptyReferenceForm })
+  }
+
+  function startEditReference(item: ReferenceItem) {
+    setEditingReference(item)
+    if (referenceTab === 'main') {
+      const row = item as ProductMainCategory
+      setReferenceForm({
+        ...emptyReferenceForm,
+        code: row.code,
+        name: row.name,
+        name_ar: row.name_ar ?? '',
+        description: row.description ?? '',
+        sort_order: String(row.sort_order ?? 0),
+        is_active: row.is_active,
+      })
+      return
+    }
+    if (referenceTab === 'sub') {
+      const row = item as ProductSubcategory
+      setReferenceForm({
+        ...emptyReferenceForm,
+        main_category_id: String(row.main_category_id),
+        code: row.code,
+        name: row.name,
+        name_ar: row.name_ar ?? '',
+        description: row.description ?? '',
+        sort_order: String(row.sort_order ?? 0),
+        is_active: row.is_active,
+      })
+      return
+    }
+    if (referenceTab === 'type') {
+      const row = item as ProductTypeReference
+      setReferenceForm({
+        ...emptyReferenceForm,
+        main_category_id: String(row.main_category_id),
+        subcategory_id: String(row.subcategory_id),
+        hs_code_ref_id: row.hs_code_ref_id ? String(row.hs_code_ref_id) : '',
+        code: row.code,
+        name: row.name,
+        name_ar: row.name_ar ?? '',
+        description: row.description ?? '',
+        customs_unit_basis: row.default_customs_unit_basis ?? '',
+        customs_estimated_value_usd: row.default_customs_estimated_value_usd ?? '',
+        customs_duty_pct: row.default_customs_duty_pct ?? '',
+        sales_tax_pct: row.default_sales_tax_pct ?? '',
+        other_tax_pct: row.default_other_tax_pct ?? '',
+        sort_order: String(row.sort_order ?? 0),
+        is_active: row.is_active,
+      })
+      return
+    }
+    const row = item as HSCodeReference
+    setReferenceForm({
+      ...emptyReferenceForm,
+      country: row.country,
+      hs_code: row.hs_code,
+      chapter: row.chapter ?? '',
+      description: row.description,
+      name_ar: row.description_ar ?? '',
+      customs_unit_basis: row.customs_unit_basis ?? '',
+      customs_estimated_value_usd: row.customs_estimated_value_usd ?? '',
+      customs_duty_pct: row.customs_duty_pct ?? '',
+      sales_tax_pct: row.sales_tax_pct ?? '',
+      other_tax_pct: row.other_tax_pct ?? '',
+      source_url: row.source_url ?? '',
+      notes: row.notes ?? '',
+      import_allowed: row.import_allowed,
+      is_active: row.is_active,
+    })
+  }
+
+  function numberOrNull(value: string) {
+    return value === '' ? null : Number(value)
+  }
+
+  function buildReferencePayload() {
+    if (referenceTab === 'main') {
+      return {
+        code: referenceForm.code.trim(),
+        name: referenceForm.name.trim(),
+        name_ar: referenceForm.name_ar || null,
+        description: referenceForm.description || null,
+        sort_order: Number(referenceForm.sort_order || 0),
+        is_active: referenceForm.is_active,
+      }
+    }
+    if (referenceTab === 'sub') {
+      return {
+        main_category_id: Number(referenceForm.main_category_id),
+        code: referenceForm.code.trim(),
+        name: referenceForm.name.trim(),
+        name_ar: referenceForm.name_ar || null,
+        description: referenceForm.description || null,
+        sort_order: Number(referenceForm.sort_order || 0),
+        is_active: referenceForm.is_active,
+      }
+    }
+    if (referenceTab === 'type') {
+      return {
+        main_category_id: Number(referenceForm.main_category_id),
+        subcategory_id: Number(referenceForm.subcategory_id),
+        hs_code_ref_id: numberOrNull(referenceForm.hs_code_ref_id),
+        code: referenceForm.code.trim(),
+        name: referenceForm.name.trim(),
+        name_ar: referenceForm.name_ar || null,
+        description: referenceForm.description || null,
+        default_customs_unit_basis: referenceForm.customs_unit_basis || null,
+        default_customs_estimated_value_usd: referenceForm.customs_estimated_value_usd || null,
+        default_customs_duty_pct: referenceForm.customs_duty_pct || null,
+        default_sales_tax_pct: referenceForm.sales_tax_pct || null,
+        default_other_tax_pct: referenceForm.other_tax_pct || null,
+        sort_order: Number(referenceForm.sort_order || 0),
+        is_active: referenceForm.is_active,
+      }
+    }
+    return {
+      country: referenceForm.country || 'Jordan',
+      hs_code: referenceForm.hs_code.trim(),
+      chapter: referenceForm.chapter || null,
+      description: referenceForm.description.trim(),
+      description_ar: referenceForm.name_ar || null,
+      customs_unit_basis: referenceForm.customs_unit_basis || null,
+      customs_estimated_value_usd: referenceForm.customs_estimated_value_usd || null,
+      customs_duty_pct: referenceForm.customs_duty_pct || null,
+      sales_tax_pct: referenceForm.sales_tax_pct || null,
+      other_tax_pct: referenceForm.other_tax_pct || null,
+      source_url: referenceForm.source_url || null,
+      notes: referenceForm.notes || null,
+      import_allowed: referenceForm.import_allowed,
+      is_active: referenceForm.is_active,
+    }
   }
 
   function applyHsRef(id: string) {
@@ -203,6 +457,28 @@ export default function ProductsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['products-admin'] })
       setDeleting(null)
+    },
+  })
+
+  const saveReferenceMut = useMutation({
+    mutationFn: (): Promise<ReferenceItem> => {
+      const payload = buildReferencePayload()
+      const id = editingReference?.id
+      if (referenceTab === 'main') {
+        return id ? updateProductMainCategory(id, payload) : createProductMainCategory(payload)
+      }
+      if (referenceTab === 'sub') {
+        return id ? updateProductSubcategory(id, payload) : createProductSubcategory(payload)
+      }
+      if (referenceTab === 'type') {
+        return id ? updateProductTypeReference(id, payload) : createProductTypeReference(payload)
+      }
+      return id ? updateHSCodeReference(id, payload) : createHSCodeReference(payload)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['product-taxonomy'] })
+      qc.invalidateQueries({ queryKey: ['products-admin'] })
+      startCreateReference()
     },
   })
 
@@ -414,10 +690,16 @@ export default function ProductsPage() {
           <h1 className="page-title">{t('products.title')}</h1>
           {data && <p className="text-sm text-gray-400 mt-0.5">{data.total} {t('common.results')}</p>}
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          {t('products.add')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setReferenceOpen(true)}>
+            <Database size={16} />
+            {t('products.reference_data')}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            {t('products.add')}
+          </Button>
+        </div>
       </div>
 
       <div className="relative w-full sm:max-w-xs">
@@ -440,6 +722,301 @@ export default function ProductsPage() {
         onPageChange={setPage}
         rowKey={(p) => p.id}
       />
+
+      <Modal
+        open={referenceOpen}
+        onClose={() => setReferenceOpen(false)}
+        title={t('products.reference_data')}
+        size="xl"
+      >
+        <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
+          <div className="space-y-2">
+            {(['main', 'sub', 'type', 'hs'] as ReferenceTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => switchReferenceTab(tab)}
+                className={`w-full text-start rounded-lg px-3 py-2 text-sm transition-colors ${
+                  referenceTab === tab
+                    ? 'bg-brand-primary/20 text-brand-primary-light border border-brand-primary/50'
+                    : 'bg-white/5 text-brand-text-muted border border-brand-border hover:text-brand-text'
+                }`}
+              >
+                {referenceTabTitle(tab)}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            {saveReferenceMut.isError && (
+              <div className="px-3 py-2 rounded-lg bg-brand-red/10 border border-brand-red/30 text-xs text-brand-red">
+                {(saveReferenceMut.error as any)?.response?.data?.detail ?? t('common.required')}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                saveReferenceMut.mutate()
+              }}
+              className="space-y-4 rounded-xl border border-brand-border bg-white/[0.02] p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-brand-text">
+                    {editingReference ? t('products.update_reference') : t('products.add_reference')}
+                  </h3>
+                  <p className="text-xs text-brand-text-muted">{referenceTabTitle(referenceTab)}</p>
+                </div>
+                {editingReference && (
+                  <Button type="button" variant="ghost" size="sm" onClick={startCreateReference}>
+                    <Plus size={14} />
+                    {t('common.add')}
+                  </Button>
+                )}
+              </div>
+
+              {referenceTab !== 'main' && referenceTab !== 'hs' && (
+                <div className="space-y-1.5">
+                  <label className="label-base">{t('products.main_category')}</label>
+                  <select
+                    required
+                    className="input-base w-full"
+                    value={referenceForm.main_category_id}
+                    onChange={(e) => {
+                      setRefField('main_category_id', e.target.value)
+                      if (referenceTab === 'type') setRefField('subcategory_id', '')
+                    }}
+                  >
+                    <option value="">—</option>
+                    {(managerTaxonomyData?.main_categories ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>{refLabel(item)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {referenceTab === 'type' && (
+                <FormRow>
+                  <div className="space-y-1.5">
+                    <label className="label-base">{t('products.subcategory')}</label>
+                    <select
+                      required
+                      className="input-base w-full"
+                      value={referenceForm.subcategory_id}
+                      onChange={(e) => setRefField('subcategory_id', e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {referenceSubcategoryOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{refLabel(item)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="label-base">{t('products.hs_code_reference')}</label>
+                    <select
+                      className="input-base w-full"
+                      value={referenceForm.hs_code_ref_id}
+                      onChange={(e) => setRefField('hs_code_ref_id', e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {(managerTaxonomyData?.hs_codes ?? []).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.country} · {item.hs_code} · {isAr && item.description_ar ? item.description_ar : item.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </FormRow>
+              )}
+
+              {referenceTab !== 'hs' ? (
+                <>
+                  <FormRow>
+                    <Input
+                      label={t('products.reference_code')}
+                      required
+                      value={referenceForm.code}
+                      onChange={(e) => setRefField('code', e.target.value)}
+                    />
+                    <Input
+                      label={t('common.name')}
+                      required
+                      value={referenceForm.name}
+                      onChange={(e) => setRefField('name', e.target.value)}
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Input
+                      label={t('common.arabic')}
+                      value={referenceForm.name_ar}
+                      onChange={(e) => setRefField('name_ar', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.sort_order')}
+                      type="number"
+                      value={referenceForm.sort_order}
+                      onChange={(e) => setRefField('sort_order', e.target.value)}
+                    />
+                  </FormRow>
+                  <Input
+                    label={t('products.description')}
+                    value={referenceForm.description}
+                    onChange={(e) => setRefField('description', e.target.value)}
+                  />
+                </>
+              ) : (
+                <>
+                  <FormRow>
+                    <Input
+                      label={t('common.country')}
+                      required
+                      value={referenceForm.country}
+                      onChange={(e) => setRefField('country', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.hs_code')}
+                      required
+                      value={referenceForm.hs_code}
+                      onChange={(e) => setRefField('hs_code', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.chapter')}
+                      value={referenceForm.chapter}
+                      onChange={(e) => setRefField('chapter', e.target.value)}
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Input
+                      label={t('products.description')}
+                      required
+                      value={referenceForm.description}
+                      onChange={(e) => setRefField('description', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.description_ar')}
+                      value={referenceForm.name_ar}
+                      onChange={(e) => setRefField('name_ar', e.target.value)}
+                    />
+                  </FormRow>
+                </>
+              )}
+
+              {(referenceTab === 'type' || referenceTab === 'hs') && (
+                <>
+                  <FormRow>
+                    <div className="space-y-1.5">
+                      <label className="label-base">{t('products.customs_unit_basis')}</label>
+                      <select
+                        className="input-base w-full"
+                        value={referenceForm.customs_unit_basis}
+                        onChange={(e) => setRefField('customs_unit_basis', e.target.value)}
+                      >
+                        <option value="">—</option>
+                        <option value="dozen">{t('products.unit_dozen')}</option>
+                        <option value="piece">{t('products.unit_piece')}</option>
+                        <option value="kg">{t('products.unit_kg')}</option>
+                        <option value="carton">{t('products.unit_carton')}</option>
+                      </select>
+                    </div>
+                    <Input
+                      label={t('products.customs_estimated_value_usd')}
+                      type="number"
+                      step="0.0001"
+                      value={referenceForm.customs_estimated_value_usd}
+                      onChange={(e) => setRefField('customs_estimated_value_usd', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.customs_duty_pct')}
+                      type="number"
+                      step="0.01"
+                      value={referenceForm.customs_duty_pct}
+                      onChange={(e) => setRefField('customs_duty_pct', e.target.value)}
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Input
+                      label={t('products.sales_tax_pct')}
+                      type="number"
+                      step="0.01"
+                      value={referenceForm.sales_tax_pct}
+                      onChange={(e) => setRefField('sales_tax_pct', e.target.value)}
+                    />
+                    <Input
+                      label={t('products.other_tax_pct')}
+                      type="number"
+                      step="0.01"
+                      value={referenceForm.other_tax_pct}
+                      onChange={(e) => setRefField('other_tax_pct', e.target.value)}
+                    />
+                    {referenceTab === 'hs' && (
+                      <Input
+                        label={t('products.source_url')}
+                        value={referenceForm.source_url}
+                        onChange={(e) => setRefField('source_url', e.target.value)}
+                      />
+                    )}
+                  </FormRow>
+                  {referenceTab === 'hs' && (
+                    <Input
+                      label={t('common.notes')}
+                      value={referenceForm.notes}
+                      onChange={(e) => setRefField('notes', e.target.value)}
+                    />
+                  )}
+                </>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-5">
+                  {referenceTab === 'hs' && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={referenceForm.import_allowed}
+                        onChange={(e) => setRefField('import_allowed', e.target.checked)}
+                      />
+                      <span className="text-sm text-gray-300">{t('products.import_allowed')}</span>
+                    </label>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={referenceForm.is_active}
+                      onChange={(e) => setRefField('is_active', e.target.checked)}
+                    />
+                    <span className="text-sm text-gray-300">{t('common.active')}</span>
+                  </label>
+                </div>
+                <Button type="submit" loading={saveReferenceMut.isPending}>
+                  <Save size={15} />
+                  {editingReference ? t('common.update') : t('common.save')}
+                </Button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {(referenceRows() as ReferenceItem[]).map((item) => (
+                <div
+                  key={`${referenceTab}-${item.id}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-white/[0.02] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-brand-text">{referenceRowTitle(item)}</p>
+                    <p className="truncate text-xs text-brand-text-muted">{referenceRowMeta(item)}</p>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => startEditReference(item)}>
+                    <Pencil size={14} />
+                    {t('common.edit')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       {/* Create / Edit */}
       <Modal

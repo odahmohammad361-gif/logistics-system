@@ -90,6 +90,112 @@ class ProductReferenceDataResponse(BaseModel):
     hs_codes: list[HSCodeReferenceResponse]
 
 
+class ProductMainCategoryCreate(BaseModel):
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ProductMainCategoryUpdate(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class ProductSubcategoryCreate(BaseModel):
+    main_category_id: int
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ProductSubcategoryUpdate(BaseModel):
+    main_category_id: Optional[int] = None
+    code: Optional[str] = None
+    name: Optional[str] = None
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class HSCodeReferenceCreate(BaseModel):
+    country: str = "Jordan"
+    hs_code: str
+    chapter: Optional[str] = None
+    description: str
+    description_ar: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    customs_estimated_value_usd: Optional[Decimal] = None
+    customs_duty_pct: Optional[Decimal] = None
+    sales_tax_pct: Optional[Decimal] = None
+    other_tax_pct: Optional[Decimal] = None
+    source_url: Optional[str] = None
+    notes: Optional[str] = None
+    import_allowed: bool = True
+    is_active: bool = True
+
+
+class HSCodeReferenceUpdate(BaseModel):
+    country: Optional[str] = None
+    hs_code: Optional[str] = None
+    chapter: Optional[str] = None
+    description: Optional[str] = None
+    description_ar: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    customs_estimated_value_usd: Optional[Decimal] = None
+    customs_duty_pct: Optional[Decimal] = None
+    sales_tax_pct: Optional[Decimal] = None
+    other_tax_pct: Optional[Decimal] = None
+    source_url: Optional[str] = None
+    notes: Optional[str] = None
+    import_allowed: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+class ProductTypeCreate(BaseModel):
+    main_category_id: int
+    subcategory_id: int
+    hs_code_ref_id: Optional[int] = None
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    default_customs_unit_basis: Optional[str] = None
+    default_customs_estimated_value_usd: Optional[Decimal] = None
+    default_customs_duty_pct: Optional[Decimal] = None
+    default_sales_tax_pct: Optional[Decimal] = None
+    default_other_tax_pct: Optional[Decimal] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ProductTypeUpdate(BaseModel):
+    main_category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    hs_code_ref_id: Optional[int] = None
+    code: Optional[str] = None
+    name: Optional[str] = None
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    default_customs_unit_basis: Optional[str] = None
+    default_customs_estimated_value_usd: Optional[Decimal] = None
+    default_customs_duty_pct: Optional[Decimal] = None
+    default_sales_tax_pct: Optional[Decimal] = None
+    default_other_tax_pct: Optional[Decimal] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class ProductCreate(BaseModel):
     code: str
     name: str
