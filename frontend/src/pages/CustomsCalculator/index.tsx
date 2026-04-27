@@ -32,9 +32,18 @@ interface CalcRow {
 
 const COUNTRIES = ['Jordan', 'Iraq', 'China', 'UAE', 'Saudi Arabia']
 
+let fallbackRowId = 0
+
+function makeRowId() {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  if (uuid) return uuid
+  fallbackRowId += 1
+  return `customs-row-${Date.now()}-${fallbackRowId}`
+}
+
 function newRow(): CalcRow {
   return {
-    id: crypto.randomUUID(),
+    id: makeRowId(),
     product_id: '',
     description: '',
     description_ar: '',
