@@ -111,7 +111,7 @@ def delete_product(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(404, "Product not found")
-    db.delete(product)
+    product.is_active = False
     db.commit()
 
 

@@ -315,6 +315,7 @@ Do not commit:
 ## Follow-Up TODO
 
 This checklist is the working map for the next invoice, shop, and container integration work.
+Keep this invoice TODO here while the more urgent connected work moves through shipping agents, clearance agents, and container profiles.
 
 ### 1. Invoice Sources
 

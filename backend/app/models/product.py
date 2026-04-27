@@ -19,11 +19,28 @@ class Product(Base):
 
     # Pricing (stored in CNY — converted on frontend via market rates)
     price_cny = Column(Numeric(10, 2), nullable=False)
+    price_usd = Column(Numeric(14, 4), nullable=True)
+
+    # Customs / tax foundation (USD until multi-currency rules are finalized)
+    hs_code = Column(String(30), nullable=True, index=True)
+    origin_country = Column(String(100), nullable=True)
+    customs_category = Column(String(120), nullable=True, index=True)
+    customs_unit_basis = Column(String(30), nullable=True)  # dozen | piece | kg | carton
+    customs_estimated_value_usd = Column(Numeric(14, 4), nullable=True)
+    customs_duty_pct = Column(Numeric(6, 2), nullable=True)
+    sales_tax_pct = Column(Numeric(6, 2), nullable=True)
+    other_tax_pct = Column(Numeric(6, 2), nullable=True)
+    customs_notes = Column(Text, nullable=True)
 
     # Carton / shipping info
     pcs_per_carton = Column(Integer, nullable=False, default=250)
     cbm_per_carton = Column(Numeric(8, 4), nullable=False, default=0.20)
     min_order_cartons = Column(Integer, nullable=False, default=1)
+    gross_weight_kg_per_carton = Column(Numeric(10, 3), nullable=True)
+    net_weight_kg_per_carton = Column(Numeric(10, 3), nullable=True)
+    carton_length_cm = Column(Numeric(8, 2), nullable=True)
+    carton_width_cm = Column(Numeric(8, 2), nullable=True)
+    carton_height_cm = Column(Numeric(8, 2), nullable=True)
 
     # Display
     is_active = Column(Boolean, default=True, nullable=False)

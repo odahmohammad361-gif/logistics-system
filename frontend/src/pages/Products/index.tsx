@@ -24,9 +24,24 @@ interface FormValues {
   description_ar: string
   supplier_id: string
   price_cny: string
+  price_usd: string
+  hs_code: string
+  origin_country: string
+  customs_category: string
+  customs_unit_basis: string
+  customs_estimated_value_usd: string
+  customs_duty_pct: string
+  sales_tax_pct: string
+  other_tax_pct: string
+  customs_notes: string
   pcs_per_carton: string
   cbm_per_carton: string
   min_order_cartons: string
+  gross_weight_kg_per_carton: string
+  net_weight_kg_per_carton: string
+  carton_length_cm: string
+  carton_width_cm: string
+  carton_height_cm: string
   is_featured: boolean
   is_active: boolean
 }
@@ -67,9 +82,24 @@ export default function ProductsPage() {
         description_ar: v.description_ar || null,
         supplier_id: v.supplier_id ? Number(v.supplier_id) : null,
         price_cny: v.price_cny,
+        price_usd: v.price_usd || null,
+        hs_code: v.hs_code || null,
+        origin_country: v.origin_country || null,
+        customs_category: v.customs_category || null,
+        customs_unit_basis: v.customs_unit_basis || null,
+        customs_estimated_value_usd: v.customs_estimated_value_usd || null,
+        customs_duty_pct: v.customs_duty_pct || null,
+        sales_tax_pct: v.sales_tax_pct || null,
+        other_tax_pct: v.other_tax_pct || null,
+        customs_notes: v.customs_notes || null,
         pcs_per_carton: Number(v.pcs_per_carton),
         cbm_per_carton: v.cbm_per_carton,
         min_order_cartons: Number(v.min_order_cartons),
+        gross_weight_kg_per_carton: v.gross_weight_kg_per_carton || null,
+        net_weight_kg_per_carton: v.net_weight_kg_per_carton || null,
+        carton_length_cm: v.carton_length_cm || null,
+        carton_width_cm: v.carton_width_cm || null,
+        carton_height_cm: v.carton_height_cm || null,
         is_featured: v.is_featured,
         is_active: v.is_active,
       }
@@ -116,7 +146,13 @@ export default function ProductsPage() {
     reset({
       code: '', name: '', name_ar: '', category: '',
       description: '', description_ar: '', supplier_id: '',
+      price_usd: '', hs_code: '', origin_country: 'China',
+      customs_category: '', customs_unit_basis: 'dozen',
+      customs_estimated_value_usd: '', customs_duty_pct: '',
+      sales_tax_pct: '', other_tax_pct: '', customs_notes: '',
       price_cny: '', pcs_per_carton: '250', cbm_per_carton: '0.20',
+      gross_weight_kg_per_carton: '', net_weight_kg_per_carton: '',
+      carton_length_cm: '', carton_width_cm: '', carton_height_cm: '',
       min_order_cartons: '1', is_featured: false, is_active: true,
     })
     setModalOpen(true)
@@ -129,8 +165,22 @@ export default function ProductsPage() {
       category: p.category ?? '', description: p.description ?? '',
       description_ar: p.description_ar ?? '',
       supplier_id: p.supplier?.id ? String(p.supplier.id) : '',
+      price_usd: p.price_usd ?? '', hs_code: p.hs_code ?? '',
+      origin_country: p.origin_country ?? '',
+      customs_category: p.customs_category ?? '',
+      customs_unit_basis: p.customs_unit_basis ?? 'dozen',
+      customs_estimated_value_usd: p.customs_estimated_value_usd ?? '',
+      customs_duty_pct: p.customs_duty_pct ?? '',
+      sales_tax_pct: p.sales_tax_pct ?? '',
+      other_tax_pct: p.other_tax_pct ?? '',
+      customs_notes: p.customs_notes ?? '',
       price_cny: p.price_cny, pcs_per_carton: String(p.pcs_per_carton),
       cbm_per_carton: p.cbm_per_carton, min_order_cartons: String(p.min_order_cartons),
+      gross_weight_kg_per_carton: p.gross_weight_kg_per_carton ?? '',
+      net_weight_kg_per_carton: p.net_weight_kg_per_carton ?? '',
+      carton_length_cm: p.carton_length_cm ?? '',
+      carton_width_cm: p.carton_width_cm ?? '',
+      carton_height_cm: p.carton_height_cm ?? '',
       is_featured: p.is_featured, is_active: p.is_active,
     })
     setModalOpen(true)
@@ -160,6 +210,7 @@ export default function ProductsPage() {
             <div>
               <p className="text-sm text-white font-medium">{p.name}</p>
               {p.name_ar && <p className="text-xs text-gray-500 font-arabic">{p.name_ar}</p>}
+              {p.hs_code && <p className="text-[11px] text-brand-primary-light font-mono">HS {p.hs_code}</p>}
             </div>
           </div>
         )
@@ -183,7 +234,24 @@ export default function ProductsPage() {
       key: 'price',
       label: t('products.price_cny'),
       render: (p: Product) => (
-        <span className="text-sm text-yellow-400 font-medium">¥{Number(p.price_cny).toFixed(2)}</span>
+        <div className="leading-tight">
+          <span className="text-sm text-yellow-400 font-medium">¥{Number(p.price_cny).toFixed(2)}</span>
+          {p.price_usd && <p className="text-xs text-brand-green">${Number(p.price_usd).toFixed(2)}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'customs',
+      label: t('products.customs'),
+      render: (p: Product) => (
+        <div className="leading-tight text-xs text-gray-400">
+          <p>{p.customs_category || '—'}</p>
+          {p.customs_estimated_value_usd && (
+            <p className="text-brand-text-muted">
+              ${Number(p.customs_estimated_value_usd).toFixed(2)} / {p.customs_unit_basis || 'unit'}
+            </p>
+          )}
+        </div>
       ),
     },
     {
@@ -332,6 +400,12 @@ export default function ProductsPage() {
                 error={errors.price_cny ? t('common.required') : undefined}
               />
               <Input
+                label={t('products.price_usd')}
+                type="number"
+                step="0.0001"
+                {...register('price_usd')}
+              />
+              <Input
                 label={t('products.pcs_per_carton')}
                 type="number"
                 {...register('pcs_per_carton', { required: true })}
@@ -348,6 +422,90 @@ export default function ProductsPage() {
                 label={t('products.min_order')}
                 type="number"
                 {...register('min_order_cartons', { required: true })}
+              />
+            </FormRow>
+          </FormSection>
+
+          <FormSection title={t('products.customs')}>
+            <FormRow>
+              <Input label={t('products.hs_code')} placeholder="6203.42" {...register('hs_code')} />
+              <Input label={t('products.origin_country')} placeholder="China" {...register('origin_country')} />
+              <Input label={t('products.customs_category')} placeholder="Men linen pants" {...register('customs_category')} />
+            </FormRow>
+            <FormRow>
+              <div className="space-y-1.5">
+                <label className="label-base">{t('products.customs_unit_basis')}</label>
+                <select className="input-base w-full" {...register('customs_unit_basis')}>
+                  <option value="">—</option>
+                  <option value="dozen">{t('products.unit_dozen')}</option>
+                  <option value="piece">{t('products.unit_piece')}</option>
+                  <option value="kg">{t('products.unit_kg')}</option>
+                  <option value="carton">{t('products.unit_carton')}</option>
+                </select>
+              </div>
+              <Input
+                label={t('products.customs_estimated_value_usd')}
+                type="number"
+                step="0.0001"
+                {...register('customs_estimated_value_usd')}
+              />
+              <Input
+                label={t('products.customs_duty_pct')}
+                type="number"
+                step="0.01"
+                {...register('customs_duty_pct')}
+              />
+            </FormRow>
+            <FormRow>
+              <Input
+                label={t('products.sales_tax_pct')}
+                type="number"
+                step="0.01"
+                {...register('sales_tax_pct')}
+              />
+              <Input
+                label={t('products.other_tax_pct')}
+                type="number"
+                step="0.01"
+                {...register('other_tax_pct')}
+              />
+              <Input label={t('products.customs_notes')} {...register('customs_notes')} />
+            </FormRow>
+          </FormSection>
+
+          <FormSection title={t('products.packing_defaults')}>
+            <FormRow>
+              <Input
+                label={t('products.gross_weight_kg_per_carton')}
+                type="number"
+                step="0.001"
+                {...register('gross_weight_kg_per_carton')}
+              />
+              <Input
+                label={t('products.net_weight_kg_per_carton')}
+                type="number"
+                step="0.001"
+                {...register('net_weight_kg_per_carton')}
+              />
+              <Input
+                label={t('products.carton_length_cm')}
+                type="number"
+                step="0.01"
+                {...register('carton_length_cm')}
+              />
+            </FormRow>
+            <FormRow>
+              <Input
+                label={t('products.carton_width_cm')}
+                type="number"
+                step="0.01"
+                {...register('carton_width_cm')}
+              />
+              <Input
+                label={t('products.carton_height_cm')}
+                type="number"
+                step="0.01"
+                {...register('carton_height_cm')}
               />
             </FormRow>
           </FormSection>

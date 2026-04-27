@@ -698,9 +698,24 @@ export interface Product {
   description_ar: string | null
   supplier: SupplierShort | null
   price_cny: string
+  price_usd: string | null
+  hs_code: string | null
+  origin_country: string | null
+  customs_category: string | null
+  customs_unit_basis: string | null
+  customs_estimated_value_usd: string | null
+  customs_duty_pct: string | null
+  sales_tax_pct: string | null
+  other_tax_pct: string | null
+  customs_notes: string | null
   pcs_per_carton: number
   cbm_per_carton: string
   min_order_cartons: number
+  gross_weight_kg_per_carton: string | null
+  net_weight_kg_per_carton: string | null
+  carton_length_cm: string | null
+  carton_width_cm: string | null
+  carton_height_cm: string | null
   is_active: boolean
   is_featured: boolean
   photos: ProductPhoto[]
