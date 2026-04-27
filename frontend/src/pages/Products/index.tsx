@@ -1318,6 +1318,9 @@ export default function ProductsPage() {
         <p className="text-sm text-gray-300 mb-5">
           {t('products.delete_confirm', { name: deleting?.name })}
         </p>
+        <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-5">
+          {t('products.delete_warning')}
+        </p>
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDeleting(null)}>{t('common.cancel')}</Button>
           <Button

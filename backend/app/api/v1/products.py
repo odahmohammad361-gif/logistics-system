@@ -2,11 +2,13 @@ import os
 import uuid
 import shutil
 import json as _json
+from copy import deepcopy
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db, SessionLocal
@@ -16,6 +18,9 @@ from app.models.product import (
     Product, ProductPhoto, ProductMainCategory, ProductSubcategory,
     ProductType, HSCodeReference,
 )
+from app.models.invoice_item import InvoiceItem
+from app.models.customs_calculator import CustomsEstimateLine
+from app.models.booking import BookingCargoLine
 from app.schemas.product import (
     ProductCreate,
     ProductUpdate,
@@ -66,6 +71,41 @@ def _save_photo(file: UploadFile) -> str:
     with open(path, "wb") as f:
         f.write(file.file.read())
     return path
+
+
+def _remove_file_if_local(path: str | None) -> None:
+    if not path:
+        return
+    full_path = os.path.abspath(path)
+    uploads_root = os.path.abspath(UPLOAD_DIR)
+    if not full_path.startswith(uploads_root + os.sep):
+        return
+    if os.path.isfile(full_path):
+        os.remove(full_path)
+
+
+def _detach_product_from_cargo_goods(db: Session, product_id: int) -> int:
+    changed = 0
+    lines = (
+        db.query(BookingCargoLine)
+        .filter(BookingCargoLine.extracted_goods.isnot(None))
+        .all()
+    )
+    for line in lines:
+        extracted = line.extracted_goods
+        if not isinstance(extracted, dict) or not isinstance(extracted.get("goods"), list):
+            continue
+        updated = deepcopy(extracted)
+        line_changed = False
+        for item in updated.get("goods", []):
+            if isinstance(item, dict) and str(item.get("product_id") or "") == str(product_id):
+                item["product_id"] = None
+                line_changed = True
+        if line_changed:
+            line.extracted_goods = updated
+            flag_modified(line, "extracted_goods")
+            changed += 1
+    return changed
 
 
 def _apply_reference_defaults(product: Product, db: Session) -> None:
@@ -387,8 +427,20 @@ def delete_product(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(404, "Product not found")
-    product.is_active = False
+    photo_paths = [photo.file_path for photo in product.photos]
+    db.query(InvoiceItem).filter(InvoiceItem.product_id == product_id).update(
+        {InvoiceItem.product_id: None},
+        synchronize_session=False,
+    )
+    db.query(CustomsEstimateLine).filter(CustomsEstimateLine.product_id == product_id).update(
+        {CustomsEstimateLine.product_id: None},
+        synchronize_session=False,
+    )
+    _detach_product_from_cargo_goods(db, product_id)
+    db.delete(product)
     db.commit()
+    for path in photo_paths:
+        _remove_file_if_local(path)
 
 
 @router.post("/admin/{product_id}/photos", response_model=ProductResponse)

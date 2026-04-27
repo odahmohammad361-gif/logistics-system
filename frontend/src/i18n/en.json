@@ -883,7 +883,8 @@
     "featured": "Featured",
     "photos": "Photos",
     "upload_photo": "Upload Photo",
-    "delete_confirm": "Delete product \"{{name}}\"?",
+    "delete_confirm": "Permanently delete product \"{{name}}\"?",
+    "delete_warning": "This removes the product row and product photos. Existing invoices, customs estimates, and container cargo keep their saved text values, but the product reference is cleared.",
     "supplier": "Supplier",
     "description": "Description"
   },
