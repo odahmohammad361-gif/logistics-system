@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button'
 import { FormSection, Input } from '@/components/ui/Form'
 import { getBookings } from '@/services/bookingService'
 import { getClients } from '@/services/clientService'
-import { getInvoices } from '@/services/invoiceService'
+import { getInvoice, getInvoices } from '@/services/invoiceService'
 import { listProducts } from '@/services/productService'
 import {
   archiveCustomsEstimate,
@@ -14,7 +14,7 @@ import {
   createCustomsEstimate,
   listCustomsEstimates,
 } from '@/services/customsCalculatorService'
-import type { CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Product } from '@/types'
+import type { CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Invoice, InvoiceItem, Product } from '@/types'
 
 type UnitBasis = 'dozen' | 'piece' | 'kg' | 'carton'
 
@@ -160,6 +160,116 @@ function estimateToRows(estimate: CustomsEstimate): CalcRow[] {
   }))
 }
 
+function valueString(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return ''
+  return String(value)
+}
+
+function numeric(value: string | number | null | undefined) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalized(value: string | null | undefined) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function isUnitBasis(value: unknown): value is UnitBasis {
+  return value === 'dozen' || value === 'piece' || value === 'kg' || value === 'carton'
+}
+
+function inferUnitBasis(item: InvoiceItem, product?: Product): UnitBasis {
+  if (isUnitBasis(product?.customs_unit_basis)) return product.customs_unit_basis
+  const unit = normalized(item.unit)
+  if (unit.includes('kg') || unit.includes('kilo') || unit.includes('كغ')) return 'kg'
+  if (unit.includes('carton') || unit.includes('ctn') || unit.includes('كرت')) return 'carton'
+  if (unit.includes('piece') || unit.includes('pcs') || unit.includes('pc') || unit.includes('قط')) return 'piece'
+  return 'dozen'
+}
+
+function customsUnitsFor(item: InvoiceItem, basis: UnitBasis) {
+  const pieces = numeric(item.quantity)
+  const cartons = numeric(item.cartons)
+  const grossKg = numeric(item.gross_weight)
+  if (basis === 'piece') return pieces
+  if (basis === 'carton') return cartons
+  if (basis === 'kg') return grossKg
+  return pieces / 12
+}
+
+function productValueFor(item: InvoiceItem, basis: UnitBasis, customsUnits: number, product?: Product) {
+  const productCustomsValue = numeric(product?.customs_estimated_value_usd)
+  if (productCustomsValue > 0) return productCustomsValue
+
+  if (basis === 'piece') {
+    const productPrice = numeric(product?.price_usd)
+    if (productPrice > 0) return productPrice
+  }
+
+  const lineTotal = numeric(item.total_price)
+  if (customsUnits > 0 && lineTotal > 0) return lineTotal / customsUnits
+
+  const unitPrice = numeric(item.unit_price)
+  if (unitPrice > 0) return unitPrice
+
+  return 0
+}
+
+function findProductForInvoiceItem(item: InvoiceItem, products: Product[]) {
+  const hs = normalized(item.hs_code)
+  if (hs) {
+    const match = products.find((product) => normalized(product.hs_code) === hs)
+    if (match) return match
+  }
+
+  const itemText = `${normalized(item.description)} ${normalized(item.description_ar)}`.trim()
+  if (!itemText) return undefined
+
+  return products.find((product) => {
+    const names = [
+      normalized(product.name),
+      normalized(product.name_ar),
+      normalized(product.description),
+      normalized(product.description_ar),
+    ].filter(Boolean)
+    return names.some((name) => itemText.includes(name) || name.includes(itemText))
+  })
+}
+
+function invoiceItemToRow(item: InvoiceItem, products: Product[]): CalcRow {
+  const product = findProductForInvoiceItem(item, products)
+  const basis = inferUnitBasis(item, product)
+  const cartons = numeric(item.cartons)
+  const quantity = numeric(item.quantity)
+  const piecesPerCarton = cartons > 0 ? quantity / cartons : numeric(product?.pcs_per_carton)
+  const customsUnits = customsUnitsFor(item, basis)
+
+  return {
+    id: makeRowId(),
+    product_id: product ? String(product.id) : '',
+    description: item.description ?? product?.name ?? '',
+    description_ar: item.description_ar ?? product?.name_ar ?? '',
+    hs_code: item.hs_code ?? product?.hs_code ?? '',
+    customs_category: product?.customs_category ?? product?.category ?? '',
+    unit_basis: basis,
+    cartons: valueString(item.cartons),
+    pieces_per_carton: piecesPerCarton > 0 ? String(Number(piecesPerCarton.toFixed(4))) : '',
+    quantity_pieces: valueString(item.quantity),
+    gross_weight_kg: valueString(item.gross_weight),
+    estimated_value_usd: valueString(productValueFor(item, basis, customsUnits, product)),
+    shipping_cost_per_unit_usd: '',
+    shipping_cost_total_usd: '',
+    customs_duty_pct: product?.customs_duty_pct ?? '',
+    sales_tax_pct: product?.sales_tax_pct ?? '',
+    other_tax_pct: product?.other_tax_pct ?? '',
+  }
+}
+
+function invoiceTitle(invoice: Invoice) {
+  const name = invoice.client?.name || invoice.buyer_name
+  return name ? `${invoice.invoice_number} - ${name}` : invoice.invoice_number
+}
+
 export default function CustomsCalculatorPage() {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
@@ -208,6 +318,20 @@ export default function CustomsCalculatorPage() {
   const calcMut = useMutation({
     mutationFn: () => calculateCustoms(buildRequest(country, rows)),
     onSuccess: setResult,
+  })
+
+  const importInvoiceMut = useMutation({
+    mutationFn: () => getInvoice(Number(invoiceId)),
+    onSuccess: (invoice) => {
+      const importedRows = invoice.items.length > 0
+        ? invoice.items.map((item) => invoiceItemToRow(item, products))
+        : [newRow()]
+      setRows(importedRows)
+      setResult(null)
+      setInvoiceId(String(invoice.id))
+      setClientId(invoice.client_id ? String(invoice.client_id) : '')
+      if (!title) setTitle(invoiceTitle(invoice))
+    },
   })
 
   const saveMut = useMutation({
@@ -425,6 +549,16 @@ export default function CustomsCalculatorPage() {
                   </option>
                 ))}
               </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => importInvoiceMut.mutate()}
+                disabled={!invoiceId}
+                loading={importInvoiceMut.isPending}
+              >
+                {t('tax_customs.import_invoice_items')}
+              </Button>
             </div>
             <div className="space-y-1.5">
               <label className="label-base">{t('containers.title')}</label>
@@ -634,6 +768,11 @@ export default function CustomsCalculatorPage() {
       {saveMut.isError && (
         <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
           {(saveMut.error as any)?.response?.data?.detail ?? t('tax_customs.save_error')}
+        </div>
+      )}
+      {importInvoiceMut.isError && (
+        <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
+          {(importInvoiceMut.error as any)?.response?.data?.detail ?? t('tax_customs.import_invoice_error')}
         </div>
       )}
     </div>

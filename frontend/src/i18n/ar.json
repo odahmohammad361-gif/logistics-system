@@ -299,6 +299,8 @@
     "estimate_title": "عنوان التقدير",
     "linked_records": "الربط مع السجلات",
     "no_link": "بدون ربط",
+    "import_invoice_items": "استيراد أصناف الفاتورة",
+    "import_invoice_error": "تعذر استيراد هذه الفاتورة.",
     "saved_estimates": "التقديرات المحفوظة",
     "no_saved_estimates": "لا توجد تقديرات محفوظة بعد.",
     "load_estimate": "فتح",

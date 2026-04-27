@@ -113,6 +113,7 @@ Current behavior:
 - Prints a simple estimate report.
 - Saves estimates with line-item history and soft archive.
 - Links saved estimates to client, invoice, and container records when available.
+- Imports selected invoice items into editable customs calculator lines and tries to match products by HS code/name.
 
 Later this section should connect to product import lists, client invoices, packing lists, containers, clearance agent rates, and accounting reports.
 

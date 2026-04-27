@@ -299,6 +299,8 @@
     "estimate_title": "Estimate title",
     "linked_records": "Linked Records",
     "no_link": "No link",
+    "import_invoice_items": "Import invoice items",
+    "import_invoice_error": "Could not import this invoice.",
     "saved_estimates": "Saved estimates",
     "no_saved_estimates": "No saved estimates yet.",
     "load_estimate": "Load",
