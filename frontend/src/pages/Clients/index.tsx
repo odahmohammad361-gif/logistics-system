@@ -342,7 +342,9 @@ export default function ClientsPage() {
           {isStaff && (
             <>
               <button onClick={() => openEdit(c)} className="btn-icon" title={t('common.edit')}><Pencil size={14} /></button>
-              <button onClick={() => setDeleting(c)} className="btn-icon hover:text-brand-red hover:bg-brand-red/10" title={t('common.delete')}><Trash2 size={14} /></button>
+              {isAdmin && (
+                <button onClick={() => setDeleting(c)} className="btn-icon hover:text-brand-red hover:bg-brand-red/10" title={t('common.delete')}><Trash2 size={14} /></button>
+              )}
             </>
           )}
         </div>
