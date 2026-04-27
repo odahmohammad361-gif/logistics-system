@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -77,3 +78,51 @@ class CustomsCalculatorResponse(BaseModel):
     currency: str
     items: list[CustomsCalculatorItemResult]
     totals: CustomsCalculatorTotals
+
+
+class CustomsEstimateCreate(CustomsCalculatorRequest):
+    title: Optional[str] = None
+    notes: Optional[str] = None
+    client_id: Optional[int] = None
+    invoice_id: Optional[int] = None
+    booking_id: Optional[int] = None
+
+
+class CustomsEstimateLineResponse(CustomsCalculatorItemResult):
+    id: int
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class CustomsEstimateResponse(BaseModel):
+    id: int
+    estimate_number: str
+    title: Optional[str] = None
+    country: str
+    currency: str
+    status: str
+    notes: Optional[str] = None
+    client_id: Optional[int] = None
+    invoice_id: Optional[int] = None
+    booking_id: Optional[int] = None
+    product_value_usd: Decimal
+    shipping_cost_usd: Decimal
+    customs_base_usd: Decimal
+    customs_duty_usd: Decimal
+    sales_tax_usd: Decimal
+    other_tax_usd: Decimal
+    total_taxes_usd: Decimal
+    landed_estimate_usd: Decimal
+    created_at: datetime
+    updated_at: datetime
+    lines: list[CustomsEstimateLineResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class CustomsEstimateListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    results: list[CustomsEstimateResponse]

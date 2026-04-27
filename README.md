@@ -111,6 +111,7 @@ Current behavior:
 - Combines estimated customs product value plus allocated shipping cost.
 - Applies customs, sales tax, and other tax percentages.
 - Prints a simple estimate report.
+- Saves estimates with line-item history and soft archive.
 
 Later this section should connect to product import lists, client invoices, packing lists, containers, clearance agent rates, and accounting reports.
 

@@ -804,6 +804,42 @@ export interface CustomsCalculatorResponse {
   totals: CustomsCalculatorTotals
 }
 
+export interface CustomsEstimateLine extends CustomsCalculatorItemResult {
+  id: number
+  sort_order: number
+}
+
+export interface CustomsEstimate {
+  id: number
+  estimate_number: string
+  title: string | null
+  country: string
+  currency: 'USD'
+  status: string
+  notes: string | null
+  client_id: number | null
+  invoice_id: number | null
+  booking_id: number | null
+  product_value_usd: string
+  shipping_cost_usd: string
+  customs_base_usd: string
+  customs_duty_usd: string
+  sales_tax_usd: string
+  other_tax_usd: string
+  total_taxes_usd: string
+  landed_estimate_usd: string
+  created_at: string
+  updated_at: string
+  lines: CustomsEstimateLine[]
+}
+
+export interface CustomsEstimateListResponse {
+  total: number
+  page: number
+  page_size: number
+  results: CustomsEstimate[]
+}
+
 // ── Customer (shop) ───────────────────────────────────────────────────────────
 export interface Customer {
   id: number

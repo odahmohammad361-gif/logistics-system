@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_role
 from app.database import get_db
+from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.customs_calculator import (
@@ -15,6 +19,9 @@ from app.schemas.customs_calculator import (
     CustomsCalculatorRequest,
     CustomsCalculatorResponse,
     CustomsCalculatorTotals,
+    CustomsEstimateCreate,
+    CustomsEstimateListResponse,
+    CustomsEstimateResponse,
 )
 
 router = APIRouter()
@@ -138,12 +145,7 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     )
 
 
-@router.post("/calculate", response_model=CustomsCalculatorResponse)
-def calculate_customs(
-    payload: CustomsCalculatorRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def _calculate_payload(payload: CustomsCalculatorRequest, db: Session) -> CustomsCalculatorResponse:
     product_ids = [item.product_id for item in payload.items if item.product_id]
     products = {
         p.id: p
@@ -171,3 +173,211 @@ def calculate_customs(
         items=items,
         totals=totals,
     )
+
+
+def _generate_estimate_number(db: Session) -> str:
+    year = datetime.utcnow().year
+    pattern = f"CUST-{year}-%"
+    count = db.query(CustomsEstimate).filter(CustomsEstimate.estimate_number.like(pattern)).count()
+    return f"CUST-{year}-{str(count + 1).zfill(5)}"
+
+
+def _serialize_line(line: CustomsEstimateLine) -> dict:
+    warnings = []
+    if line.warnings_json:
+        try:
+            warnings = json.loads(line.warnings_json)
+        except json.JSONDecodeError:
+            warnings = []
+    return {
+        "id": line.id,
+        "sort_order": line.sort_order,
+        "product_id": line.product_id,
+        "description": line.description,
+        "description_ar": line.description_ar,
+        "hs_code": line.hs_code,
+        "customs_category": line.customs_category,
+        "unit_basis": line.unit_basis,
+        "cartons": line.cartons,
+        "pieces_per_carton": line.pieces_per_carton,
+        "total_pieces": line.total_pieces,
+        "gross_weight_kg": line.gross_weight_kg,
+        "customs_units": line.customs_units,
+        "estimated_value_per_unit_usd": line.estimated_value_per_unit_usd,
+        "shipping_cost_per_unit_usd": line.shipping_cost_per_unit_usd,
+        "shipping_cost_total_usd": line.shipping_cost_total_usd,
+        "product_value_usd": line.product_value_usd,
+        "customs_base_usd": line.customs_base_usd,
+        "customs_duty_pct": line.customs_duty_pct,
+        "sales_tax_pct": line.sales_tax_pct,
+        "other_tax_pct": line.other_tax_pct,
+        "total_tax_pct": line.total_tax_pct,
+        "customs_duty_usd": line.customs_duty_usd,
+        "sales_tax_usd": line.sales_tax_usd,
+        "other_tax_usd": line.other_tax_usd,
+        "total_taxes_usd": line.total_taxes_usd,
+        "landed_estimate_usd": line.landed_estimate_usd,
+        "warnings": warnings,
+    }
+
+
+def _serialize_estimate(estimate: CustomsEstimate) -> dict:
+    return {
+        "id": estimate.id,
+        "estimate_number": estimate.estimate_number,
+        "title": estimate.title,
+        "country": estimate.country,
+        "currency": estimate.currency,
+        "status": estimate.status,
+        "notes": estimate.notes,
+        "client_id": estimate.client_id,
+        "invoice_id": estimate.invoice_id,
+        "booking_id": estimate.booking_id,
+        "product_value_usd": estimate.product_value_usd,
+        "shipping_cost_usd": estimate.shipping_cost_usd,
+        "customs_base_usd": estimate.customs_base_usd,
+        "customs_duty_usd": estimate.customs_duty_usd,
+        "sales_tax_usd": estimate.sales_tax_usd,
+        "other_tax_usd": estimate.other_tax_usd,
+        "total_taxes_usd": estimate.total_taxes_usd,
+        "landed_estimate_usd": estimate.landed_estimate_usd,
+        "created_at": estimate.created_at,
+        "updated_at": estimate.updated_at,
+        "lines": [_serialize_line(line) for line in estimate.lines],
+    }
+
+
+def _get_estimate(db: Session, estimate_id: int) -> CustomsEstimate:
+    estimate = db.query(CustomsEstimate).filter(
+        CustomsEstimate.id == estimate_id,
+        CustomsEstimate.is_archived == False,
+    ).first()
+    if not estimate:
+        raise HTTPException(404, "Customs estimate not found")
+    return estimate
+
+
+@router.get("/estimates", response_model=CustomsEstimateListResponse)
+def list_estimates(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    search: str = "",
+    country: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = db.query(CustomsEstimate).filter(CustomsEstimate.is_archived == False)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(CustomsEstimate.estimate_number.ilike(like), CustomsEstimate.title.ilike(like)))
+    if country:
+        q = q.filter(CustomsEstimate.country == country)
+    total = q.count()
+    estimates = (
+        q.order_by(CustomsEstimate.created_at.desc(), CustomsEstimate.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "results": [_serialize_estimate(estimate) for estimate in estimates],
+    }
+
+
+@router.post("/estimates", response_model=CustomsEstimateResponse, status_code=status.HTTP_201_CREATED)
+def create_estimate(
+    payload: CustomsEstimateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    result = _calculate_payload(payload, db)
+    estimate = CustomsEstimate(
+        estimate_number=_generate_estimate_number(db),
+        title=payload.title or None,
+        country=result.country,
+        currency=result.currency,
+        status="estimated",
+        notes=payload.notes or None,
+        client_id=payload.client_id,
+        invoice_id=payload.invoice_id,
+        booking_id=payload.booking_id,
+        product_value_usd=result.totals.product_value_usd,
+        shipping_cost_usd=result.totals.shipping_cost_usd,
+        customs_base_usd=result.totals.customs_base_usd,
+        customs_duty_usd=result.totals.customs_duty_usd,
+        sales_tax_usd=result.totals.sales_tax_usd,
+        other_tax_usd=result.totals.other_tax_usd,
+        total_taxes_usd=result.totals.total_taxes_usd,
+        landed_estimate_usd=result.totals.landed_estimate_usd,
+        created_by_id=current_user.id,
+    )
+    db.add(estimate)
+    db.flush()
+
+    for index, item in enumerate(result.items):
+        db.add(CustomsEstimateLine(
+            estimate_id=estimate.id,
+            sort_order=index,
+            product_id=item.product_id,
+            description=item.description,
+            description_ar=item.description_ar,
+            hs_code=item.hs_code,
+            customs_category=item.customs_category,
+            unit_basis=item.unit_basis,
+            cartons=item.cartons,
+            pieces_per_carton=item.pieces_per_carton,
+            total_pieces=item.total_pieces,
+            gross_weight_kg=item.gross_weight_kg,
+            customs_units=item.customs_units,
+            estimated_value_per_unit_usd=item.estimated_value_per_unit_usd,
+            shipping_cost_per_unit_usd=item.shipping_cost_per_unit_usd,
+            shipping_cost_total_usd=item.shipping_cost_total_usd,
+            product_value_usd=item.product_value_usd,
+            customs_base_usd=item.customs_base_usd,
+            customs_duty_pct=item.customs_duty_pct,
+            sales_tax_pct=item.sales_tax_pct,
+            other_tax_pct=item.other_tax_pct,
+            total_tax_pct=item.total_tax_pct,
+            customs_duty_usd=item.customs_duty_usd,
+            sales_tax_usd=item.sales_tax_usd,
+            other_tax_usd=item.other_tax_usd,
+            total_taxes_usd=item.total_taxes_usd,
+            landed_estimate_usd=item.landed_estimate_usd,
+            warnings_json=json.dumps(item.warnings, ensure_ascii=False),
+        ))
+
+    db.commit()
+    db.refresh(estimate)
+    return _serialize_estimate(estimate)
+
+
+@router.get("/estimates/{estimate_id}", response_model=CustomsEstimateResponse)
+def get_estimate(
+    estimate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _serialize_estimate(_get_estimate(db, estimate_id))
+
+
+@router.delete("/estimates/{estimate_id}", status_code=status.HTTP_204_NO_CONTENT)
+def archive_estimate(
+    estimate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    estimate = _get_estimate(db, estimate_id)
+    estimate.is_archived = True
+    db.commit()
+
+
+@router.post("/calculate", response_model=CustomsCalculatorResponse)
+def calculate_customs(
+    payload: CustomsCalculatorRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _calculate_payload(payload, db)

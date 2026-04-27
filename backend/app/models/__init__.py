@@ -18,6 +18,7 @@ from app.models.accounting import (
     AccountingEntry, AccountingAttachment, AccountingDirection, AccountingStatus,
     BankStatementImport, BankStatementLine, BankLineMatchStatus,
 )
+from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 
 __all__ = [
     "Base", "Branch", "User", "Client",
@@ -29,4 +30,5 @@ __all__ = [
     "Supplier", "Product", "ProductPhoto", "Customer",
     "AccountingEntry", "AccountingAttachment", "AccountingDirection", "AccountingStatus",
     "BankStatementImport", "BankStatementLine", "BankLineMatchStatus",
+    "CustomsEstimate", "CustomsEstimateLine",
 ]

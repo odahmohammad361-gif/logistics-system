@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Calculator, Plus, Printer, RefreshCw, Trash2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Calculator, FolderOpen, Plus, Printer, RefreshCw, Save, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { FormSection, Input } from '@/components/ui/Form'
 import { listProducts } from '@/services/productService'
-import { calculateCustoms } from '@/services/customsCalculatorService'
-import type { CustomsCalculatorResponse, Product } from '@/types'
+import {
+  archiveCustomsEstimate,
+  calculateCustoms,
+  createCustomsEstimate,
+  listCustomsEstimates,
+} from '@/services/customsCalculatorService'
+import type { CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Product } from '@/types'
 
 type UnitBasis = 'dozen' | 'piece' | 'kg' | 'carton'
 
@@ -81,16 +86,91 @@ function esc(value: unknown) {
   }[ch] as string))
 }
 
+function buildRequest(country: string, rows: CalcRow[]): CustomsCalculatorRequest {
+  return {
+    country,
+    currency: 'USD',
+    items: rows.map((row) => ({
+      product_id: row.product_id ? Number(row.product_id) : null,
+      description: compact(row.description),
+      description_ar: compact(row.description_ar),
+      hs_code: compact(row.hs_code),
+      customs_category: compact(row.customs_category),
+      unit_basis: row.unit_basis,
+      cartons: compact(row.cartons),
+      pieces_per_carton: compact(row.pieces_per_carton),
+      quantity_pieces: compact(row.quantity_pieces),
+      gross_weight_kg: compact(row.gross_weight_kg),
+      estimated_value_usd: compact(row.estimated_value_usd),
+      shipping_cost_per_unit_usd: compact(row.shipping_cost_per_unit_usd),
+      shipping_cost_total_usd: compact(row.shipping_cost_total_usd),
+      customs_duty_pct: compact(row.customs_duty_pct),
+      sales_tax_pct: compact(row.sales_tax_pct),
+      other_tax_pct: compact(row.other_tax_pct),
+    })),
+  }
+}
+
+function estimateToResult(estimate: CustomsEstimate): CustomsCalculatorResponse {
+  return {
+    country: estimate.country,
+    currency: 'USD',
+    items: [...estimate.lines].sort((a, b) => a.sort_order - b.sort_order),
+    totals: {
+      product_value_usd: estimate.product_value_usd,
+      shipping_cost_usd: estimate.shipping_cost_usd,
+      customs_base_usd: estimate.customs_base_usd,
+      customs_duty_usd: estimate.customs_duty_usd,
+      sales_tax_usd: estimate.sales_tax_usd,
+      other_tax_usd: estimate.other_tax_usd,
+      total_taxes_usd: estimate.total_taxes_usd,
+      landed_estimate_usd: estimate.landed_estimate_usd,
+    },
+  }
+}
+
+function estimateToRows(estimate: CustomsEstimate): CalcRow[] {
+  const lines = [...estimate.lines].sort((a, b) => a.sort_order - b.sort_order)
+  if (lines.length === 0) return [newRow()]
+  return lines.map((line) => ({
+    id: makeRowId(),
+    product_id: line.product_id ? String(line.product_id) : '',
+    description: line.description ?? '',
+    description_ar: line.description_ar ?? '',
+    hs_code: line.hs_code ?? '',
+    customs_category: line.customs_category ?? '',
+    unit_basis: (line.unit_basis as UnitBasis) || 'dozen',
+    cartons: line.cartons ?? '',
+    pieces_per_carton: line.pieces_per_carton ?? '',
+    quantity_pieces: line.total_pieces ?? '',
+    gross_weight_kg: line.gross_weight_kg ?? '',
+    estimated_value_usd: line.estimated_value_per_unit_usd ?? '',
+    shipping_cost_per_unit_usd: line.shipping_cost_per_unit_usd ?? '',
+    shipping_cost_total_usd: line.shipping_cost_total_usd ?? '',
+    customs_duty_pct: line.customs_duty_pct ?? '',
+    sales_tax_pct: line.sales_tax_pct ?? '',
+    other_tax_pct: line.other_tax_pct ?? '',
+  }))
+}
+
 export default function CustomsCalculatorPage() {
   const { t, i18n } = useTranslation()
+  const qc = useQueryClient()
   const isAr = i18n.language === 'ar'
   const [country, setCountry] = useState('Jordan')
+  const [title, setTitle] = useState('')
+  const [notes, setNotes] = useState('')
   const [rows, setRows] = useState<CalcRow[]>([newRow()])
   const [result, setResult] = useState<CustomsCalculatorResponse | null>(null)
 
   const { data: productsData } = useQuery({
     queryKey: ['customs-calculator-products'],
     queryFn: () => listProducts({ page: 1, page_size: 100 }),
+  })
+
+  const { data: estimatesData } = useQuery({
+    queryKey: ['customs-estimates'],
+    queryFn: () => listCustomsEstimates({ page: 1, page_size: 8 }),
   })
 
   const products = productsData?.results ?? []
@@ -101,29 +181,27 @@ export default function CustomsCalculatorPage() {
   }, [products])
 
   const calcMut = useMutation({
-    mutationFn: () => calculateCustoms({
-      country,
-      currency: 'USD',
-      items: rows.map((row) => ({
-        product_id: row.product_id ? Number(row.product_id) : null,
-        description: compact(row.description),
-        description_ar: compact(row.description_ar),
-        hs_code: compact(row.hs_code),
-        customs_category: compact(row.customs_category),
-        unit_basis: row.unit_basis,
-        cartons: compact(row.cartons),
-        pieces_per_carton: compact(row.pieces_per_carton),
-        quantity_pieces: compact(row.quantity_pieces),
-        gross_weight_kg: compact(row.gross_weight_kg),
-        estimated_value_usd: compact(row.estimated_value_usd),
-        shipping_cost_per_unit_usd: compact(row.shipping_cost_per_unit_usd),
-        shipping_cost_total_usd: compact(row.shipping_cost_total_usd),
-        customs_duty_pct: compact(row.customs_duty_pct),
-        sales_tax_pct: compact(row.sales_tax_pct),
-        other_tax_pct: compact(row.other_tax_pct),
-      })),
-    }),
+    mutationFn: () => calculateCustoms(buildRequest(country, rows)),
     onSuccess: setResult,
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () => createCustomsEstimate({
+      ...buildRequest(country, rows),
+      title: compact(title),
+      notes: compact(notes),
+    }),
+    onSuccess: (estimate) => {
+      setResult(estimateToResult(estimate))
+      setTitle(estimate.title || estimate.estimate_number)
+      setNotes(estimate.notes || '')
+      qc.invalidateQueries({ queryKey: ['customs-estimates'] })
+    },
+  })
+
+  const archiveMut = useMutation({
+    mutationFn: archiveCustomsEstimate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['customs-estimates'] }),
   })
 
   function patchRow(id: string, patch: Partial<CalcRow>) {
@@ -161,6 +239,14 @@ export default function CustomsCalculatorPage() {
 
   function applyClothingRate(id: string) {
     patchRow(id, { customs_duty_pct: '30', sales_tax_pct: '', other_tax_pct: '' })
+  }
+
+  function loadEstimate(estimate: CustomsEstimate) {
+    setCountry(estimate.country)
+    setTitle(estimate.title || estimate.estimate_number)
+    setNotes(estimate.notes || '')
+    setRows(estimateToRows(estimate))
+    setResult(estimateToResult(estimate))
   }
 
   function printReport() {
@@ -249,11 +335,20 @@ export default function CustomsCalculatorPage() {
             <Printer size={16} />
             {t('tax_customs.print')}
           </Button>
+          <Button variant="secondary" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+            <Save size={16} />
+            {t('tax_customs.save_estimate')}
+          </Button>
         </div>
       </div>
 
       <div className="rounded-xl border border-brand-border bg-brand-surface/60 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <Input
+            label={t('tax_customs.estimate_title')}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
           <div className="space-y-1.5">
             <label className="label-base">{t('tax_customs.country')}</label>
             <select value={country} onChange={(e) => setCountry(e.target.value)} className="input-base w-full">
@@ -266,6 +361,51 @@ export default function CustomsCalculatorPage() {
             <p className="text-xl font-black text-brand-text">{rows.length}</p>
           </div>
         </div>
+        <div className="mt-4">
+          <Input
+            label={t('common.notes')}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-brand-border bg-brand-surface/60 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-semibold text-brand-text">{t('tax_customs.saved_estimates')}</h2>
+          <span className="text-xs text-brand-text-muted">{estimatesData?.total ?? 0}</span>
+        </div>
+        {(estimatesData?.results ?? []).length === 0 ? (
+          <p className="text-sm text-brand-text-muted">{t('tax_customs.no_saved_estimates')}</p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {(estimatesData?.results ?? []).map((estimate) => (
+              <div key={estimate.id} className="rounded-lg border border-brand-border bg-white/[0.03] px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-brand-text truncate">
+                      {estimate.title || estimate.estimate_number}
+                    </p>
+                    <p className="text-xs text-brand-text-muted mt-0.5">
+                      {estimate.estimate_number} · {estimate.country} · {new Date(estimate.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <p className="text-sm font-black text-brand-green tabular-nums">{money(estimate.landed_estimate_usd)}</p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => loadEstimate(estimate)}>
+                    <FolderOpen size={14} />
+                    {t('tax_customs.load_estimate')}
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => archiveMut.mutate(estimate.id)} loading={archiveMut.isPending}>
+                    <Trash2 size={14} />
+                    {t('tax_customs.archive')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -401,6 +541,11 @@ export default function CustomsCalculatorPage() {
       {calcMut.isError && (
         <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
           {(calcMut.error as any)?.response?.data?.detail ?? t('tax_customs.calculate_error')}
+        </div>
+      )}
+      {saveMut.isError && (
+        <div className="rounded-lg border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-sm text-brand-red">
+          {(saveMut.error as any)?.response?.data?.detail ?? t('tax_customs.save_error')}
         </div>
       )}
     </div>
