@@ -1,9 +1,12 @@
 import api from './api'
-import type { Product, ProductListResponse } from '@/types'
+import type { Product, ProductListResponse, ProductReferenceData } from '@/types'
 
 // Admin endpoints
 export const adminListProducts = (params?: Record<string, unknown>) =>
   api.get<ProductListResponse>('/products/admin', { params }).then((r) => r.data)
+
+export const listProductTaxonomy = (params?: Record<string, unknown>) =>
+  api.get<ProductReferenceData>('/products/taxonomy', { params }).then((r) => r.data)
 
 export const createProduct = (data: unknown) =>
   api.post<Product>('/products/admin', data).then((r) => r.data)

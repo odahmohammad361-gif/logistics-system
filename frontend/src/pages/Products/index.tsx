@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Pencil, Trash2, ImagePlus, X, Package } from 'lucide-react'
 import {
   adminListProducts, createProduct, updateProduct, deleteProduct,
-  uploadProductPhoto, deleteProductPhoto,
+  uploadProductPhoto, deleteProductPhoto, listProductTaxonomy,
 } from '@/services/productService'
 import { getSuppliers } from '@/services/supplierService'
 import { useAuth } from '@/hooks/useAuth'
@@ -23,6 +23,10 @@ interface FormValues {
   description: string
   description_ar: string
   supplier_id: string
+  main_category_id: string
+  subcategory_id: string
+  product_type_id: string
+  hs_code_ref_id: string
   price_cny: string
   price_usd: string
   hs_code: string
@@ -47,7 +51,7 @@ interface FormValues {
 }
 
 export default function ProductsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { isAdmin } = useAuth()
   const qc = useQueryClient()
 
@@ -69,7 +73,84 @@ export default function ProductsPage() {
     queryFn: () => getSuppliers(),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>()
+  const { data: taxonomyData } = useQuery({
+    queryKey: ['product-taxonomy'],
+    queryFn: () => listProductTaxonomy(),
+  })
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const selectedMainCategoryId = watch('main_category_id')
+  const selectedSubcategoryId = watch('subcategory_id')
+  const selectedProductTypeId = watch('product_type_id')
+  const selectedHsCodeRefId = watch('hs_code_ref_id')
+  const isAr = i18n.language === 'ar'
+
+  const subcategoryOptions = useMemo(
+    () => (taxonomyData?.subcategories ?? []).filter((item) => !selectedMainCategoryId || String(item.main_category_id) === selectedMainCategoryId),
+    [taxonomyData, selectedMainCategoryId],
+  )
+  const productTypeOptions = useMemo(
+    () => (taxonomyData?.product_types ?? []).filter((item) => !selectedSubcategoryId || String(item.subcategory_id) === selectedSubcategoryId),
+    [taxonomyData, selectedSubcategoryId],
+  )
+  const hsCodeOptions = useMemo(() => {
+    const productType = (taxonomyData?.product_types ?? []).find((item) => String(item.id) === selectedProductTypeId)
+    const typeHs = productType?.hs_code_ref?.hs_code
+    const countryPriority = (a: string) => a === 'Jordan' ? 0 : a === 'Iraq' ? 1 : 2
+    return [...(taxonomyData?.hs_codes ?? [])]
+      .filter((item) => !typeHs || item.hs_code === typeHs)
+      .sort((a, b) => countryPriority(a.country) - countryPriority(b.country) || a.hs_code.localeCompare(b.hs_code))
+  }, [taxonomyData, selectedProductTypeId])
+
+  function refLabel(item: { name: string; name_ar?: string | null }) {
+    return isAr && item.name_ar ? item.name_ar : item.name
+  }
+
+  function applyHsRef(id: string) {
+    setValue('hs_code_ref_id', id)
+    const ref = (taxonomyData?.hs_codes ?? []).find((item) => String(item.id) === id)
+    if (!ref) return
+    setValue('hs_code', ref.hs_code)
+    setValue('customs_category', isAr && ref.description_ar ? ref.description_ar : ref.description)
+    setValue('customs_unit_basis', ref.customs_unit_basis || '')
+    setValue('customs_estimated_value_usd', ref.customs_estimated_value_usd || '')
+    setValue('customs_duty_pct', ref.customs_duty_pct || '')
+    setValue('sales_tax_pct', ref.sales_tax_pct || '')
+    setValue('other_tax_pct', ref.other_tax_pct || '')
+    if (ref.notes) setValue('customs_notes', ref.notes)
+  }
+
+  function applyProductType(id: string) {
+    setValue('product_type_id', id)
+    const productType = (taxonomyData?.product_types ?? []).find((item) => String(item.id) === id)
+    if (!productType) return
+    setValue('main_category_id', String(productType.main_category_id))
+    setValue('subcategory_id', String(productType.subcategory_id))
+    const mainCategory = (taxonomyData?.main_categories ?? []).find((item) => item.id === productType.main_category_id)
+    if (mainCategory) setValue('category', mainCategory.name)
+    setValue('customs_category', productType.name)
+    setValue('customs_unit_basis', productType.default_customs_unit_basis || '')
+    setValue('customs_estimated_value_usd', productType.default_customs_estimated_value_usd || '')
+    setValue('customs_duty_pct', productType.default_customs_duty_pct || '')
+    setValue('sales_tax_pct', productType.default_sales_tax_pct || '')
+    setValue('other_tax_pct', productType.default_other_tax_pct || '')
+    if (productType.hs_code_ref_id) applyHsRef(String(productType.hs_code_ref_id))
+  }
+
+  function changeMainCategory(id: string) {
+    setValue('main_category_id', id)
+    setValue('subcategory_id', '')
+    setValue('product_type_id', '')
+    setValue('hs_code_ref_id', '')
+    const mainCategory = (taxonomyData?.main_categories ?? []).find((item) => String(item.id) === id)
+    setValue('category', mainCategory?.name ?? '')
+  }
+
+  function changeSubcategory(id: string) {
+    setValue('subcategory_id', id)
+    setValue('product_type_id', '')
+    setValue('hs_code_ref_id', '')
+  }
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) => {
@@ -81,6 +162,10 @@ export default function ProductsPage() {
         description: v.description || null,
         description_ar: v.description_ar || null,
         supplier_id: v.supplier_id ? Number(v.supplier_id) : null,
+        main_category_id: v.main_category_id ? Number(v.main_category_id) : null,
+        subcategory_id: v.subcategory_id ? Number(v.subcategory_id) : null,
+        product_type_id: v.product_type_id ? Number(v.product_type_id) : null,
+        hs_code_ref_id: v.hs_code_ref_id ? Number(v.hs_code_ref_id) : null,
         price_cny: v.price_cny,
         price_usd: v.price_usd || null,
         hs_code: v.hs_code || null,
@@ -146,6 +231,7 @@ export default function ProductsPage() {
     reset({
       code: '', name: '', name_ar: '', category: '',
       description: '', description_ar: '', supplier_id: '',
+      main_category_id: '', subcategory_id: '', product_type_id: '', hs_code_ref_id: '',
       price_usd: '', hs_code: '', origin_country: 'China',
       customs_category: '', customs_unit_basis: 'dozen',
       customs_estimated_value_usd: '', customs_duty_pct: '',
@@ -165,6 +251,10 @@ export default function ProductsPage() {
       category: p.category ?? '', description: p.description ?? '',
       description_ar: p.description_ar ?? '',
       supplier_id: p.supplier?.id ? String(p.supplier.id) : '',
+      main_category_id: p.main_category_id ? String(p.main_category_id) : '',
+      subcategory_id: p.subcategory_id ? String(p.subcategory_id) : '',
+      product_type_id: p.product_type_id ? String(p.product_type_id) : '',
+      hs_code_ref_id: p.hs_code_ref_id ? String(p.hs_code_ref_id) : '',
       price_usd: p.price_usd ?? '', hs_code: p.hs_code ?? '',
       origin_country: p.origin_country ?? '',
       customs_category: p.customs_category ?? '',
@@ -210,6 +300,12 @@ export default function ProductsPage() {
             <div>
               <p className="text-sm text-white font-medium">{p.name}</p>
               {p.name_ar && <p className="text-xs text-gray-500 font-arabic">{p.name_ar}</p>}
+              {(p.main_category || p.product_type || p.category) && (
+                <p className="text-[11px] text-gray-500">
+                  {p.main_category ? refLabel(p.main_category) : p.category}
+                  {p.product_type ? ` · ${refLabel(p.product_type)}` : ''}
+                </p>
+              )}
               {p.hs_code && <p className="text-[11px] text-brand-primary-light font-mono">HS {p.hs_code}</p>}
             </div>
           </div>
@@ -245,7 +341,7 @@ export default function ProductsPage() {
       label: t('products.customs'),
       render: (p: Product) => (
         <div className="leading-tight text-xs text-gray-400">
-          <p>{p.customs_category || '—'}</p>
+          <p>{p.hs_code_ref ? `${p.hs_code_ref.country} · ${p.hs_code_ref.hs_code}` : (p.customs_category || '—')}</p>
           {p.customs_estimated_value_usd && (
             <p className="text-brand-text-muted">
               ${Number(p.customs_estimated_value_usd).toFixed(2)} / {p.customs_unit_basis || 'unit'}
@@ -358,6 +454,10 @@ export default function ProductsPage() {
               {(saveMut.error as any)?.response?.data?.detail ?? t('common.required')}
             </div>
           )}
+          <input type="hidden" {...register('main_category_id')} />
+          <input type="hidden" {...register('subcategory_id')} />
+          <input type="hidden" {...register('product_type_id')} />
+          <input type="hidden" {...register('hs_code_ref_id')} />
 
           <FormSection title={t('agents.basic_info')}>
             <FormRow>
@@ -385,8 +485,51 @@ export default function ProductsPage() {
               />
               <Input label="Arabic Name" {...register('name_ar')} />
             </FormRow>
+          </FormSection>
+
+          <FormSection title={t('products.reference_tree')}>
             <FormRow>
-              <Input label={t('products.category')} placeholder="T-Shirts, Jeans..." {...register('category')} />
+              <div className="space-y-1.5">
+                <label className="label-base">{t('products.main_category')}</label>
+                <select className="input-base w-full" value={selectedMainCategoryId || ''} onChange={(e) => changeMainCategory(e.target.value)}>
+                  <option value="">—</option>
+                  {(taxonomyData?.main_categories ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>{refLabel(item)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{t('products.subcategory')}</label>
+                <select className="input-base w-full" value={selectedSubcategoryId || ''} onChange={(e) => changeSubcategory(e.target.value)}>
+                  <option value="">—</option>
+                  {subcategoryOptions.map((item) => (
+                    <option key={item.id} value={item.id}>{refLabel(item)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="label-base">{t('products.product_type')}</label>
+                <select className="input-base w-full" value={selectedProductTypeId || ''} onChange={(e) => applyProductType(e.target.value)}>
+                  <option value="">—</option>
+                  {productTypeOptions.map((item) => (
+                    <option key={item.id} value={item.id}>{refLabel(item)}</option>
+                  ))}
+                </select>
+              </div>
+            </FormRow>
+            <FormRow>
+              <div className="space-y-1.5">
+                <label className="label-base">{t('products.hs_code_reference')}</label>
+                <select className="input-base w-full" value={selectedHsCodeRefId || ''} onChange={(e) => applyHsRef(e.target.value)}>
+                  <option value="">—</option>
+                  {hsCodeOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.country} · {item.hs_code} · {isAr && item.description_ar ? item.description_ar : item.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Input label={t('products.category')} placeholder="Legacy category text" {...register('category')} />
             </FormRow>
           </FormSection>
 

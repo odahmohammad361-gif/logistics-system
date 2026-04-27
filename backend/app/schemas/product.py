@@ -21,6 +21,75 @@ class SupplierShort(BaseModel):
     market_location: Optional[str] = None
 
 
+class ProductMainCategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ProductSubcategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    main_category_id: int
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class HSCodeReferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    country: str
+    hs_code: str
+    chapter: Optional[str] = None
+    description: str
+    description_ar: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    customs_estimated_value_usd: Optional[Decimal] = None
+    customs_duty_pct: Optional[Decimal] = None
+    sales_tax_pct: Optional[Decimal] = None
+    other_tax_pct: Optional[Decimal] = None
+    source_url: Optional[str] = None
+    notes: Optional[str] = None
+    import_allowed: bool = True
+    is_active: bool = True
+
+
+class ProductTypeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    main_category_id: int
+    subcategory_id: int
+    hs_code_ref_id: Optional[int] = None
+    code: str
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    default_customs_unit_basis: Optional[str] = None
+    default_customs_estimated_value_usd: Optional[Decimal] = None
+    default_customs_duty_pct: Optional[Decimal] = None
+    default_sales_tax_pct: Optional[Decimal] = None
+    default_other_tax_pct: Optional[Decimal] = None
+    sort_order: int = 0
+    is_active: bool = True
+    hs_code_ref: Optional[HSCodeReferenceResponse] = None
+
+
+class ProductReferenceDataResponse(BaseModel):
+    main_categories: list[ProductMainCategoryResponse]
+    subcategories: list[ProductSubcategoryResponse]
+    product_types: list[ProductTypeResponse]
+    hs_codes: list[HSCodeReferenceResponse]
+
+
 class ProductCreate(BaseModel):
     code: str
     name: str
@@ -29,6 +98,10 @@ class ProductCreate(BaseModel):
     description: Optional[str] = None
     description_ar: Optional[str] = None
     supplier_id: Optional[int] = None
+    main_category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    product_type_id: Optional[int] = None
+    hs_code_ref_id: Optional[int] = None
     price_cny: Decimal
     price_usd: Optional[Decimal] = None
     hs_code: Optional[str] = None
@@ -60,6 +133,10 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     description_ar: Optional[str] = None
     supplier_id: Optional[int] = None
+    main_category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    product_type_id: Optional[int] = None
+    hs_code_ref_id: Optional[int] = None
     price_cny: Optional[Decimal] = None
     price_usd: Optional[Decimal] = None
     hs_code: Optional[str] = None
@@ -94,6 +171,14 @@ class ProductResponse(BaseModel):
     description: Optional[str] = None
     description_ar: Optional[str] = None
     supplier: Optional[SupplierShort] = None
+    main_category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    product_type_id: Optional[int] = None
+    hs_code_ref_id: Optional[int] = None
+    main_category: Optional[ProductMainCategoryResponse] = None
+    subcategory: Optional[ProductSubcategoryResponse] = None
+    product_type: Optional[ProductTypeResponse] = None
+    hs_code_ref: Optional[HSCodeReferenceResponse] = None
     price_cny: Decimal
     price_usd: Optional[Decimal] = None
     hs_code: Optional[str] = None

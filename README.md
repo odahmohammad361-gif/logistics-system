@@ -41,6 +41,7 @@ Current focus before the next round:
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
+| Product Taxonomy | Main category, subcategory/frame, product type, and HS/customs reference data for products, invoices, containers, and customs |
 | Tax & Customs Calculator | USD-based estimate using product HS code, customs value, packing data, shipping allocation, and tax percentages |
 | Market Board | Currency rates, agent prices, top clients, public TV view |
 | Users | Role-based access |
@@ -97,6 +98,17 @@ Each clearance quote can define:
 - Buy and sell values, with percentage markup support.
 
 The add/update clearance price modal supports multiple quote entries in the same page.
+
+## Product Taxonomy
+
+Products now have a reference tree in addition to the legacy text category:
+
+- Main category, such as clothing, electronics, bags, furniture, home goods, tools, and auto parts.
+- Subcategory/frame, such as men, women, children, mobile accessories, lighting, or kitchenware.
+- Product type, such as men trousers, men shirts, LED lamps, backpacks, toys, or hand tools.
+- HS/customs reference rows for Jordan and Iraq starter data, including HS code, description, customs unit, estimated value, and editable duty/tax defaults.
+
+The old product `category`, `hs_code`, and customs fields remain populated for compatibility with shop, invoice, container, and customs-calculator flows.
 
 ## Tax & Customs Calculator
 

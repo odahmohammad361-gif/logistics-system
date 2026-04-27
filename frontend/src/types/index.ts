@@ -683,6 +683,71 @@ export interface ProductPhoto {
   sort_order: number
 }
 
+export interface ProductMainCategory {
+  id: number
+  code: string
+  name: string
+  name_ar: string | null
+  description: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export interface ProductSubcategory {
+  id: number
+  main_category_id: number
+  code: string
+  name: string
+  name_ar: string | null
+  description: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export interface HSCodeReference {
+  id: number
+  country: string
+  hs_code: string
+  chapter: string | null
+  description: string
+  description_ar: string | null
+  customs_unit_basis: string | null
+  customs_estimated_value_usd: string | null
+  customs_duty_pct: string | null
+  sales_tax_pct: string | null
+  other_tax_pct: string | null
+  source_url: string | null
+  notes: string | null
+  import_allowed: boolean
+  is_active: boolean
+}
+
+export interface ProductTypeReference {
+  id: number
+  main_category_id: number
+  subcategory_id: number
+  hs_code_ref_id: number | null
+  code: string
+  name: string
+  name_ar: string | null
+  description: string | null
+  default_customs_unit_basis: string | null
+  default_customs_estimated_value_usd: string | null
+  default_customs_duty_pct: string | null
+  default_sales_tax_pct: string | null
+  default_other_tax_pct: string | null
+  sort_order: number
+  is_active: boolean
+  hs_code_ref: HSCodeReference | null
+}
+
+export interface ProductReferenceData {
+  main_categories: ProductMainCategory[]
+  subcategories: ProductSubcategory[]
+  product_types: ProductTypeReference[]
+  hs_codes: HSCodeReference[]
+}
+
 export interface SupplierShort {
   id: number
   code: string
@@ -699,6 +764,14 @@ export interface Product {
   description: string | null
   description_ar: string | null
   supplier: SupplierShort | null
+  main_category_id: number | null
+  subcategory_id: number | null
+  product_type_id: number | null
+  hs_code_ref_id: number | null
+  main_category: ProductMainCategory | null
+  subcategory: ProductSubcategory | null
+  product_type: ProductTypeReference | null
+  hs_code_ref: HSCodeReference | null
   price_cny: string
   price_usd: string | null
   hs_code: string | null

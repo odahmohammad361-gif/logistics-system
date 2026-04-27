@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db, SessionLocal
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.product import Product, ProductPhoto
-from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse, ProductListResponse
+from app.models.product import (
+    Product, ProductPhoto, ProductMainCategory, ProductSubcategory,
+    ProductType, HSCodeReference,
+)
+from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse, ProductListResponse, ProductReferenceDataResponse
 
 router = APIRouter()
 
@@ -46,6 +49,67 @@ def _save_photo(file: UploadFile) -> str:
     return path
 
 
+def _apply_reference_defaults(product: Product, db: Session) -> None:
+    main_category = db.query(ProductMainCategory).filter(ProductMainCategory.id == product.main_category_id).first() if product.main_category_id else None
+    subcategory = db.query(ProductSubcategory).filter(ProductSubcategory.id == product.subcategory_id).first() if product.subcategory_id else None
+    product_type = db.query(ProductType).filter(ProductType.id == product.product_type_id).first() if product.product_type_id else None
+    hs_ref = db.query(HSCodeReference).filter(HSCodeReference.id == product.hs_code_ref_id).first() if product.hs_code_ref_id else None
+
+    if product_type:
+        product.main_category_id = product_type.main_category_id
+        product.subcategory_id = product_type.subcategory_id
+        main_category = product_type.main_category
+        subcategory = product_type.subcategory
+        if not product.hs_code_ref_id and product_type.hs_code_ref_id:
+            product.hs_code_ref_id = product_type.hs_code_ref_id
+            hs_ref = product_type.hs_code_ref
+        if not product.customs_category:
+            product.customs_category = product_type.name
+        if not product.customs_unit_basis and product_type.default_customs_unit_basis:
+            product.customs_unit_basis = product_type.default_customs_unit_basis
+        if product.customs_estimated_value_usd is None and product_type.default_customs_estimated_value_usd is not None:
+            product.customs_estimated_value_usd = product_type.default_customs_estimated_value_usd
+        if product.customs_duty_pct is None and product_type.default_customs_duty_pct is not None:
+            product.customs_duty_pct = product_type.default_customs_duty_pct
+        if product.sales_tax_pct is None and product_type.default_sales_tax_pct is not None:
+            product.sales_tax_pct = product_type.default_sales_tax_pct
+        if product.other_tax_pct is None and product_type.default_other_tax_pct is not None:
+            product.other_tax_pct = product_type.default_other_tax_pct
+
+    if product.subcategory_id and not subcategory:
+        raise HTTPException(404, "Product subcategory not found")
+    if product.main_category_id and not main_category:
+        raise HTTPException(404, "Product main category not found")
+    if product.product_type_id and not product_type:
+        raise HTTPException(404, "Product type not found")
+    if product.hs_code_ref_id and not hs_ref:
+        raise HTTPException(404, "HS code reference not found")
+
+    if subcategory and product.main_category_id and subcategory.main_category_id != product.main_category_id:
+        raise HTTPException(400, "Selected subcategory does not belong to the selected main category")
+
+    if hs_ref:
+        if not product.hs_code:
+            product.hs_code = hs_ref.hs_code
+        if not product.customs_category:
+            product.customs_category = hs_ref.description
+        if not product.customs_unit_basis:
+            product.customs_unit_basis = hs_ref.customs_unit_basis
+        if product.customs_estimated_value_usd is None:
+            product.customs_estimated_value_usd = hs_ref.customs_estimated_value_usd
+        if product.customs_duty_pct is None:
+            product.customs_duty_pct = hs_ref.customs_duty_pct
+        if product.sales_tax_pct is None:
+            product.sales_tax_pct = hs_ref.sales_tax_pct
+        if product.other_tax_pct is None:
+            product.other_tax_pct = hs_ref.other_tax_pct
+        if not product.customs_notes and hs_ref.notes:
+            product.customs_notes = hs_ref.notes
+
+    if main_category and not product.category:
+        product.category = main_category.name
+
+
 # ── Admin endpoints (require auth) ────────────────────────────────────────────
 
 @router.get("/admin", response_model=ProductListResponse)
@@ -70,6 +134,32 @@ def admin_list_products(
     return {"total": total, "page": page, "page_size": page_size, "results": results}
 
 
+@router.get("/taxonomy", response_model=ProductReferenceDataResponse)
+def list_product_taxonomy(
+    country: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hs_q = db.query(HSCodeReference).filter(HSCodeReference.is_active == True)  # noqa: E712
+    if country:
+        hs_q = hs_q.filter(HSCodeReference.country == country)
+    return {
+        "main_categories": db.query(ProductMainCategory)
+        .filter(ProductMainCategory.is_active == True)  # noqa: E712
+        .order_by(ProductMainCategory.sort_order, ProductMainCategory.name)
+        .all(),
+        "subcategories": db.query(ProductSubcategory)
+        .filter(ProductSubcategory.is_active == True)  # noqa: E712
+        .order_by(ProductSubcategory.main_category_id, ProductSubcategory.sort_order, ProductSubcategory.name)
+        .all(),
+        "product_types": db.query(ProductType)
+        .filter(ProductType.is_active == True)  # noqa: E712
+        .order_by(ProductType.main_category_id, ProductType.subcategory_id, ProductType.sort_order, ProductType.name)
+        .all(),
+        "hs_codes": hs_q.order_by(HSCodeReference.country, HSCodeReference.hs_code, HSCodeReference.description).all(),
+    }
+
+
 @router.post("/admin", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(
     payload: ProductCreate,
@@ -79,6 +169,7 @@ def create_product(
     if db.query(Product).filter(Product.code == payload.code).first():
         raise HTTPException(400, f"Product code '{payload.code}' already exists")
     product = Product(**payload.model_dump())
+    _apply_reference_defaults(product, db)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -97,6 +188,7 @@ def update_product(
         raise HTTPException(404, "Product not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(product, k, v)
+    _apply_reference_defaults(product, db)
     db.commit()
     db.refresh(product)
     return product

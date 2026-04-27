@@ -12,7 +12,10 @@ from app.models.company_settings import CompanySettings
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, BookingCargoDocument
 from app.models.supplier import Supplier
-from app.models.product import Product, ProductPhoto
+from app.models.product import (
+    Product, ProductPhoto, ProductMainCategory, ProductSubcategory,
+    ProductType, HSCodeReference,
+)
 from app.models.customer import Customer
 from app.models.accounting import (
     AccountingEntry, AccountingAttachment, AccountingDirection, AccountingStatus,
@@ -27,7 +30,8 @@ __all__ = [
     "InvoiceItem", "MarketRate",
     "CompanySettings", "CompanyWarehouse",
     "Booking", "BookingCargoLine", "BookingCargoImage", "BookingCargoDocument",
-    "Supplier", "Product", "ProductPhoto", "Customer",
+    "Supplier", "Product", "ProductPhoto", "ProductMainCategory", "ProductSubcategory",
+    "ProductType", "HSCodeReference", "Customer",
     "AccountingEntry", "AccountingAttachment", "AccountingDirection", "AccountingStatus",
     "BankStatementImport", "BankStatementLine", "BankLineMatchStatus",
     "CustomsEstimate", "CustomsEstimateLine",
