@@ -119,6 +119,7 @@ Current behavior:
 
 - Uses USD as the working currency.
 - Loads product customs defaults from the product database.
+- Uses country-specific HS/customs references when no exact product is selected, including manual calculator rows.
 - Supports multiple product lines in one estimate.
 - Calculates by customs unit: dozen, piece, kg, or carton.
 - Combines estimated customs product value plus allocated shipping cost.

@@ -14,7 +14,7 @@ from app.models.booking import Booking, BookingCargoLine
 from app.models.client import Client
 from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 from app.models.invoice import Invoice
-from app.models.product import Product
+from app.models.product import HSCodeReference, Product
 from app.models.user import User, UserRole
 from app.schemas.customs_calculator import (
     CustomsCalculatorItemInput,
@@ -64,8 +64,17 @@ def _resolve_units(unit_basis: str, total_pieces: Decimal, cartons: Decimal, gro
     return total_pieces / Decimal("12") if total_pieces else ZERO
 
 
-def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) -> CustomsCalculatorItemResult:
-    unit_basis = (row.unit_basis or (product.customs_unit_basis if product else None) or "dozen").lower()
+def _calculate_item(
+    row: CustomsCalculatorItemInput,
+    product: Product | None,
+    hs_ref: HSCodeReference | None,
+) -> CustomsCalculatorItemResult:
+    unit_basis = (
+        row.unit_basis
+        or (product.customs_unit_basis if product else None)
+        or (hs_ref.customs_unit_basis if hs_ref else None)
+        or "dozen"
+    ).lower()
     cartons = _first_decimal(row.cartons)
     pieces_per_carton = _first_decimal(row.pieces_per_carton, product.pcs_per_carton if product else None)
     total_pieces = _first_decimal(row.quantity_pieces)
@@ -78,6 +87,7 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     estimated_value = _first_decimal(
         row.estimated_value_usd,
         product.customs_estimated_value_usd if product else None,
+        hs_ref.customs_estimated_value_usd if hs_ref else None,
         product.price_usd if product else None,
     )
 
@@ -91,9 +101,21 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     product_value = estimated_value * units
     customs_base = product_value + shipping_total
 
-    duty_pct = _first_decimal(row.customs_duty_pct, product.customs_duty_pct if product else None)
-    sales_pct = _first_decimal(row.sales_tax_pct, product.sales_tax_pct if product else None)
-    other_pct = _first_decimal(row.other_tax_pct, product.other_tax_pct if product else None)
+    duty_pct = _first_decimal(
+        row.customs_duty_pct,
+        product.customs_duty_pct if product else None,
+        hs_ref.customs_duty_pct if hs_ref else None,
+    )
+    sales_pct = _first_decimal(
+        row.sales_tax_pct,
+        product.sales_tax_pct if product else None,
+        hs_ref.sales_tax_pct if hs_ref else None,
+    )
+    other_pct = _first_decimal(
+        row.other_tax_pct,
+        product.other_tax_pct if product else None,
+        hs_ref.other_tax_pct if hs_ref else None,
+    )
 
     duty = customs_base * duty_pct / Decimal("100")
     sales = customs_base * sales_pct / Decimal("100")
@@ -104,6 +126,10 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     warnings: list[str] = []
     if not product and row.product_id:
         warnings.append("Product not found; manual values were used.")
+    if not product and not hs_ref and row.hs_code:
+        warnings.append("No matching HS reference found for this country.")
+    if hs_ref and not hs_ref.import_allowed:
+        warnings.append("HS reference is marked as not allowed for import.")
     if not units:
         warnings.append("No customs units calculated. Add pieces, cartons, or kg.")
     if not estimated_value:
@@ -114,6 +140,7 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     description = (
         row.description
         or (product.name if product else None)
+        or (hs_ref.description if hs_ref else None)
         or row.customs_category
         or "Manual item"
     )
@@ -121,9 +148,9 @@ def _calculate_item(row: CustomsCalculatorItemInput, product: Product | None) ->
     return CustomsCalculatorItemResult(
         product_id=row.product_id,
         description=description,
-        description_ar=row.description_ar or (product.name_ar if product else None),
-        hs_code=row.hs_code or (product.hs_code if product else None),
-        customs_category=row.customs_category or (product.customs_category if product else None),
+        description_ar=row.description_ar or (product.name_ar if product else None) or (hs_ref.description_ar if hs_ref else None),
+        hs_code=row.hs_code or (product.hs_code if product else None) or (hs_ref.hs_code if hs_ref else None),
+        customs_category=row.customs_category or (product.customs_category if product else None) or (hs_ref.description if hs_ref else None),
         unit_basis=unit_basis,
         cartons=_q(cartons, QTY),
         pieces_per_carton=_q(pieces_per_carton, QTY),
@@ -155,10 +182,42 @@ def _calculate_payload(payload: CustomsCalculatorRequest, db: Session) -> Custom
         for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
     } if product_ids else {}
 
-    items = [
-        _calculate_item(item, products.get(item.product_id) if item.product_id else None)
-        for item in payload.items
-    ]
+    hs_refs = db.query(HSCodeReference).filter(
+        HSCodeReference.country == payload.country,
+        HSCodeReference.is_active == True,  # noqa: E712
+    ).order_by(HSCodeReference.id).all()
+    hs_refs_by_code: dict[str, HSCodeReference] = {}
+    for ref in hs_refs:
+        hs_refs_by_code.setdefault(ref.hs_code.strip().lower(), ref)
+
+    def match_hs_reference(item: CustomsCalculatorItemInput, product: Product | None) -> HSCodeReference | None:
+        hs_code = str(item.hs_code or (product.hs_code if product else "") or "").strip().lower()
+        if hs_code and hs_code in hs_refs_by_code:
+            return hs_refs_by_code[hs_code]
+
+        product_ref = product.hs_code_ref if product and product.hs_code_ref else None
+        if product_ref and product_ref.country == payload.country and product_ref.is_active:
+            return product_ref
+
+        text = " ".join(
+            str(value or "").strip().lower()
+            for value in [item.customs_category, item.description, item.description_ar]
+            if value
+        )
+        if len(text) < 4:
+            return None
+        for ref in hs_refs:
+            candidates = [ref.description, ref.description_ar, ref.hs_code]
+            for candidate in candidates:
+                candidate_text = str(candidate or "").strip().lower()
+                if len(candidate_text) >= 4 and (candidate_text in text or text in candidate_text):
+                    return ref
+        return None
+
+    items = []
+    for item in payload.items:
+        product = products.get(item.product_id) if item.product_id else None
+        items.append(_calculate_item(item, product, match_hs_reference(item, product)))
 
     totals = CustomsCalculatorTotals(
         product_value_usd=_q(sum((i.product_value_usd for i in items), ZERO)),

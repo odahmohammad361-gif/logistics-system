@@ -8,20 +8,21 @@ import { FormSection, Input } from '@/components/ui/Form'
 import { getBooking, getBookings } from '@/services/bookingService'
 import { getClients } from '@/services/clientService'
 import { getInvoice, getInvoices } from '@/services/invoiceService'
-import { listProducts } from '@/services/productService'
+import { listProducts, listProductTaxonomy } from '@/services/productService'
 import {
   archiveCustomsEstimate,
   calculateCustoms,
   createCustomsEstimate,
   listCustomsEstimates,
 } from '@/services/customsCalculatorService'
-import type { BookingCargoLine, CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, Invoice, InvoiceItem, Product } from '@/types'
+import type { BookingCargoLine, CustomsCalculatorRequest, CustomsCalculatorResponse, CustomsEstimate, HSCodeReference, Invoice, InvoiceItem, Product } from '@/types'
 
 type UnitBasis = 'dozen' | 'piece' | 'kg' | 'carton'
 
 interface CalcRow {
   id: string
   product_id: string
+  hs_ref_id: string
   description: string
   description_ar: string
   hs_code: string
@@ -54,6 +55,7 @@ function newRow(): CalcRow {
   return {
     id: makeRowId(),
     product_id: '',
+    hs_ref_id: '',
     description: '',
     description_ar: '',
     hs_code: '',
@@ -143,6 +145,7 @@ function estimateToRows(estimate: CustomsEstimate): CalcRow[] {
   return lines.map((line) => ({
     id: makeRowId(),
     product_id: line.product_id ? String(line.product_id) : '',
+    hs_ref_id: '',
     description: line.description ?? '',
     description_ar: line.description_ar ?? '',
     hs_code: line.hs_code ?? '',
@@ -252,6 +255,7 @@ function invoiceItemToRow(item: InvoiceItem, products: Product[]): CalcRow {
   return {
     id: makeRowId(),
     product_id: product ? String(product.id) : '',
+    hs_ref_id: product?.hs_code_ref_id ? String(product.hs_code_ref_id) : '',
     description: item.description ?? product?.name ?? '',
     description_ar: item.description_ar ?? product?.name_ar ?? '',
     hs_code: item.hs_code ?? product?.hs_code ?? '',
@@ -293,6 +297,7 @@ function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoL
   return {
     id: makeRowId(),
     product_id: product ? String(product.id) : '',
+    hs_ref_id: product?.hs_code_ref_id ? String(product.hs_code_ref_id) : '',
     description: item.description ?? line.description ?? product?.name ?? '',
     description_ar: line.description_ar ?? product?.name_ar ?? '',
     hs_code: item.hs_code ?? line.hs_code ?? product?.hs_code ?? '',
@@ -337,6 +342,11 @@ export default function CustomsCalculatorPage() {
     queryFn: () => listProducts({ page: 1, page_size: 100 }),
   })
 
+  const { data: taxonomyData } = useQuery({
+    queryKey: ['customs-calculator-taxonomy', country],
+    queryFn: () => listProductTaxonomy({ country }),
+  })
+
   const { data: estimatesData } = useQuery({
     queryKey: ['customs-estimates'],
     queryFn: () => listCustomsEstimates({ page: 1, page_size: 8 }),
@@ -365,6 +375,7 @@ export default function CustomsCalculatorPage() {
   })
 
   const products = productsData?.results ?? []
+  const hsReferences = taxonomyData?.hs_codes ?? []
   const bookingCargoLines = selectedBooking?.cargo_lines ?? []
   const selectedCargoLine = bookingCargoLines.find((line) => String(line.id) === bookingCargoLineId)
   const productById = useMemo(() => {
@@ -372,6 +383,11 @@ export default function CustomsCalculatorPage() {
     products.forEach((product) => map.set(product.id, product))
     return map
   }, [products])
+  const hsReferenceById = useMemo(() => {
+    const map = new Map<number, HSCodeReference>()
+    hsReferences.forEach((ref) => map.set(ref.id, ref))
+    return map
+  }, [hsReferences])
 
   const calcMut = useMutation({
     mutationFn: () => calculateCustoms(buildRequest(country, rows)),
@@ -426,11 +442,15 @@ export default function CustomsCalculatorPage() {
   function applyProduct(id: string, productId: string) {
     const product = productById.get(Number(productId))
     if (!product) {
-      patchRow(id, { product_id: productId })
+      patchRow(id, { product_id: productId, hs_ref_id: '' })
       return
     }
+    const matchingHsRef =
+      hsReferences.find((ref) => ref.id === product.hs_code_ref_id)
+      ?? hsReferences.find((ref) => ref.hs_code === product.hs_code)
     patchRow(id, {
       product_id: productId,
+      hs_ref_id: matchingHsRef ? String(matchingHsRef.id) : '',
       description: product.name ?? '',
       description_ar: product.name_ar ?? '',
       hs_code: product.hs_code ?? '',
@@ -441,6 +461,26 @@ export default function CustomsCalculatorPage() {
       customs_duty_pct: product.customs_duty_pct ?? '',
       sales_tax_pct: product.sales_tax_pct ?? '',
       other_tax_pct: product.other_tax_pct ?? '',
+    })
+  }
+
+  function applyHsReference(id: string, hsRefId: string) {
+    const ref = hsReferenceById.get(Number(hsRefId))
+    if (!ref) {
+      patchRow(id, { hs_ref_id: hsRefId })
+      return
+    }
+    patchRow(id, {
+      hs_ref_id: hsRefId,
+      hs_code: ref.hs_code,
+      customs_category: isAr && ref.description_ar ? ref.description_ar : ref.description,
+      description: ref.description,
+      description_ar: ref.description_ar ?? '',
+      unit_basis: (ref.customs_unit_basis as UnitBasis) || 'dozen',
+      estimated_value_usd: ref.customs_estimated_value_usd ?? '',
+      customs_duty_pct: ref.customs_duty_pct ?? '',
+      sales_tax_pct: ref.sales_tax_pct ?? '',
+      other_tax_pct: ref.other_tax_pct ?? '',
     })
   }
 
@@ -774,7 +814,7 @@ export default function CustomsCalculatorPage() {
               </div>
 
               <FormSection title={t('tax_customs.product_data')}>
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-5 gap-4">
                   <div className="space-y-1.5">
                     <label className="label-base">{t('tax_customs.product')}</label>
                     <select
@@ -786,6 +826,21 @@ export default function CustomsCalculatorPage() {
                       {products.map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.code} — {isAr ? product.name_ar || product.name : product.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="label-base">{t('products.hs_code_reference')}</label>
+                    <select
+                      value={row.hs_ref_id}
+                      onChange={(e) => applyHsReference(row.id, e.target.value)}
+                      className="input-base w-full"
+                    >
+                      <option value="">{t('tax_customs.manual_item')}</option>
+                      {hsReferences.map((ref) => (
+                        <option key={ref.id} value={ref.id}>
+                          {ref.country} · {ref.hs_code} · {isAr && ref.description_ar ? ref.description_ar : ref.description}
                         </option>
                       ))}
                     </select>
