@@ -312,14 +312,62 @@ Do not commit:
 
 ---
 
-## Next Planned Work
+## Follow-Up TODO
 
-Container section redesign:
+This checklist is the working map for the next invoice, shop, and container integration work.
 
-- Improve container archive: group export by client and include all document categories. Print-ready HTML is available, and ZIP export now downloads the uploaded originals grouped by client.
-- Connect internal system invoices: if cargo source is company buying service, link PI/CI/PL/SC from the invoice section and use them to fill cargo data.
-- Add OCR foundation: extract data from uploaded PI/CI/PL/SC/CO/goods invoices, show a review modal, then fill description, HS code, cartons, weights, CBM, marks, and notes.
-- Add server temp export handling: ZIP exports are generated in a temp folder and deleted after download; later add PDF export/cleanup scheduling if needed.
-- Connect final cost equations: shipping agent rate + clearance agent rate + origin/destination fees + delivery.
-- Refine full-container vs LCL workflows inside container profile.
-- Keep container ETD synced from the selected shipping agent carrier vessel date unless manually adjusted later.
+### 1. Invoice Sources
+
+- [ ] Support three invoice sources:
+  - system/manual invoice created by staff.
+  - online shop order invoice created when a logged-in website customer buys through the shop.
+  - external client goods invoice uploaded as PI, CI, PL, SC, CO, B/L, or other files.
+- [ ] Add a clear invoice source field in the database and UI.
+- [ ] Keep saved invoice items independent from product records after creation, so old invoices never change when products are edited.
+- [ ] Decide how a website `customer` becomes an internal `client` before invoice/container work can use them operationally.
+
+### 2. Online Shop To Invoice
+
+- [ ] Let logged-in shop customers create orders from products.
+- [ ] Convert approved shop orders into system PI first.
+- [ ] Reuse the same item data later for CI, PL, and SC.
+- [ ] Keep product price/currency conversion rules separate until the full currency section is finalized.
+- [ ] Store item snapshot data: description, Arabic description, HS code, quantity, unit price, cartons, weights, CBM, and product image.
+
+### 3. Invoice To Container Cargo
+
+- [ ] Link invoices to a container client cargo line with an optional `booking_cargo_line_id`.
+- [ ] Inside container profile, allow selecting existing system invoices for the same client.
+- [ ] When an invoice is attached, fill the cargo goods list from invoice items.
+- [ ] Allow manual edits inside container cargo without rewriting the original invoice unless explicitly requested later.
+- [ ] Support multiple invoices/documents for one client cargo line.
+
+### 4. External Client Documents
+
+- [ ] Keep uploaded PI, CI, PL, SC, CO, B/L, security approvals, and other files under the client cargo line.
+- [ ] Improve PDF/image preview inside the system for uploaded files.
+- [ ] OCR/extract only goods and packing data from uploaded documents for now.
+- [ ] Do not let OCR change destination, country, port, or container routing from sample files.
+- [ ] Extract B/L data only into container transport fields such as container number, seal number, and B/L number.
+- [ ] Show OCR results as an editable goods list before saving final cargo details.
+
+### 5. Container Rules
+
+- [ ] Keep LCL capacity checks: warn at 90%, block if CBM exceeds capacity.
+- [ ] When one LCL client takes the full container, convert the booking to FCL, assign a new FCL number, and block additional clients.
+- [ ] Match clearance rates automatically by destination country, sea/air mode, container size, and carrier.
+- [ ] Keep container ETD synced from the selected shipping agent carrier vessel date unless manual override rules are added later.
+
+### 6. Pricing And Final Cost Equation
+
+- [ ] Keep `Client Freight Share` as the current simple port-to-port selling freight share for now.
+- [ ] Later replace/extend the equation after taxes, customs valuation, cargo type, HS code, clearance, transportation, destination fees, and service fees are ready.
+- [ ] Use selling prices charged to the client, not agent buy prices, for client-facing cost calculations.
+- [ ] Keep shipping agent rate, clearance agent rate, invoice valuation, and cargo line data connected but auditable.
+
+### 7. Export And Archive
+
+- [ ] Keep per-container ZIP archive export grouped by client.
+- [ ] Include linked system invoices and uploaded external documents in the client folder.
+- [ ] Keep print-ready HTML/PDF export separate from raw uploaded originals.
+- [ ] Add cleanup scheduling for generated temp exports if needed after usage grows.
