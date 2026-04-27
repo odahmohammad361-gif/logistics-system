@@ -77,6 +77,7 @@ interface FormValues {
 }
 
 interface GoodsRow {
+  product_id: string
   description: string
   cartons: string
   quantity: string
@@ -150,6 +151,7 @@ export default function CargoLineForm({
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const [goodsRows, setGoodsRows] = useState<GoodsRow[]>([])
   const selectedClientId = watch('client_id')
+  const selectedInvoiceId = watch('invoice_id')
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
@@ -180,6 +182,11 @@ export default function CargoLineForm({
         label: `${inv.invoice_number} — ${inv.invoice_type} — ${Number(inv.total || 0).toFixed(2)} ${inv.currency || 'USD'}`,
       }))
   }, [invoicesData, selectedClientId])
+
+  const selectedInvoice = useMemo(
+    () => (invoicesData?.results ?? []).find(inv => String(inv.id) === selectedInvoiceId),
+    [invoicesData, selectedInvoiceId],
+  )
 
   const clearanceRateOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
@@ -239,6 +246,7 @@ export default function CargoLineForm({
   useEffect(() => {
     if (!open) return
     const extractedRows = initial?.extracted_goods?.goods?.map(item => ({
+      product_id: item.product_id != null ? String(item.product_id) : '',
       description: item.description ?? '',
       cartons: item.cartons != null ? String(item.cartons) : '',
       quantity: item.quantity != null ? String(item.quantity) : '',
@@ -305,11 +313,16 @@ export default function CargoLineForm({
 
   function toNum(v: string) { const n = parseFloat(v); return isNaN(n) ? null : n }
   function toInt(v: string) { const n = parseInt(v); return isNaN(n) ? null : n }
+  function sumRows(rows: GoodsRow[], field: keyof Pick<GoodsRow, 'cartons' | 'gross_weight_kg' | 'cbm'>, decimals = 3) {
+    const total = rows.reduce((sum, row) => sum + (parseFloat(row[field]) || 0), 0)
+    if (!total) return ''
+    return field === 'cartons' ? String(Math.round(total)) : total.toFixed(decimals)
+  }
   function updateGoodsRow(index: number, field: keyof GoodsRow, value: string) {
     setGoodsRows(rows => rows.map((row, i) => i === index ? { ...row, [field]: value } : row))
   }
   function addGoodsRow() {
-    setGoodsRows(rows => [...rows, { description: '', cartons: '', quantity: '', gross_weight_kg: '', cbm: '', hs_code: '' }])
+    setGoodsRows(rows => [...rows, { product_id: '', description: '', cartons: '', quantity: '', gross_weight_kg: '', cbm: '', hs_code: '' }])
   }
   function removeGoodsRow(index: number) {
     setGoodsRows(rows => rows.filter((_, i) => i !== index))
@@ -318,13 +331,14 @@ export default function CargoLineForm({
   async function handleFormSubmit(vals: FormValues) {
     const cleanedGoods = goodsRows
       .map(row => ({
+        product_id: toInt(row.product_id),
         description: row.description.trim(),
         cartons: toInt(row.cartons),
         quantity: toInt(row.quantity),
         gross_weight_kg: toNum(row.gross_weight_kg),
         cbm: toNum(row.cbm),
         hs_code: row.hs_code.trim() || null,
-        source: initial?.extracted_goods?.goods?.length ? 'document_or_manual' : 'manual',
+        source: selectedInvoiceId ? 'linked_invoice' : (initial?.extracted_goods?.goods?.length ? 'document_or_manual' : 'manual'),
       }))
       .filter(row => row.description || row.cartons != null || row.quantity != null || row.gross_weight_kg != null || row.cbm != null || row.hs_code)
     await onSubmit({
@@ -355,10 +369,35 @@ export default function CargoLineForm({
             ...(initial?.extracted_goods ?? {}),
             version: 1,
             updated_at: new Date().toISOString(),
+            invoice_id: vals.invoice_id ? parseInt(vals.invoice_id) : null,
+            invoice_number: selectedInvoice?.invoice_number ?? initial?.invoice_number ?? null,
             goods: cleanedGoods,
           }
         : null,
     })
+  }
+
+  function importSelectedInvoiceGoods() {
+    if (!selectedInvoice) return
+    const rows = (selectedInvoice.items ?? []).map(item => ({
+      product_id: item.product_id != null ? String(item.product_id) : '',
+      description: item.description ?? '',
+      cartons: item.cartons != null ? String(item.cartons) : '',
+      quantity: item.quantity != null ? String(item.quantity) : '',
+      gross_weight_kg: item.gross_weight != null ? String(item.gross_weight) : '',
+      cbm: item.cbm != null ? String(item.cbm) : '',
+      hs_code: item.hs_code ?? '',
+    }))
+    setGoodsRows(rows)
+    setValue('goods_source', 'company_buying_service')
+    setValue('cartons', sumRows(rows, 'cartons'))
+    setValue('gross_weight_kg', sumRows(rows, 'gross_weight_kg'))
+    setValue('cbm', sumRows(rows, 'cbm', 4))
+    const hsCodes = Array.from(new Set(rows.map(row => row.hs_code.trim()).filter(Boolean)))
+    setValue('hs_code', hsCodes.length === 1 ? hsCodes[0] : '')
+    if (!watch('description')) {
+      setValue('description', rows.map((row, idx) => `${idx + 1}. ${row.description}`).filter(Boolean).join('\n'))
+    }
   }
 
   const title = initial ? t('bookings.edit_cargo') : t('bookings.add_client_cargo')
@@ -437,6 +476,27 @@ export default function CargoLineForm({
               : (isAr ? 'لا توجد فواتير مطابقة' : 'No matching invoices')}
             {...register('invoice_id')}
           />
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-white/[0.02] px-3 py-2">
+            <div>
+              <p className="text-xs font-semibold text-brand-text">
+                {isAr ? 'استيراد بنود الفاتورة' : 'Import invoice items'}
+              </p>
+              <p className="text-[11px] text-brand-text-muted">
+                {isAr
+                  ? 'ينقل الأصناف والكميات والكراتين والوزن إلى قائمة البضاعة.'
+                  : 'Copies items, quantities, cartons, weights, and HS codes into the goods list.'}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={importSelectedInvoiceGoods}
+              disabled={!selectedInvoice}
+            >
+              {isAr ? 'استيراد' : 'Import'}
+            </Button>
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <Select
               label={isAr ? 'مصدر البضاعة' : 'Goods Source'}

@@ -525,6 +525,7 @@ export interface BookingCargoLine {
     invoice_no?: string | null
     source_documents?: Array<{ id: number; type: string; filename: string | null; characters?: number }>
     goods?: Array<{
+      product_id?: number | null
       description?: string
       cartons?: number | null
       quantity?: number | null

@@ -288,7 +288,8 @@ function cargoProductValue(product?: Product) {
 }
 
 function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoLine, products: Product[]): CalcRow {
-  const product = findProductByText(products, item.hs_code ?? line.hs_code, item.description, line.description, line.description_ar)
+  const linkedProduct = item.product_id ? products.find((product) => product.id === item.product_id) : undefined
+  const product = linkedProduct ?? findProductByText(products, item.hs_code ?? line.hs_code, item.description, line.description, line.description_ar)
   const basis = isUnitBasis(product?.customs_unit_basis) ? product.customs_unit_basis : 'dozen'
   const cartons = numeric(item.cartons ?? line.cartons)
   const quantity = numeric(item.quantity)
