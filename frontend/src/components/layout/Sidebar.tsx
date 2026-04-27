@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, FileText, Ship,
   Anchor, TrendingUp, UserCog, ChevronLeft, ChevronRight,
   LogOut, Building2, Container, Warehouse, Store, Package, FolderInput,
-  Landmark,
+  Landmark, Calculator,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
@@ -19,6 +19,7 @@ const NAV = [
   { to: '/containers',       icon: Container,       key: 'containers' },
   { to: '/shipping-agents',  icon: Ship,            key: 'shipping_agents' },
   { to: '/clearance-agents', icon: Anchor,          key: 'clearance_agents' },
+  { to: '/customs-calculator', icon: Calculator,    key: 'customs_calculator' },
   { to: '/market',           icon: TrendingUp,      key: 'market' },
   { to: '/users',            icon: UserCog,         key: 'users' },
   { to: '/company',          icon: Building2,       key: 'company' },

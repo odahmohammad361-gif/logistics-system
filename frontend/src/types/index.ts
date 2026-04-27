@@ -730,6 +730,80 @@ export interface ProductListResponse {
   results: Product[]
 }
 
+// ── Customs / Tax Calculator ────────────────────────────────────────────────
+export interface CustomsCalculatorItemInput {
+  product_id?: number | null
+  description?: string | null
+  description_ar?: string | null
+  hs_code?: string | null
+  customs_category?: string | null
+  unit_basis?: string | null
+  cartons?: string | number | null
+  pieces_per_carton?: string | number | null
+  quantity_pieces?: string | number | null
+  gross_weight_kg?: string | number | null
+  estimated_value_usd?: string | number | null
+  shipping_cost_per_unit_usd?: string | number | null
+  shipping_cost_total_usd?: string | number | null
+  customs_duty_pct?: string | number | null
+  sales_tax_pct?: string | number | null
+  other_tax_pct?: string | number | null
+  notes?: string | null
+}
+
+export interface CustomsCalculatorRequest {
+  country: string
+  currency: 'USD'
+  items: CustomsCalculatorItemInput[]
+}
+
+export interface CustomsCalculatorItemResult {
+  product_id: number | null
+  description: string
+  description_ar: string | null
+  hs_code: string | null
+  customs_category: string | null
+  unit_basis: string
+  cartons: string
+  pieces_per_carton: string
+  total_pieces: string
+  gross_weight_kg: string
+  customs_units: string
+  estimated_value_per_unit_usd: string
+  shipping_cost_per_unit_usd: string
+  shipping_cost_total_usd: string
+  product_value_usd: string
+  customs_base_usd: string
+  customs_duty_pct: string
+  sales_tax_pct: string
+  other_tax_pct: string
+  total_tax_pct: string
+  customs_duty_usd: string
+  sales_tax_usd: string
+  other_tax_usd: string
+  total_taxes_usd: string
+  landed_estimate_usd: string
+  warnings: string[]
+}
+
+export interface CustomsCalculatorTotals {
+  product_value_usd: string
+  shipping_cost_usd: string
+  customs_base_usd: string
+  customs_duty_usd: string
+  sales_tax_usd: string
+  other_tax_usd: string
+  total_taxes_usd: string
+  landed_estimate_usd: string
+}
+
+export interface CustomsCalculatorResponse {
+  country: string
+  currency: 'USD'
+  items: CustomsCalculatorItemResult[]
+  totals: CustomsCalculatorTotals
+}
+
 // ── Customer (shop) ───────────────────────────────────────────────────────────
 export interface Customer {
   id: number

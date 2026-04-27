@@ -41,6 +41,7 @@ Current focus before the next round:
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
+| Tax & Customs Calculator | USD-based estimate using product HS code, customs value, packing data, shipping allocation, and tax percentages |
 | Market Board | Currency rates, agent prices, top clients, public TV view |
 | Users | Role-based access |
 | Company | Company info, logo, stamp, warehouses |
@@ -96,6 +97,22 @@ Each clearance quote can define:
 - Buy and sell values, with percentage markup support.
 
 The add/update clearance price modal supports multiple quote entries in the same page.
+
+## Tax & Customs Calculator
+
+The calculator is a first operational stage for estimating customs and taxes before the final accounting equation is connected.
+
+Current behavior:
+
+- Uses USD as the working currency.
+- Loads product customs defaults from the product database.
+- Supports multiple product lines in one estimate.
+- Calculates by customs unit: dozen, piece, kg, or carton.
+- Combines estimated customs product value plus allocated shipping cost.
+- Applies customs, sales tax, and other tax percentages.
+- Prints a simple estimate report.
+
+Later this section should connect to product import lists, client invoices, packing lists, containers, clearance agent rates, and accounting reports.
 
 ---
 
