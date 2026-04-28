@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_role
 from app.database import get_db
-from app.models.product import HSCodeReference
+from app.models.product import HSCodeReference, Product, ProductType
 from app.models.user import User, UserRole
 from app.schemas.product import (
     HSCodeReferenceCreate,
@@ -76,3 +76,25 @@ def update_hs_code_reference(
     _commit_hs_reference(db)
     db.refresh(ref)
     return ref
+
+
+@router.delete("/hs-codes/{ref_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_hs_code_reference(
+    ref_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.ADMIN)),
+):
+    ref = db.query(HSCodeReference).filter(HSCodeReference.id == ref_id).first()
+    if not ref:
+        raise HTTPException(404, "HS code reference not found")
+
+    db.query(Product).filter(Product.hs_code_ref_id == ref_id).update(
+        {Product.hs_code_ref_id: None},
+        synchronize_session=False,
+    )
+    db.query(ProductType).filter(ProductType.hs_code_ref_id == ref_id).update(
+        {ProductType.hs_code_ref_id: None},
+        synchronize_session=False,
+    )
+    db.delete(ref)
+    db.commit()

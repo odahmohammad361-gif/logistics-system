@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpenCheck, Pencil, Plus, Save, Search } from 'lucide-react'
+import { BookOpenCheck, Pencil, Plus, Save, Search, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Table from '@/components/ui/Table'
 import { FormSection, Input } from '@/components/ui/Form'
 import {
   createHSCodeReference,
+  deleteHSCodeReference,
   listHSCodeReferences,
   updateHSCodeReference,
 } from '@/services/customsReferenceService'
+import { useAuth } from '@/hooks/useAuth'
 import type { HSCodeReference } from '@/types'
 
 interface HSForm {
@@ -53,6 +55,7 @@ const PAGE_SIZE = 25
 export default function CustomsReferencesPage() {
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
+  const { isAdmin } = useAuth()
   const qc = useQueryClient()
   const [country, setCountry] = useState('Jordan')
   const [search, setSearch] = useState('')
@@ -60,6 +63,7 @@ export default function CustomsReferencesPage() {
   const [page, setPage] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<HSCodeReference | null>(null)
+  const [deleting, setDeleting] = useState<HSCodeReference | null>(null)
   const [form, setForm] = useState<HSForm>(emptyForm)
 
   const { data = [], isLoading } = useQuery({
@@ -130,6 +134,20 @@ export default function CustomsReferencesPage() {
     },
   })
 
+  const deleteMut = useMutation({
+    mutationFn: deleteHSCodeReference,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customs-references'] })
+      qc.invalidateQueries({ queryKey: ['product-taxonomy'] })
+      qc.invalidateQueries({ queryKey: ['products-admin'] })
+      setDeleting(null)
+      if (editing?.id === deleting?.id) {
+        setEditing(null)
+        setModalOpen(false)
+      }
+    },
+  })
+
   const columns = [
     {
       key: 'hs',
@@ -188,16 +206,28 @@ export default function CustomsReferencesPage() {
     {
       key: 'actions',
       label: '',
-      className: 'w-20',
+      className: 'w-24',
       render: (row: HSCodeReference) => (
-        <button
-          type="button"
-          onClick={() => openEdit(row)}
-          className="rounded p-1.5 text-brand-text-muted transition-colors hover:bg-white/5 hover:text-brand-text"
-          title={t('common.edit')}
-        >
-          <Pencil size={15} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => openEdit(row)}
+            className="rounded p-1.5 text-brand-text-muted transition-colors hover:bg-white/5 hover:text-brand-text"
+            title={t('common.edit')}
+          >
+            <Pencil size={15} />
+          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setDeleting(row)}
+              className="rounded p-1.5 text-brand-text-muted transition-colors hover:bg-red-500/10 hover:text-brand-red"
+              title={t('common.delete')}
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
       ),
     },
   ]
@@ -332,6 +362,35 @@ export default function CustomsReferencesPage() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={t('common.confirm_delete')}
+        size="sm"
+      >
+        <p className="mb-4 text-sm text-brand-text">
+          {t('customs_refs.delete_confirm', {
+            hs: deleting ? `${deleting.country} · ${deleting.hs_code}` : '',
+          })}
+        </p>
+        <p className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300/90">
+          {t('customs_refs.delete_warning')}
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={() => setDeleting(null)}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            loading={deleteMut.isPending}
+            onClick={() => deleting && deleteMut.mutate(deleting.id)}
+          >
+            {t('common.delete')}
+          </Button>
+        </div>
       </Modal>
     </div>
   )

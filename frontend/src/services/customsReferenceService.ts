@@ -9,3 +9,6 @@ export const createHSCodeReference = (data: unknown) =>
 
 export const updateHSCodeReference = (id: number, data: unknown) =>
   api.patch<HSCodeReference>(`/customs-references/hs-codes/${id}`, data).then((r) => r.data)
+
+export const deleteHSCodeReference = (id: number) =>
+  api.delete(`/customs-references/hs-codes/${id}`)

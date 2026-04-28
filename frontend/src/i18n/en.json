@@ -902,7 +902,9 @@
     "search_placeholder": "Search HS code, chapter, or description...",
     "include_inactive": "Include inactive",
     "hs_identity": "HS Identity",
-    "calculation_values": "Calculation Values"
+    "calculation_values": "Calculation Values",
+    "delete_confirm": "Permanently delete HS reference {{hs}}?",
+    "delete_warning": "This removes the HS/customs row from the database and clears its link from connected products and product types. Historical invoice and cargo text stays unchanged."
   },
   "shop": {
     "browse": "Products",

@@ -902,7 +902,9 @@
     "search_placeholder": "ابحث برمز HS أو الفصل أو الوصف...",
     "include_inactive": "إظهار غير النشط",
     "hs_identity": "هوية HS",
-    "calculation_values": "قيم الحساب"
+    "calculation_values": "قيم الحساب",
+    "delete_confirm": "حذف مرجع HS {{hs}} نهائياً؟",
+    "delete_warning": "سيتم حذف سجل HS والجمارك من قاعدة البيانات وإزالة ربطه من المنتجات وأنواع المنتجات المرتبطة. نصوص الفواتير والبضاعة القديمة تبقى كما هي."
   },
   "shop": {
     "browse": "المنتجات",
