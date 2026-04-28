@@ -263,7 +263,8 @@ export default function InvoiceForm({
 
   function productLabel(product: Product) {
     const name = isRTL ? product.name_ar || product.name : product.name
-    return `${product.code} — ${name}${product.hs_code ? ` — HS ${product.hs_code}` : ''}`
+    const hsCode = product.hs_code_ref?.hs_code ?? product.hs_code
+    return `${product.code} — ${name}${hsCode ? ` — HS ${hsCode}` : ''}`
   }
 
   function applyProductToItem(index: number, productId: string) {
@@ -280,7 +281,7 @@ export default function InvoiceForm({
     setValue(`items.${index}.description_ar`, product.name_ar ?? '')
     setValue(`items.${index}.details`, product.description ?? '')
     setValue(`items.${index}.details_ar`, product.description_ar ?? '')
-    setValue(`items.${index}.hs_code`, product.hs_code ?? '')
+    setValue(`items.${index}.hs_code`, product.hs_code_ref?.hs_code ?? product.hs_code ?? '')
     setValue(`items.${index}.unit`, 'pcs')
     if (watchCurrency === 'USD' && product.price_usd) setValue(`items.${index}.unit_price`, Number(product.price_usd))
     if (watchCurrency === 'CNY' && product.price_cny) setValue(`items.${index}.unit_price`, Number(product.price_cny))

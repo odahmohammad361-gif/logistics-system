@@ -8,7 +8,6 @@ import {
   createProductMainCategory, updateProductMainCategory,
   createProductSubcategory, updateProductSubcategory,
   createProductTypeReference, updateProductTypeReference,
-  createHSCodeReference, updateHSCodeReference,
 } from '@/services/productService'
 import { getSuppliers } from '@/services/supplierService'
 import { useAuth } from '@/hooks/useAuth'
@@ -17,7 +16,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
 import { useForm } from 'react-hook-form'
-import type { HSCodeReference, Product, ProductMainCategory, ProductSubcategory, ProductTypeReference } from '@/types'
+import type { Product, ProductMainCategory, ProductSubcategory, ProductTypeReference } from '@/types'
 
 interface FormValues {
   code: string
@@ -33,15 +32,6 @@ interface FormValues {
   hs_code_ref_id: string
   price_cny: string
   price_usd: string
-  hs_code: string
-  origin_country: string
-  customs_category: string
-  customs_unit_basis: string
-  customs_estimated_value_usd: string
-  customs_duty_pct: string
-  sales_tax_pct: string
-  other_tax_pct: string
-  customs_notes: string
   pcs_per_carton: string
   cbm_per_carton: string
   min_order_cartons: string
@@ -54,8 +44,8 @@ interface FormValues {
   is_active: boolean
 }
 
-type ReferenceTab = 'main' | 'sub' | 'type' | 'hs'
-type ReferenceItem = ProductMainCategory | ProductSubcategory | ProductTypeReference | HSCodeReference
+type ReferenceTab = 'main' | 'sub' | 'type'
+type ReferenceItem = ProductMainCategory | ProductSubcategory | ProductTypeReference
 
 interface ReferenceForm {
   main_category_id: string
@@ -65,18 +55,7 @@ interface ReferenceForm {
   name: string
   name_ar: string
   description: string
-  country: string
-  hs_code: string
-  chapter: string
-  customs_unit_basis: string
-  customs_estimated_value_usd: string
-  customs_duty_pct: string
-  sales_tax_pct: string
-  other_tax_pct: string
-  source_url: string
-  notes: string
   sort_order: string
-  import_allowed: boolean
   is_active: boolean
 }
 
@@ -88,18 +67,7 @@ const emptyReferenceForm: ReferenceForm = {
   name: '',
   name_ar: '',
   description: '',
-  country: 'Jordan',
-  hs_code: '',
-  chapter: '',
-  customs_unit_basis: 'dozen',
-  customs_estimated_value_usd: '',
-  customs_duty_pct: '',
-  sales_tax_pct: '',
-  other_tax_pct: '',
-  source_url: '',
-  notes: '',
   sort_order: '0',
-  import_allowed: true,
   is_active: true,
 }
 
@@ -187,22 +155,16 @@ export default function ProductsPage() {
   function referenceTabTitle(tab: ReferenceTab) {
     if (tab === 'main') return t('products.main_categories')
     if (tab === 'sub') return t('products.subcategories')
-    if (tab === 'type') return t('products.product_types')
-    return t('products.hs_codes')
+    return t('products.product_types')
   }
 
   function referenceRows() {
     if (referenceTab === 'main') return managerTaxonomyData?.main_categories ?? []
     if (referenceTab === 'sub') return managerTaxonomyData?.subcategories ?? []
-    if (referenceTab === 'type') return managerTaxonomyData?.product_types ?? []
-    return managerTaxonomyData?.hs_codes ?? []
+    return managerTaxonomyData?.product_types ?? []
   }
 
   function referenceRowTitle(item: ReferenceItem) {
-    if (referenceTab === 'hs') {
-      const row = item as HSCodeReference
-      return `${row.country} · ${row.hs_code} · ${isAr && row.description_ar ? row.description_ar : row.description}`
-    }
     const row = item as ProductMainCategory | ProductSubcategory | ProductTypeReference
     return refLabel(row)
   }
@@ -219,8 +181,7 @@ export default function ProductsPage() {
       const sub = managerTaxonomyData?.subcategories.find((s) => s.id === row.subcategory_id)
       return `${row.code} · ${sub ? refLabel(sub) : t('products.subcategory')}${row.hs_code_ref ? ` · HS ${row.hs_code_ref.hs_code}` : ''}`
     }
-    const row = item as HSCodeReference
-    return `${row.customs_unit_basis || 'unit'} · ${row.customs_duty_pct ?? '0'}% + ${row.sales_tax_pct ?? '0'}%`
+    return ''
   }
 
   function startCreateReference() {
@@ -268,34 +229,11 @@ export default function ProductsPage() {
         name: row.name,
         name_ar: row.name_ar ?? '',
         description: row.description ?? '',
-        customs_unit_basis: row.default_customs_unit_basis ?? '',
-        customs_estimated_value_usd: row.default_customs_estimated_value_usd ?? '',
-        customs_duty_pct: row.default_customs_duty_pct ?? '',
-        sales_tax_pct: row.default_sales_tax_pct ?? '',
-        other_tax_pct: row.default_other_tax_pct ?? '',
         sort_order: String(row.sort_order ?? 0),
         is_active: row.is_active,
       })
       return
     }
-    const row = item as HSCodeReference
-    setReferenceForm({
-      ...emptyReferenceForm,
-      country: row.country,
-      hs_code: row.hs_code,
-      chapter: row.chapter ?? '',
-      description: row.description,
-      name_ar: row.description_ar ?? '',
-      customs_unit_basis: row.customs_unit_basis ?? '',
-      customs_estimated_value_usd: row.customs_estimated_value_usd ?? '',
-      customs_duty_pct: row.customs_duty_pct ?? '',
-      sales_tax_pct: row.sales_tax_pct ?? '',
-      other_tax_pct: row.other_tax_pct ?? '',
-      source_url: row.source_url ?? '',
-      notes: row.notes ?? '',
-      import_allowed: row.import_allowed,
-      is_active: row.is_active,
-    })
   }
 
   function numberOrNull(value: string) {
@@ -333,45 +271,15 @@ export default function ProductsPage() {
         name: referenceForm.name.trim(),
         name_ar: referenceForm.name_ar || null,
         description: referenceForm.description || null,
-        default_customs_unit_basis: referenceForm.customs_unit_basis || null,
-        default_customs_estimated_value_usd: referenceForm.customs_estimated_value_usd || null,
-        default_customs_duty_pct: referenceForm.customs_duty_pct || null,
-        default_sales_tax_pct: referenceForm.sales_tax_pct || null,
-        default_other_tax_pct: referenceForm.other_tax_pct || null,
         sort_order: Number(referenceForm.sort_order || 0),
         is_active: referenceForm.is_active,
       }
     }
-    return {
-      country: referenceForm.country || 'Jordan',
-      hs_code: referenceForm.hs_code.trim(),
-      chapter: referenceForm.chapter || null,
-      description: referenceForm.description.trim(),
-      description_ar: referenceForm.name_ar || null,
-      customs_unit_basis: referenceForm.customs_unit_basis || null,
-      customs_estimated_value_usd: referenceForm.customs_estimated_value_usd || null,
-      customs_duty_pct: referenceForm.customs_duty_pct || null,
-      sales_tax_pct: referenceForm.sales_tax_pct || null,
-      other_tax_pct: referenceForm.other_tax_pct || null,
-      source_url: referenceForm.source_url || null,
-      notes: referenceForm.notes || null,
-      import_allowed: referenceForm.import_allowed,
-      is_active: referenceForm.is_active,
-    }
+    return {}
   }
 
   function applyHsRef(id: string) {
     setValue('hs_code_ref_id', id)
-    const ref = (taxonomyData?.hs_codes ?? []).find((item) => String(item.id) === id)
-    if (!ref) return
-    setValue('hs_code', ref.hs_code)
-    setValue('customs_category', isAr && ref.description_ar ? ref.description_ar : ref.description)
-    setValue('customs_unit_basis', ref.customs_unit_basis || '')
-    setValue('customs_estimated_value_usd', ref.customs_estimated_value_usd || '')
-    setValue('customs_duty_pct', ref.customs_duty_pct || '')
-    setValue('sales_tax_pct', ref.sales_tax_pct || '')
-    setValue('other_tax_pct', ref.other_tax_pct || '')
-    if (ref.notes) setValue('customs_notes', ref.notes)
   }
 
   function applyProductType(id: string) {
@@ -382,12 +290,6 @@ export default function ProductsPage() {
     setValue('subcategory_id', String(productType.subcategory_id))
     const mainCategory = (taxonomyData?.main_categories ?? []).find((item) => item.id === productType.main_category_id)
     if (mainCategory) setValue('category', mainCategory.name)
-    setValue('customs_category', productType.name)
-    setValue('customs_unit_basis', productType.default_customs_unit_basis || '')
-    setValue('customs_estimated_value_usd', productType.default_customs_estimated_value_usd || '')
-    setValue('customs_duty_pct', productType.default_customs_duty_pct || '')
-    setValue('sales_tax_pct', productType.default_sales_tax_pct || '')
-    setValue('other_tax_pct', productType.default_other_tax_pct || '')
     if (productType.hs_code_ref_id) applyHsRef(String(productType.hs_code_ref_id))
   }
 
@@ -422,15 +324,6 @@ export default function ProductsPage() {
         hs_code_ref_id: v.hs_code_ref_id ? Number(v.hs_code_ref_id) : null,
         price_cny: v.price_cny,
         price_usd: v.price_usd || null,
-        hs_code: v.hs_code || null,
-        origin_country: v.origin_country || null,
-        customs_category: v.customs_category || null,
-        customs_unit_basis: v.customs_unit_basis || null,
-        customs_estimated_value_usd: v.customs_estimated_value_usd || null,
-        customs_duty_pct: v.customs_duty_pct || null,
-        sales_tax_pct: v.sales_tax_pct || null,
-        other_tax_pct: v.other_tax_pct || null,
-        customs_notes: v.customs_notes || null,
         pcs_per_carton: Number(v.pcs_per_carton),
         cbm_per_carton: v.cbm_per_carton,
         min_order_cartons: Number(v.min_order_cartons),
@@ -473,7 +366,7 @@ export default function ProductsPage() {
       if (referenceTab === 'type') {
         return id ? updateProductTypeReference(id, payload) : createProductTypeReference(payload)
       }
-      return id ? updateHSCodeReference(id, payload) : createHSCodeReference(payload)
+      return Promise.reject(new Error('Unsupported reference tab'))
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['product-taxonomy'] })
@@ -508,10 +401,7 @@ export default function ProductsPage() {
       code: '', name: '', name_ar: '', category: '',
       description: '', description_ar: '', supplier_id: '',
       main_category_id: '', subcategory_id: '', product_type_id: '', hs_code_ref_id: '',
-      price_usd: '', hs_code: '', origin_country: 'China',
-      customs_category: '', customs_unit_basis: 'dozen',
-      customs_estimated_value_usd: '', customs_duty_pct: '',
-      sales_tax_pct: '', other_tax_pct: '', customs_notes: '',
+      price_usd: '',
       price_cny: '', pcs_per_carton: '250', cbm_per_carton: '0.20',
       gross_weight_kg_per_carton: '', net_weight_kg_per_carton: '',
       carton_length_cm: '', carton_width_cm: '', carton_height_cm: '',
@@ -531,15 +421,7 @@ export default function ProductsPage() {
       subcategory_id: p.subcategory_id ? String(p.subcategory_id) : '',
       product_type_id: p.product_type_id ? String(p.product_type_id) : '',
       hs_code_ref_id: p.hs_code_ref_id ? String(p.hs_code_ref_id) : '',
-      price_usd: p.price_usd ?? '', hs_code: p.hs_code ?? '',
-      origin_country: p.origin_country ?? '',
-      customs_category: p.customs_category ?? '',
-      customs_unit_basis: p.customs_unit_basis ?? 'dozen',
-      customs_estimated_value_usd: p.customs_estimated_value_usd ?? '',
-      customs_duty_pct: p.customs_duty_pct ?? '',
-      sales_tax_pct: p.sales_tax_pct ?? '',
-      other_tax_pct: p.other_tax_pct ?? '',
-      customs_notes: p.customs_notes ?? '',
+      price_usd: p.price_usd ?? '',
       price_cny: p.price_cny, pcs_per_carton: String(p.pcs_per_carton),
       cbm_per_carton: p.cbm_per_carton, min_order_cartons: String(p.min_order_cartons),
       gross_weight_kg_per_carton: p.gross_weight_kg_per_carton ?? '',
@@ -582,7 +464,7 @@ export default function ProductsPage() {
                   {p.product_type ? ` · ${refLabel(p.product_type)}` : ''}
                 </p>
               )}
-              {p.hs_code && <p className="text-[11px] text-brand-primary-light font-mono">HS {p.hs_code}</p>}
+              {p.hs_code_ref && <p className="text-[11px] text-brand-primary-light font-mono">HS {p.hs_code_ref.hs_code}</p>}
             </div>
           </div>
         )
@@ -613,16 +495,12 @@ export default function ProductsPage() {
       ),
     },
     {
-      key: 'customs',
-      label: t('products.customs'),
+      key: 'hs_ref',
+      label: t('products.hs_code_reference'),
       render: (p: Product) => (
         <div className="leading-tight text-xs text-gray-400">
-          <p>{p.hs_code_ref ? `${p.hs_code_ref.country} · ${p.hs_code_ref.hs_code}` : (p.customs_category || '—')}</p>
-          {p.customs_estimated_value_usd && (
-            <p className="text-brand-text-muted">
-              ${Number(p.customs_estimated_value_usd).toFixed(2)} / {p.customs_unit_basis || 'unit'}
-            </p>
-          )}
+          <p>{p.hs_code_ref ? `${p.hs_code_ref.country} · ${p.hs_code_ref.hs_code}` : '—'}</p>
+          {p.hs_code_ref && <p className="text-brand-text-muted">{isAr && p.hs_code_ref.description_ar ? p.hs_code_ref.description_ar : p.hs_code_ref.description}</p>}
         </div>
       ),
     },
@@ -731,7 +609,7 @@ export default function ProductsPage() {
       >
         <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
           <div className="space-y-2">
-            {(['main', 'sub', 'type', 'hs'] as ReferenceTab[]).map((tab) => (
+            {(['main', 'sub', 'type'] as ReferenceTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -776,7 +654,7 @@ export default function ProductsPage() {
                 )}
               </div>
 
-              {referenceTab !== 'main' && referenceTab !== 'hs' && (
+              {referenceTab !== 'main' && (
                 <div className="space-y-1.5">
                   <label className="label-base">{t('products.main_category')}</label>
                   <select
@@ -830,156 +708,41 @@ export default function ProductsPage() {
                 </FormRow>
               )}
 
-              {referenceTab !== 'hs' ? (
-                <>
-                  <FormRow>
-                    <Input
-                      label={t('products.reference_code')}
-                      required
-                      value={referenceForm.code}
-                      onChange={(e) => setRefField('code', e.target.value)}
-                    />
-                    <Input
-                      label={t('common.name')}
-                      required
-                      value={referenceForm.name}
-                      onChange={(e) => setRefField('name', e.target.value)}
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Input
-                      label={t('common.arabic')}
-                      value={referenceForm.name_ar}
-                      onChange={(e) => setRefField('name_ar', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.sort_order')}
-                      type="number"
-                      value={referenceForm.sort_order}
-                      onChange={(e) => setRefField('sort_order', e.target.value)}
-                    />
-                  </FormRow>
-                  <Input
-                    label={t('products.description')}
-                    value={referenceForm.description}
-                    onChange={(e) => setRefField('description', e.target.value)}
-                  />
-                </>
-              ) : (
-                <>
-                  <FormRow>
-                    <Input
-                      label={t('common.country')}
-                      required
-                      value={referenceForm.country}
-                      onChange={(e) => setRefField('country', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.hs_code')}
-                      required
-                      value={referenceForm.hs_code}
-                      onChange={(e) => setRefField('hs_code', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.chapter')}
-                      value={referenceForm.chapter}
-                      onChange={(e) => setRefField('chapter', e.target.value)}
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Input
-                      label={t('products.description')}
-                      required
-                      value={referenceForm.description}
-                      onChange={(e) => setRefField('description', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.description_ar')}
-                      value={referenceForm.name_ar}
-                      onChange={(e) => setRefField('name_ar', e.target.value)}
-                    />
-                  </FormRow>
-                </>
-              )}
-
-              {(referenceTab === 'type' || referenceTab === 'hs') && (
-                <>
-                  <FormRow>
-                    <div className="space-y-1.5">
-                      <label className="label-base">{t('products.customs_unit_basis')}</label>
-                      <select
-                        className="input-base w-full"
-                        value={referenceForm.customs_unit_basis}
-                        onChange={(e) => setRefField('customs_unit_basis', e.target.value)}
-                      >
-                        <option value="">—</option>
-                        <option value="dozen">{t('products.unit_dozen')}</option>
-                        <option value="piece">{t('products.unit_piece')}</option>
-                        <option value="kg">{t('products.unit_kg')}</option>
-                        <option value="carton">{t('products.unit_carton')}</option>
-                      </select>
-                    </div>
-                    <Input
-                      label={t('products.customs_estimated_value_usd')}
-                      type="number"
-                      step="0.0001"
-                      value={referenceForm.customs_estimated_value_usd}
-                      onChange={(e) => setRefField('customs_estimated_value_usd', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.customs_duty_pct')}
-                      type="number"
-                      step="0.01"
-                      value={referenceForm.customs_duty_pct}
-                      onChange={(e) => setRefField('customs_duty_pct', e.target.value)}
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Input
-                      label={t('products.sales_tax_pct')}
-                      type="number"
-                      step="0.01"
-                      value={referenceForm.sales_tax_pct}
-                      onChange={(e) => setRefField('sales_tax_pct', e.target.value)}
-                    />
-                    <Input
-                      label={t('products.other_tax_pct')}
-                      type="number"
-                      step="0.01"
-                      value={referenceForm.other_tax_pct}
-                      onChange={(e) => setRefField('other_tax_pct', e.target.value)}
-                    />
-                    {referenceTab === 'hs' && (
-                      <Input
-                        label={t('products.source_url')}
-                        value={referenceForm.source_url}
-                        onChange={(e) => setRefField('source_url', e.target.value)}
-                      />
-                    )}
-                  </FormRow>
-                  {referenceTab === 'hs' && (
-                    <Input
-                      label={t('common.notes')}
-                      value={referenceForm.notes}
-                      onChange={(e) => setRefField('notes', e.target.value)}
-                    />
-                  )}
-                </>
-              )}
+              <FormRow>
+                <Input
+                  label={t('products.reference_code')}
+                  required
+                  value={referenceForm.code}
+                  onChange={(e) => setRefField('code', e.target.value)}
+                />
+                <Input
+                  label={t('common.name')}
+                  required
+                  value={referenceForm.name}
+                  onChange={(e) => setRefField('name', e.target.value)}
+                />
+              </FormRow>
+              <FormRow>
+                <Input
+                  label={t('common.arabic')}
+                  value={referenceForm.name_ar}
+                  onChange={(e) => setRefField('name_ar', e.target.value)}
+                />
+                <Input
+                  label={t('products.sort_order')}
+                  type="number"
+                  value={referenceForm.sort_order}
+                  onChange={(e) => setRefField('sort_order', e.target.value)}
+                />
+              </FormRow>
+              <Input
+                label={t('products.description')}
+                value={referenceForm.description}
+                onChange={(e) => setRefField('description', e.target.value)}
+              />
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-5">
-                  {referenceTab === 'hs' && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="rounded"
-                        checked={referenceForm.import_allowed}
-                        onChange={(e) => setRefField('import_allowed', e.target.checked)}
-                      />
-                      <span className="text-sm text-gray-300">{t('products.import_allowed')}</span>
-                    </label>
-                  )}
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1143,53 +906,6 @@ export default function ProductsPage() {
                 type="number"
                 {...register('min_order_cartons', { required: true })}
               />
-            </FormRow>
-          </FormSection>
-
-          <FormSection title={t('products.customs')}>
-            <FormRow>
-              <Input label={t('products.hs_code')} placeholder="6203.42" {...register('hs_code')} />
-              <Input label={t('products.origin_country')} placeholder="China" {...register('origin_country')} />
-              <Input label={t('products.customs_category')} placeholder="Men linen pants" {...register('customs_category')} />
-            </FormRow>
-            <FormRow>
-              <div className="space-y-1.5">
-                <label className="label-base">{t('products.customs_unit_basis')}</label>
-                <select className="input-base w-full" {...register('customs_unit_basis')}>
-                  <option value="">—</option>
-                  <option value="dozen">{t('products.unit_dozen')}</option>
-                  <option value="piece">{t('products.unit_piece')}</option>
-                  <option value="kg">{t('products.unit_kg')}</option>
-                  <option value="carton">{t('products.unit_carton')}</option>
-                </select>
-              </div>
-              <Input
-                label={t('products.customs_estimated_value_usd')}
-                type="number"
-                step="0.0001"
-                {...register('customs_estimated_value_usd')}
-              />
-              <Input
-                label={t('products.customs_duty_pct')}
-                type="number"
-                step="0.01"
-                {...register('customs_duty_pct')}
-              />
-            </FormRow>
-            <FormRow>
-              <Input
-                label={t('products.sales_tax_pct')}
-                type="number"
-                step="0.01"
-                {...register('sales_tax_pct')}
-              />
-              <Input
-                label={t('products.other_tax_pct')}
-                type="number"
-                step="0.01"
-                {...register('other_tax_pct')}
-              />
-              <Input label={t('products.customs_notes')} {...register('customs_notes')} />
             </FormRow>
           </FormSection>
 

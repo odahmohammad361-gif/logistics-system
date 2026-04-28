@@ -185,7 +185,7 @@ function isUnitBasis(value: unknown): value is UnitBasis {
 function findProductByText(products: Product[], hsCode?: string | null, ...texts: Array<string | null | undefined>) {
   const hs = normalized(hsCode)
   if (hs) {
-    const match = products.find((product) => normalized(product.hs_code) === hs)
+    const match = products.find((product) => normalized(product.hs_code_ref?.hs_code ?? product.hs_code) === hs)
     if (match) return match
   }
 
@@ -204,6 +204,7 @@ function findProductByText(products: Product[], hsCode?: string | null, ...texts
 }
 
 function inferUnitBasis(item: InvoiceItem, product?: Product): UnitBasis {
+  if (isUnitBasis(product?.hs_code_ref?.customs_unit_basis)) return product.hs_code_ref.customs_unit_basis
   if (isUnitBasis(product?.customs_unit_basis)) return product.customs_unit_basis
   const unit = normalized(item.unit)
   if (unit.includes('kg') || unit.includes('kilo') || unit.includes('كغ')) return 'kg'
@@ -223,7 +224,7 @@ function customsUnitsFor(item: InvoiceItem, basis: UnitBasis) {
 }
 
 function productValueFor(item: InvoiceItem, basis: UnitBasis, customsUnits: number, product?: Product) {
-  const productCustomsValue = numeric(product?.customs_estimated_value_usd)
+  const productCustomsValue = numeric(product?.hs_code_ref?.customs_estimated_value_usd ?? product?.customs_estimated_value_usd)
   if (productCustomsValue > 0) return productCustomsValue
 
   if (basis === 'piece') {
@@ -258,8 +259,8 @@ function invoiceItemToRow(item: InvoiceItem, products: Product[]): CalcRow {
     hs_ref_id: product?.hs_code_ref_id ? String(product.hs_code_ref_id) : '',
     description: item.description ?? product?.name ?? '',
     description_ar: item.description_ar ?? product?.name_ar ?? '',
-    hs_code: item.hs_code ?? product?.hs_code ?? '',
-    customs_category: product?.customs_category ?? product?.category ?? '',
+    hs_code: item.hs_code ?? product?.hs_code_ref?.hs_code ?? product?.hs_code ?? '',
+    customs_category: product?.hs_code_ref?.description ?? product?.customs_category ?? product?.category ?? '',
     unit_basis: basis,
     cartons: valueString(item.cartons),
     pieces_per_carton: piecesPerCarton > 0 ? String(Number(piecesPerCarton.toFixed(4))) : '',
@@ -268,9 +269,9 @@ function invoiceItemToRow(item: InvoiceItem, products: Product[]): CalcRow {
     estimated_value_usd: valueString(productValueFor(item, basis, customsUnits, product)),
     shipping_cost_per_unit_usd: '',
     shipping_cost_total_usd: '',
-    customs_duty_pct: product?.customs_duty_pct ?? '',
-    sales_tax_pct: product?.sales_tax_pct ?? '',
-    other_tax_pct: product?.other_tax_pct ?? '',
+    customs_duty_pct: product?.hs_code_ref?.customs_duty_pct ?? product?.customs_duty_pct ?? '',
+    sales_tax_pct: product?.hs_code_ref?.sales_tax_pct ?? product?.sales_tax_pct ?? '',
+    other_tax_pct: product?.hs_code_ref?.other_tax_pct ?? product?.other_tax_pct ?? '',
   }
 }
 
@@ -282,7 +283,7 @@ function invoiceTitle(invoice: Invoice) {
 type ExtractedCargoGoods = NonNullable<NonNullable<BookingCargoLine['extracted_goods']>['goods']>[number]
 
 function cargoProductValue(product?: Product) {
-  const productCustomsValue = numeric(product?.customs_estimated_value_usd)
+  const productCustomsValue = numeric(product?.hs_code_ref?.customs_estimated_value_usd ?? product?.customs_estimated_value_usd)
   if (productCustomsValue > 0) return productCustomsValue
   return numeric(product?.price_usd)
 }
@@ -290,7 +291,9 @@ function cargoProductValue(product?: Product) {
 function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoLine, products: Product[]): CalcRow {
   const linkedProduct = item.product_id ? products.find((product) => product.id === item.product_id) : undefined
   const product = linkedProduct ?? findProductByText(products, item.hs_code ?? line.hs_code, item.description, line.description, line.description_ar)
-  const basis = isUnitBasis(product?.customs_unit_basis) ? product.customs_unit_basis : 'dozen'
+  const basis = isUnitBasis(product?.hs_code_ref?.customs_unit_basis)
+    ? product.hs_code_ref.customs_unit_basis
+    : isUnitBasis(product?.customs_unit_basis) ? product.customs_unit_basis : 'dozen'
   const cartons = numeric(item.cartons ?? line.cartons)
   const quantity = numeric(item.quantity)
   const piecesPerCarton = cartons > 0 && quantity > 0 ? quantity / cartons : numeric(product?.pcs_per_carton)
@@ -301,8 +304,8 @@ function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoL
     hs_ref_id: product?.hs_code_ref_id ? String(product.hs_code_ref_id) : '',
     description: item.description ?? line.description ?? product?.name ?? '',
     description_ar: line.description_ar ?? product?.name_ar ?? '',
-    hs_code: item.hs_code ?? line.hs_code ?? product?.hs_code ?? '',
-    customs_category: product?.customs_category ?? product?.category ?? '',
+    hs_code: item.hs_code ?? line.hs_code ?? product?.hs_code_ref?.hs_code ?? product?.hs_code ?? '',
+    customs_category: product?.hs_code_ref?.description ?? product?.customs_category ?? product?.category ?? '',
     unit_basis: basis,
     cartons: valueString(item.cartons ?? line.cartons),
     pieces_per_carton: piecesPerCarton > 0 ? String(Number(piecesPerCarton.toFixed(4))) : '',
@@ -311,9 +314,9 @@ function cargoGoodsToRow(item: Partial<ExtractedCargoGoods>, line: BookingCargoL
     estimated_value_usd: valueString(cargoProductValue(product)),
     shipping_cost_per_unit_usd: '',
     shipping_cost_total_usd: '',
-    customs_duty_pct: product?.customs_duty_pct ?? '',
-    sales_tax_pct: product?.sales_tax_pct ?? '',
-    other_tax_pct: product?.other_tax_pct ?? '',
+    customs_duty_pct: product?.hs_code_ref?.customs_duty_pct ?? product?.customs_duty_pct ?? '',
+    sales_tax_pct: product?.hs_code_ref?.sales_tax_pct ?? product?.sales_tax_pct ?? '',
+    other_tax_pct: product?.hs_code_ref?.other_tax_pct ?? product?.other_tax_pct ?? '',
   }
 }
 
@@ -448,20 +451,21 @@ export default function CustomsCalculatorPage() {
     }
     const matchingHsRef =
       hsReferences.find((ref) => ref.id === product.hs_code_ref_id)
-      ?? hsReferences.find((ref) => ref.hs_code === product.hs_code)
+      ?? hsReferences.find((ref) => ref.hs_code === product.hs_code_ref?.hs_code || ref.hs_code === product.hs_code)
+    const sourceRef = matchingHsRef ?? product.hs_code_ref
     patchRow(id, {
       product_id: productId,
-      hs_ref_id: matchingHsRef ? String(matchingHsRef.id) : '',
+      hs_ref_id: sourceRef ? String(sourceRef.id) : '',
       description: product.name ?? '',
       description_ar: product.name_ar ?? '',
-      hs_code: product.hs_code ?? '',
-      customs_category: product.customs_category ?? product.category ?? '',
-      unit_basis: (product.customs_unit_basis as UnitBasis) || 'dozen',
+      hs_code: sourceRef?.hs_code ?? product.hs_code ?? '',
+      customs_category: sourceRef?.description ?? product.customs_category ?? product.category ?? '',
+      unit_basis: (sourceRef?.customs_unit_basis as UnitBasis) || (product.customs_unit_basis as UnitBasis) || 'dozen',
       pieces_per_carton: String(product.pcs_per_carton ?? ''),
-      estimated_value_usd: product.customs_estimated_value_usd ?? product.price_usd ?? '',
-      customs_duty_pct: product.customs_duty_pct ?? '',
-      sales_tax_pct: product.sales_tax_pct ?? '',
-      other_tax_pct: product.other_tax_pct ?? '',
+      estimated_value_usd: sourceRef?.customs_estimated_value_usd ?? product.customs_estimated_value_usd ?? product.price_usd ?? '',
+      customs_duty_pct: sourceRef?.customs_duty_pct ?? product.customs_duty_pct ?? '',
+      sales_tax_pct: sourceRef?.sales_tax_pct ?? product.sales_tax_pct ?? '',
+      other_tax_pct: sourceRef?.other_tax_pct ?? product.other_tax_pct ?? '',
     })
   }
 

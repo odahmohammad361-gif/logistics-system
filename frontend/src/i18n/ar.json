@@ -13,6 +13,7 @@
     "shipping_agents": "وكلاء الشحن",
     "clearance_agents": "وكلاء التخليص",
     "customs_calculator": "حاسبة الجمارك",
+    "customs_references": "HS والجمارك",
     "market": "لوحة السوق",
     "users": "المستخدمون",
     "company": "إعدادات الشركة",
@@ -887,6 +888,21 @@
     "delete_warning": "سيتم حذف سجل المنتج وصوره. الفواتير وتقديرات الجمارك وبضاعة الحاويات ستحتفظ بالنصوص المحفوظة، لكن سيتم إزالة مرجع المنتج منها.",
     "supplier": "المورد",
     "description": "الوصف"
+  },
+  "customs_refs": {
+    "badge": "بيانات مرجعية للجمارك",
+    "title": "مراجع HS والجمارك",
+    "subtitle": "إدارة رموز HS والقيم الجمركية التقديرية ونسب الرسوم والضرائب وقواعد السماح بالاستيراد خارج صفحة المنتجات.",
+    "add_hs": "إضافة مرجع HS",
+    "edit_hs": "تعديل مرجع HS",
+    "hs_system": "نظام HS",
+    "customs_basis": "أساس الجمارك",
+    "tax_rates": "نسب الضرائب",
+    "import_blocked": "الاستيراد ممنوع",
+    "search_placeholder": "ابحث برمز HS أو الفصل أو الوصف...",
+    "include_inactive": "إظهار غير النشط",
+    "hs_identity": "هوية HS",
+    "calculation_values": "قيم الحساب"
   },
   "shop": {
     "browse": "المنتجات",

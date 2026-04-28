@@ -13,6 +13,7 @@
     "shipping_agents": "Shipping Agents",
     "clearance_agents": "Clearance Agents",
     "customs_calculator": "Tax & Customs",
+    "customs_references": "HS & Customs",
     "market": "Market Board",
     "users": "Users",
     "company": "Company Settings",
@@ -887,6 +888,21 @@
     "delete_warning": "This removes the product row and product photos. Existing invoices, customs estimates, and container cargo keep their saved text values, but the product reference is cleared.",
     "supplier": "Supplier",
     "description": "Description"
+  },
+  "customs_refs": {
+    "badge": "Customs reference data",
+    "title": "HS & Customs References",
+    "subtitle": "Manage HS codes, estimated customs values, duty rates, tax percentages, and import rules outside the product editor.",
+    "add_hs": "Add HS Reference",
+    "edit_hs": "Edit HS Reference",
+    "hs_system": "HS System",
+    "customs_basis": "Customs Basis",
+    "tax_rates": "Tax Rates",
+    "import_blocked": "Import Blocked",
+    "search_placeholder": "Search HS code, chapter, or description...",
+    "include_inactive": "Include inactive",
+    "hs_identity": "HS Identity",
+    "calculation_values": "Calculation Values"
   },
   "shop": {
     "browse": "Products",

@@ -9,7 +9,7 @@ import time
 
 from app.config import settings
 from app.core.limiter import limiter
-from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop, customers, client_portal, accounting, customs_calculator
+from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop, customers, client_portal, accounting, customs_calculator, customs_references
 
 app = FastAPI(
     title="Logistics System API",
@@ -81,6 +81,7 @@ app.include_router(customers.router,        prefix=f"{API_PREFIX}/customers",   
 app.include_router(client_portal.router,   prefix=f"{API_PREFIX}/client-portal",    tags=["Client Portal"])
 app.include_router(accounting.router,      prefix=f"{API_PREFIX}/accounting",       tags=["Accounting"])
 app.include_router(customs_calculator.router, prefix=f"{API_PREFIX}/customs-calculator", tags=["Customs Calculator"])
+app.include_router(customs_references.router, prefix=f"{API_PREFIX}/customs-references", tags=["Customs References"])
 
 
 @app.get("/health", tags=["Health"])

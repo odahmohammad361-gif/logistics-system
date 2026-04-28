@@ -122,18 +122,6 @@ def _apply_reference_defaults(product: Product, db: Session) -> None:
         if not product.hs_code_ref_id and product_type.hs_code_ref_id:
             product.hs_code_ref_id = product_type.hs_code_ref_id
             hs_ref = product_type.hs_code_ref
-        if not product.customs_category:
-            product.customs_category = product_type.name
-        if not product.customs_unit_basis and product_type.default_customs_unit_basis:
-            product.customs_unit_basis = product_type.default_customs_unit_basis
-        if product.customs_estimated_value_usd is None and product_type.default_customs_estimated_value_usd is not None:
-            product.customs_estimated_value_usd = product_type.default_customs_estimated_value_usd
-        if product.customs_duty_pct is None and product_type.default_customs_duty_pct is not None:
-            product.customs_duty_pct = product_type.default_customs_duty_pct
-        if product.sales_tax_pct is None and product_type.default_sales_tax_pct is not None:
-            product.sales_tax_pct = product_type.default_sales_tax_pct
-        if product.other_tax_pct is None and product_type.default_other_tax_pct is not None:
-            product.other_tax_pct = product_type.default_other_tax_pct
 
     if product.subcategory_id and not subcategory:
         raise HTTPException(404, "Product subcategory not found")
@@ -146,24 +134,6 @@ def _apply_reference_defaults(product: Product, db: Session) -> None:
 
     if subcategory and product.main_category_id and subcategory.main_category_id != product.main_category_id:
         raise HTTPException(400, "Selected subcategory does not belong to the selected main category")
-
-    if hs_ref:
-        if not product.hs_code:
-            product.hs_code = hs_ref.hs_code
-        if not product.customs_category:
-            product.customs_category = hs_ref.description
-        if not product.customs_unit_basis:
-            product.customs_unit_basis = hs_ref.customs_unit_basis
-        if product.customs_estimated_value_usd is None:
-            product.customs_estimated_value_usd = hs_ref.customs_estimated_value_usd
-        if product.customs_duty_pct is None:
-            product.customs_duty_pct = hs_ref.customs_duty_pct
-        if product.sales_tax_pct is None:
-            product.sales_tax_pct = hs_ref.sales_tax_pct
-        if product.other_tax_pct is None:
-            product.other_tax_pct = hs_ref.other_tax_pct
-        if not product.customs_notes and hs_ref.notes:
-            product.customs_notes = hs_ref.notes
 
     if main_category and not product.category:
         product.category = main_category.name

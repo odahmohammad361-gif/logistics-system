@@ -71,8 +71,8 @@ def _calculate_item(
 ) -> CustomsCalculatorItemResult:
     unit_basis = (
         row.unit_basis
-        or (product.customs_unit_basis if product else None)
         or (hs_ref.customs_unit_basis if hs_ref else None)
+        or (product.customs_unit_basis if product else None)
         or "dozen"
     ).lower()
     cartons = _first_decimal(row.cartons)
@@ -86,8 +86,8 @@ def _calculate_item(
 
     estimated_value = _first_decimal(
         row.estimated_value_usd,
-        product.customs_estimated_value_usd if product else None,
         hs_ref.customs_estimated_value_usd if hs_ref else None,
+        product.customs_estimated_value_usd if product else None,
         product.price_usd if product else None,
     )
 
@@ -103,18 +103,18 @@ def _calculate_item(
 
     duty_pct = _first_decimal(
         row.customs_duty_pct,
-        product.customs_duty_pct if product else None,
         hs_ref.customs_duty_pct if hs_ref else None,
+        product.customs_duty_pct if product else None,
     )
     sales_pct = _first_decimal(
         row.sales_tax_pct,
-        product.sales_tax_pct if product else None,
         hs_ref.sales_tax_pct if hs_ref else None,
+        product.sales_tax_pct if product else None,
     )
     other_pct = _first_decimal(
         row.other_tax_pct,
-        product.other_tax_pct if product else None,
         hs_ref.other_tax_pct if hs_ref else None,
+        product.other_tax_pct if product else None,
     )
 
     duty = customs_base * duty_pct / Decimal("100")
@@ -149,8 +149,8 @@ def _calculate_item(
         product_id=row.product_id,
         description=description,
         description_ar=row.description_ar or (product.name_ar if product else None) or (hs_ref.description_ar if hs_ref else None),
-        hs_code=row.hs_code or (product.hs_code if product else None) or (hs_ref.hs_code if hs_ref else None),
-        customs_category=row.customs_category or (product.customs_category if product else None) or (hs_ref.description if hs_ref else None),
+        hs_code=row.hs_code or (hs_ref.hs_code if hs_ref else None) or (product.hs_code if product else None),
+        customs_category=row.customs_category or (hs_ref.description if hs_ref else None) or (product.customs_category if product else None) or (product.category if product else None),
         unit_basis=unit_basis,
         cartons=_q(cartons, QTY),
         pieces_per_carton=_q(pieces_per_carton, QTY),

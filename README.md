@@ -42,6 +42,7 @@ Current focus before the next round:
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
 | Product Taxonomy | Main category, subcategory/frame, product type, and HS/customs reference data for products, invoices, containers, and customs |
+| HS & Customs References | Dedicated HS code, customs value, duty, tax, and import-allowed reference manager connected back to products |
 | Tax & Customs Calculator | USD-based estimate using product HS code, customs value, packing data, shipping allocation, and tax percentages |
 | Market Board | Currency rates, agent prices, top clients, public TV view |
 | Users | Role-based access |
@@ -106,10 +107,16 @@ Products now have a reference tree in addition to the legacy text category:
 - Main category, such as clothing, electronics, bags, furniture, home goods, tools, and auto parts.
 - Subcategory/frame, such as men, women, children, mobile accessories, lighting, or kitchenware.
 - Product type, such as men trousers, men shirts, LED lamps, backpacks, toys, or hand tools.
-- HS/customs reference rows for Jordan and Iraq starter data, including HS code, description, customs unit, estimated value, and editable duty/tax defaults.
-- Staff can maintain this reference data from the Products page, including main categories, subcategories, product types, and HS/customs rows.
+- Products can link to an HS/customs reference, but customs values and tax percentages are managed outside the Products page.
+- Staff can maintain product categories, subcategories, and product types from the Products page.
 
-The old product `category`, `hs_code`, and customs fields remain populated for compatibility with shop, invoice, container, and customs-calculator flows.
+## HS & Customs References
+
+HS code, customs valuation, duty, sales tax, other tax, import allowance, and source-note data now live in a dedicated HS & Customs References section.
+
+Products, invoice items, container cargo goods, and the customs calculator stay connected through the HS reference ID instead of duplicating customs/tax values inside product editing.
+
+The old product `category`, `hs_code`, and customs fields remain in the database for compatibility with historical records, but new customs/tax logic should use HS references.
 
 Invoice item lines can link back to a product as their source while storing independent snapshot data for description, HS code, price, packing, and weights.
 
