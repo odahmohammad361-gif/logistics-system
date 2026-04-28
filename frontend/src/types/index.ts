@@ -716,6 +716,7 @@ export interface HSCodeReference {
   description: string
   description_ar: string | null
   customs_unit_basis: string | null
+  customs_unit_quantity: string | null
   customs_estimated_value_usd: string | null
   customs_duty_pct: string | null
   sales_tax_pct: string | null

@@ -53,6 +53,7 @@ class HSCodeReferenceResponse(BaseModel):
     description: str
     description_ar: Optional[str] = None
     customs_unit_basis: Optional[str] = None
+    customs_unit_quantity: Optional[Decimal] = None
     customs_estimated_value_usd: Optional[Decimal] = None
     customs_duty_pct: Optional[Decimal] = None
     sales_tax_pct: Optional[Decimal] = None
@@ -135,6 +136,7 @@ class HSCodeReferenceCreate(BaseModel):
     description: str
     description_ar: Optional[str] = None
     customs_unit_basis: Optional[str] = None
+    customs_unit_quantity: Optional[Decimal] = None
     customs_estimated_value_usd: Optional[Decimal] = None
     customs_duty_pct: Optional[Decimal] = None
     sales_tax_pct: Optional[Decimal] = None
@@ -152,6 +154,7 @@ class HSCodeReferenceUpdate(BaseModel):
     description: Optional[str] = None
     description_ar: Optional[str] = None
     customs_unit_basis: Optional[str] = None
+    customs_unit_quantity: Optional[Decimal] = None
     customs_estimated_value_usd: Optional[Decimal] = None
     customs_duty_pct: Optional[Decimal] = None
     sales_tax_pct: Optional[Decimal] = None

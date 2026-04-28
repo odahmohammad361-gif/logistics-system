@@ -112,9 +112,11 @@ Products now have a reference tree in addition to the legacy text category:
 
 ## HS & Customs References
 
-HS code, customs valuation, duty, sales tax, other tax, import allowance, and source-note data now live in a dedicated HS & Customs References section.
+HS code, customs valuation, duty, sales tax, other tax, import allowance, customs unit quantity, and source-note data now live in a dedicated HS & Customs References section.
 
 Products, invoice items, container cargo goods, and the customs calculator stay connected through the HS reference ID instead of duplicating customs/tax values inside product editing.
+
+Customs unit quantity defines how many pieces make one customs unit, such as `12` pieces for a dozen or a custom carton/pack quantity for special clearance rules.
 
 The old product `category`, `hs_code`, and customs fields remain in the database for compatibility with historical records, but new customs/tax logic should use HS references.
 

@@ -52,6 +52,7 @@ class HSCodeReference(Base):
     description = Column(String(500), nullable=False)
     description_ar = Column(String(500), nullable=True)
     customs_unit_basis = Column(String(30), nullable=True)
+    customs_unit_quantity = Column(Numeric(14, 4), nullable=True)
     customs_estimated_value_usd = Column(Numeric(14, 4), nullable=True)
     customs_duty_pct = Column(Numeric(6, 2), nullable=True)
     sales_tax_pct = Column(Numeric(6, 2), nullable=True)

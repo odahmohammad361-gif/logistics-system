@@ -51,17 +51,27 @@ def _first_decimal(*values, default: Decimal = ZERO) -> Decimal:
     return default
 
 
-def _resolve_units(unit_basis: str, total_pieces: Decimal, cartons: Decimal, gross_weight_kg: Decimal) -> Decimal:
+def _resolve_units(
+    unit_basis: str,
+    total_pieces: Decimal,
+    cartons: Decimal,
+    gross_weight_kg: Decimal,
+    unit_quantity: Decimal,
+) -> Decimal:
     basis = unit_basis.lower()
     if basis == "dozen":
-        return total_pieces / Decimal("12") if total_pieces else ZERO
+        divisor = unit_quantity or Decimal("12")
+        return total_pieces / divisor if total_pieces else ZERO
     if basis == "piece":
         return total_pieces
     if basis == "kg":
         return gross_weight_kg
     if basis == "carton":
-        return cartons
-    return total_pieces / Decimal("12") if total_pieces else ZERO
+        if cartons:
+            return cartons
+        return total_pieces / unit_quantity if total_pieces and unit_quantity else ZERO
+    divisor = unit_quantity or Decimal("12")
+    return total_pieces / divisor if total_pieces else ZERO
 
 
 def _calculate_item(
@@ -82,7 +92,11 @@ def _calculate_item(
         total_pieces = cartons * pieces_per_carton
 
     gross_weight_kg = _first_decimal(row.gross_weight_kg)
-    units = _resolve_units(unit_basis, total_pieces, cartons, gross_weight_kg)
+    unit_quantity = _first_decimal(
+        hs_ref.customs_unit_quantity if hs_ref else None,
+        Decimal("12") if unit_basis == "dozen" else Decimal("1") if unit_basis == "piece" else None,
+    )
+    units = _resolve_units(unit_basis, total_pieces, cartons, gross_weight_kg, unit_quantity)
 
     estimated_value = _first_decimal(
         row.estimated_value_usd,

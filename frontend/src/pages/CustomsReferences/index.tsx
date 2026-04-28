@@ -22,6 +22,7 @@ interface HSForm {
   description: string
   description_ar: string
   customs_unit_basis: string
+  customs_unit_quantity: string
   customs_estimated_value_usd: string
   customs_duty_pct: string
   sales_tax_pct: string
@@ -39,6 +40,7 @@ const emptyForm: HSForm = {
   description: '',
   description_ar: '',
   customs_unit_basis: 'dozen',
+  customs_unit_quantity: '12',
   customs_estimated_value_usd: '',
   customs_duty_pct: '',
   sales_tax_pct: '',
@@ -92,6 +94,7 @@ export default function CustomsReferencesPage() {
       description: row.description,
       description_ar: row.description_ar ?? '',
       customs_unit_basis: row.customs_unit_basis ?? 'dozen',
+      customs_unit_quantity: row.customs_unit_quantity ?? '',
       customs_estimated_value_usd: row.customs_estimated_value_usd ?? '',
       customs_duty_pct: row.customs_duty_pct ?? '',
       sales_tax_pct: row.sales_tax_pct ?? '',
@@ -112,6 +115,7 @@ export default function CustomsReferencesPage() {
       description: form.description.trim(),
       description_ar: form.description_ar || null,
       customs_unit_basis: form.customs_unit_basis || null,
+      customs_unit_quantity: form.customs_unit_quantity || null,
       customs_estimated_value_usd: form.customs_estimated_value_usd || null,
       customs_duty_pct: form.customs_duty_pct || null,
       sales_tax_pct: form.sales_tax_pct || null,
@@ -174,7 +178,7 @@ export default function CustomsReferencesPage() {
       label: t('customs_refs.customs_basis'),
       render: (row: HSCodeReference) => (
         <div className="text-xs text-brand-text-muted">
-          <p>{row.customs_unit_basis || 'unit'} · ${Number(row.customs_estimated_value_usd || 0).toFixed(2)}</p>
+          <p>{row.customs_unit_basis || 'unit'} · {row.customs_unit_quantity || '—'} pcs · ${Number(row.customs_estimated_value_usd || 0).toFixed(2)}</p>
           <p>{t('products.customs_duty_pct')}: {row.customs_duty_pct ?? '0'}%</p>
         </div>
       ),
@@ -323,7 +327,17 @@ export default function CustomsReferencesPage() {
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-1.5">
                 <label className="label-base">{t('products.customs_unit_basis')}</label>
-                <select className="input-base w-full" value={form.customs_unit_basis} onChange={(e) => setField('customs_unit_basis', e.target.value)}>
+                <select
+                  className="input-base w-full"
+                  value={form.customs_unit_basis}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    setField('customs_unit_basis', next)
+                    if (!form.customs_unit_quantity || form.customs_unit_quantity === '12' || form.customs_unit_quantity === '1') {
+                      setField('customs_unit_quantity', next === 'dozen' ? '12' : next === 'piece' ? '1' : '')
+                    }
+                  }}
+                >
                   <option value="">—</option>
                   <option value="dozen">{t('products.unit_dozen')}</option>
                   <option value="piece">{t('products.unit_piece')}</option>
@@ -331,11 +345,14 @@ export default function CustomsReferencesPage() {
                   <option value="carton">{t('products.unit_carton')}</option>
                 </select>
               </div>
-              <Input label={t('products.customs_estimated_value_usd')} type="number" step="0.0001" value={form.customs_estimated_value_usd} onChange={(e) => setField('customs_estimated_value_usd', e.target.value)} />
-              <Input label={t('products.customs_duty_pct')} type="number" step="0.01" value={form.customs_duty_pct} onChange={(e) => setField('customs_duty_pct', e.target.value)} />
+              <Input label={t('customs_refs.unit_quantity')} type="number" step="0.0001" value={form.customs_unit_quantity} onChange={(e) => setField('customs_unit_quantity', e.target.value)} />
             </div>
             <div className="grid gap-3 md:grid-cols-3">
+              <Input label={t('products.customs_estimated_value_usd')} type="number" step="0.0001" value={form.customs_estimated_value_usd} onChange={(e) => setField('customs_estimated_value_usd', e.target.value)} />
+              <Input label={t('products.customs_duty_pct')} type="number" step="0.01" value={form.customs_duty_pct} onChange={(e) => setField('customs_duty_pct', e.target.value)} />
               <Input label={t('products.sales_tax_pct')} type="number" step="0.01" value={form.sales_tax_pct} onChange={(e) => setField('sales_tax_pct', e.target.value)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
               <Input label={t('products.other_tax_pct')} type="number" step="0.01" value={form.other_tax_pct} onChange={(e) => setField('other_tax_pct', e.target.value)} />
               <Input label={t('products.source_url')} value={form.source_url} onChange={(e) => setField('source_url', e.target.value)} />
             </div>
