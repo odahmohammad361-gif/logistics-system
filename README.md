@@ -37,7 +37,7 @@ Current focus before the next round:
 | Module | Current Behavior |
 | --- | --- |
 | Clients | Client profiles, branch assignment, generated client codes |
-| Invoices | PI, CI, PL, SC, price offers, PDF export in Arabic and English |
+| Invoices | Legacy PI/CI/PL/SC remains; new invoice package foundation is being introduced for cleaner document, shop, container, customs, and accounting links |
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
@@ -47,6 +47,27 @@ Current focus before the next round:
 | Market Board | Currency rates, agent prices, top clients, public TV view |
 | Users | Role-based access |
 | Company | Company info, logo, stamp, warehouses |
+
+---
+
+## Documentation Map
+
+Keep these docs updated when a partner pushes model, API, or workflow changes:
+
+- [`docs/DATABASE_STRUCTURE.md`](docs/DATABASE_STRUCTURE.md) — current database tables, relationships, file storage, API prefix map, and Arabic summary.
+- [`docs/SYSTEM_TREE.md`](docs/SYSTEM_TREE.md) — bilingual English/Arabic system tree showing how clients, invoices, containers, agents, products, HS/customs, and accounting connect.
+- [`docs/INVOICE_REBUILD_PLAN.md`](docs/INVOICE_REBUILD_PLAN.md) — clean invoice package rebuild plan, including cleanup of old seeded invoice samples.
+- This `README.md` — setup, deployment, current focus, and follow-up TODO.
+
+Quick review commands after pulling:
+
+```bash
+git pull
+git log -1 --oneline
+git status --short
+rg "__tablename__|ForeignKey\\(" backend/app/models
+rg "include_router|Route path=" backend/app/main.py frontend/src/App.tsx
+```
 
 ---
 

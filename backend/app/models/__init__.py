@@ -7,6 +7,10 @@ from app.models.shipping_quote import ShippingQuote
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate, ClearanceAgentEditLog
 from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
 from app.models.invoice_item import InvoiceItem
+from app.models.invoice_package import (
+    InvoicePackage, InvoicePackageItem, InvoiceDocument,
+    InvoiceFile, InvoiceActivityLog,
+)
 from app.models.market_rate import MarketRate
 from app.models.company_settings import CompanySettings
 from app.models.company_warehouse import CompanyWarehouse
@@ -17,6 +21,7 @@ from app.models.product import (
     ProductType, HSCodeReference,
 )
 from app.models.customer import Customer
+from app.models.shop_order import ShopOrder, ShopOrderItem
 from app.models.accounting import (
     AccountingEntry, AccountingAttachment, AccountingDirection, AccountingStatus,
     BankStatementImport, BankStatementLine, BankLineMatchStatus,
@@ -28,10 +33,12 @@ __all__ = [
     "ShippingAgent", "ShippingQuote", "ClearanceAgent", "ClearanceAgentRate", "ClearanceAgentEditLog",
     "Invoice", "InvoiceType", "InvoiceStatus",
     "InvoiceItem", "MarketRate",
+    "InvoicePackage", "InvoicePackageItem", "InvoiceDocument",
+    "InvoiceFile", "InvoiceActivityLog",
     "CompanySettings", "CompanyWarehouse",
     "Booking", "BookingCargoLine", "BookingCargoImage", "BookingCargoDocument",
     "Supplier", "Product", "ProductPhoto", "ProductMainCategory", "ProductSubcategory",
-    "ProductType", "HSCodeReference", "Customer",
+    "ProductType", "HSCodeReference", "Customer", "ShopOrder", "ShopOrderItem",
     "AccountingEntry", "AccountingAttachment", "AccountingDirection", "AccountingStatus",
     "BankStatementImport", "BankStatementLine", "BankLineMatchStatus",
     "CustomsEstimate", "CustomsEstimateLine",

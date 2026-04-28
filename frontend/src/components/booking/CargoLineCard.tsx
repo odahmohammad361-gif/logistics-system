@@ -4,6 +4,7 @@ import { Pencil, Trash2, Images, X, Upload, Loader2, ChevronDown, ChevronUp, Fil
 import clsx from 'clsx'
 import type { BookingCargoDocument, BookingCargoLine, BookingMode } from '@/types'
 import { deleteCargoImage, uploadCargoImages, deleteCargoDocument, uploadCargoDocuments, extractCargoDocuments } from '@/services/bookingService'
+import { createInvoicePackage } from '@/services/invoicePackageService'
 import FilePreviewModal from './FilePreviewModal'
 
 const SLICE_COLORS = [
@@ -36,6 +37,7 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
+  const [creatingPackage, setCreatingPackage] = useState(false)
   const [otherFileType, setOtherFileType] = useState('')
   const [preview, setPreview] = useState<{ title: string; url: string; filename?: string | null } | null>(null)
   const color = SLICE_COLORS[index % SLICE_COLORS.length]
@@ -119,6 +121,50 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
     }
   }
 
+  async function handleCreateInvoicePackage() {
+    setCreatingPackage(true)
+    try {
+      const goods = line.extracted_goods?.goods ?? []
+      const items = goods.length
+        ? goods.map((item, idx) => ({
+            description: item.description || line.description || clientName,
+            hs_code: item.hs_code || line.hs_code || null,
+            quantity: item.quantity ?? 0,
+            unit: 'pcs',
+            unit_price: 0,
+            cartons: item.cartons ?? null,
+            gross_weight: item.gross_weight_kg ?? null,
+            cbm: item.cbm ?? null,
+            sort_order: idx,
+          }))
+        : [{
+            description: line.description || clientName,
+            hs_code: line.hs_code || null,
+            quantity: 0,
+            unit: 'pcs',
+            unit_price: 0,
+            cartons: line.cartons,
+            gross_weight: line.gross_weight_kg,
+            cbm: line.cbm,
+            sort_order: 0,
+          }]
+      await createInvoicePackage({
+        source_type: 'container_cargo',
+        status: 'active',
+        title: `${line.client.client_code} - ${clientName}`,
+        client_id: line.client.id,
+        booking_id: bookingId,
+        booking_cargo_line_id: line.id,
+        currency: 'USD',
+        notes: line.notes,
+        items,
+      })
+      onRefresh()
+    } finally {
+      setCreatingPackage(false)
+    }
+  }
+
   return (
     <div className="rounded-xl border border-brand-border bg-brand-card overflow-hidden">
       {/* Header */}
@@ -176,6 +222,26 @@ export default function CargoLineCard({ line, index, mode, bookingId, onEdit, on
           <span className="rounded-full bg-yellow-500/10 text-yellow-300 px-2 py-0.5 text-[10px] font-semibold">
             {isRTL ? 'فاتورة' : 'Invoice'} {line.invoice_number}
           </span>
+        )}
+        {line.invoice_package_id && (
+          <a
+            href={`/invoices/${line.invoice_package_id}`}
+            className="rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold hover:bg-emerald-500/20 transition-colors"
+          >
+            {isRTL ? 'ملف فاتورة' : 'Invoice Package'} {line.invoice_package_number || `#${line.invoice_package_id}`}
+          </a>
+        )}
+        {!line.invoice_package_id && (
+          <button
+            type="button"
+            onClick={() => void handleCreateInvoicePackage()}
+            disabled={creatingPackage}
+            className="rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold hover:bg-emerald-500/20 transition-colors disabled:opacity-60"
+          >
+            {creatingPackage
+              ? (isRTL ? 'جاري الإنشاء...' : 'Creating...')
+              : (isRTL ? '+ ملف فاتورة' : '+ Invoice Package')}
+          </button>
         )}
       </div>
 

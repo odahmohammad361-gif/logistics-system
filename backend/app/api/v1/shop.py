@@ -3,6 +3,7 @@ Public shop API — no admin auth required.
 Customer signup / login / profile + shipping calculator.
 """
 import secrets
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_
@@ -13,10 +14,15 @@ from app.database import get_db
 from app.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.customer import Customer
+from app.models.client import Client
+from app.models.invoice_package import InvoiceActivityLog, InvoicePackage, InvoicePackageItem
 from app.models.shipping_quote import ShippingQuote
 from app.models.clearance_agent import ClearanceAgent
 from app.models.market_rate import MarketRate
+from app.models.product import Product
+from app.models.shop_order import ShopOrder, ShopOrderItem
 from app.schemas.customer import CustomerSignup, CustomerLogin, CustomerResponse, CustomerTokenResponse
+from app.schemas.shop_order import ShopOrderCreate, ShopOrderListResponse, ShopOrderResponse
 
 router = APIRouter()
 
@@ -53,6 +59,138 @@ def _get_customer_from_token(token: str, db: Session) -> Customer:
         return customer
     except Exception:
         raise HTTPException(401, "Invalid token")
+
+
+def _d(value, default: Decimal = Decimal("0")) -> Decimal:
+    if value is None or value == "":
+        return default
+    return Decimal(str(value))
+
+
+def _generate_order_number(db: Session) -> str:
+    from datetime import date
+
+    year = date.today().year
+    pattern = f"SHOP-{year}-%"
+    count = db.query(ShopOrder).filter(ShopOrder.order_number.like(pattern)).count()
+    return f"SHOP-{year}-{count + 1:04d}"
+
+
+def _generate_package_number(db: Session) -> str:
+    from datetime import date
+
+    year = date.today().year
+    pattern = f"PKG-{year}-%"
+    count = db.query(InvoicePackage).filter(InvoicePackage.package_number.like(pattern)).count()
+    return f"PKG-{year}-{count + 1:04d}"
+
+
+def _customer_client(db: Session, customer: Customer) -> Client | None:
+    return db.query(Client).filter(
+        Client.email == customer.email,
+        Client.is_active == True,  # noqa: E712
+    ).first()
+
+
+def _serialize_order(order: ShopOrder) -> dict:
+    return {
+        "id": order.id,
+        "order_number": order.order_number,
+        "customer_id": order.customer_id,
+        "client_id": order.client_id,
+        "invoice_package_id": order.invoice_package_id,
+        "invoice_package_number": order.invoice_package.package_number if order.invoice_package else None,
+        "status": order.status,
+        "destination": order.destination,
+        "currency": order.currency,
+        "subtotal_usd": order.subtotal_usd,
+        "total_cartons": order.total_cartons,
+        "total_pieces": order.total_pieces,
+        "total_cbm": order.total_cbm,
+        "total_gross_weight_kg": order.total_gross_weight_kg,
+        "notes": order.notes,
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
+        "items": order.items,
+    }
+
+
+def _build_shop_order_item(order_id: int, product: Product, cartons: Decimal, sort_order: int, notes: str | None) -> ShopOrderItem:
+    pcs_per_carton = _d(product.pcs_per_carton)
+    quantity = (cartons * pcs_per_carton).quantize(Decimal("0.001"))
+    unit_price = _d(product.price_usd)
+    total_price = (quantity * unit_price).quantize(Decimal("0.01"))
+    cbm = (cartons * _d(product.cbm_per_carton)).quantize(Decimal("0.0001"))
+    gross = None
+    if product.gross_weight_kg_per_carton is not None:
+        gross = (cartons * _d(product.gross_weight_kg_per_carton)).quantize(Decimal("0.001"))
+    net = None
+    if product.net_weight_kg_per_carton is not None:
+        net = (cartons * _d(product.net_weight_kg_per_carton)).quantize(Decimal("0.001"))
+
+    return ShopOrderItem(
+        order_id=order_id,
+        product_id=product.id,
+        product_code=product.code,
+        product_name=product.name,
+        product_name_ar=product.name_ar,
+        hs_code=product.hs_code_ref.hs_code if product.hs_code_ref else product.hs_code,
+        cartons=cartons,
+        pcs_per_carton=pcs_per_carton,
+        quantity=quantity,
+        unit_price_usd=unit_price,
+        total_price_usd=total_price,
+        cbm=cbm,
+        gross_weight_kg=gross,
+        net_weight_kg=net,
+        notes=notes,
+        sort_order=sort_order,
+    )
+
+
+def _create_package_from_shop_order(db: Session, order: ShopOrder, customer: Customer) -> InvoicePackage:
+    package = InvoicePackage(
+        package_number=_generate_package_number(db),
+        source_type="shop_order",
+        status="active",
+        title=f"Shop order {order.order_number}",
+        client_id=order.client_id,
+        buyer_name=None if order.client_id else customer.full_name,
+        destination=order.destination,
+        currency="USD",
+        notes=order.notes,
+    )
+    db.add(package)
+    db.flush()
+
+    for item in order.items:
+        db.add(InvoicePackageItem(
+            package_id=package.id,
+            product_id=item.product_id,
+            description=item.product_name,
+            description_ar=item.product_name_ar,
+            hs_code=item.hs_code,
+            quantity=item.quantity,
+            unit="pcs",
+            unit_price=item.unit_price_usd,
+            total_price=item.total_price_usd,
+            cartons=item.cartons,
+            pcs_per_carton=item.pcs_per_carton,
+            gross_weight=item.gross_weight_kg,
+            net_weight=item.net_weight_kg,
+            cbm=item.cbm,
+            sort_order=item.sort_order,
+        ))
+    db.flush()
+    package.subtotal = order.subtotal_usd
+    package.total = order.subtotal_usd
+    db.add(InvoiceActivityLog(
+        package_id=package.id,
+        action="shop_order_create",
+        summary=f"Created from shop order {order.order_number}",
+    ))
+    order.invoice_package_id = package.id
+    return package
 
 
 # ── Customer auth ──────────────────────────────────────────────────────────────
@@ -102,6 +240,93 @@ def get_me(
 ):
     customer = _get_customer_from_token(token, db)
     return customer
+
+
+# ── Shop orders → invoice packages ────────────────────────────────────────────
+
+@router.post("/orders", response_model=ShopOrderResponse, status_code=status.HTTP_201_CREATED)
+def create_shop_order(
+    payload: ShopOrderCreate,
+    token: str = Query(..., description="Customer JWT token"),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer_from_token(token, db)
+    destination = payload.destination.strip().lower()
+    if destination not in DESTINATION_PORTS:
+        raise HTTPException(400, "Destination must be 'jordan' or 'iraq'")
+
+    client = _customer_client(db, customer)
+    order = ShopOrder(
+        order_number=_generate_order_number(db),
+        customer_id=customer.id,
+        client_id=client.id if client else None,
+        status="submitted",
+        destination=destination,
+        currency="USD",
+        notes=payload.notes,
+    )
+    db.add(order)
+    db.flush()
+
+    subtotal = Decimal("0")
+    total_cartons = Decimal("0")
+    total_pieces = Decimal("0")
+    total_cbm = Decimal("0")
+    total_gross = Decimal("0")
+    gross_seen = False
+
+    for idx, row in enumerate(payload.items):
+        product = db.query(Product).filter(Product.id == row.product_id, Product.is_active == True).first()  # noqa: E712
+        if not product:
+            raise HTTPException(404, f"Product {row.product_id} not found")
+        if row.cartons < _d(product.min_order_cartons):
+            raise HTTPException(400, f"{product.name} minimum order is {product.min_order_cartons} cartons")
+        item = _build_shop_order_item(order.id, product, _d(row.cartons), idx, row.notes)
+        db.add(item)
+        subtotal += _d(item.total_price_usd)
+        total_cartons += _d(item.cartons)
+        total_pieces += _d(item.quantity)
+        total_cbm += _d(item.cbm)
+        if item.gross_weight_kg is not None:
+            total_gross += _d(item.gross_weight_kg)
+            gross_seen = True
+
+    order.subtotal_usd = subtotal.quantize(Decimal("0.01"))
+    order.total_cartons = total_cartons.quantize(Decimal("0.001"))
+    order.total_pieces = total_pieces.quantize(Decimal("0.001"))
+    order.total_cbm = total_cbm.quantize(Decimal("0.0001"))
+    order.total_gross_weight_kg = total_gross.quantize(Decimal("0.001")) if gross_seen else None
+    db.flush()
+    _create_package_from_shop_order(db, order, customer)
+    db.commit()
+    db.refresh(order)
+    return _serialize_order(order)
+
+
+@router.get("/orders", response_model=ShopOrderListResponse)
+def list_shop_orders(
+    token: str = Query(..., description="Customer JWT token"),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer_from_token(token, db)
+    rows = db.query(ShopOrder).filter(ShopOrder.customer_id == customer.id).order_by(ShopOrder.id.desc()).all()
+    return {"total": len(rows), "results": [_serialize_order(row) for row in rows]}
+
+
+@router.get("/orders/{order_id}", response_model=ShopOrderResponse)
+def get_shop_order(
+    order_id: int,
+    token: str = Query(..., description="Customer JWT token"),
+    db: Session = Depends(get_db),
+):
+    customer = _get_customer_from_token(token, db)
+    order = db.query(ShopOrder).filter(
+        ShopOrder.id == order_id,
+        ShopOrder.customer_id == customer.id,
+    ).first()
+    if not order:
+        raise HTTPException(404, "Shop order not found")
+    return _serialize_order(order)
 
 
 # ── Shipping calculator ────────────────────────────────────────────────────────

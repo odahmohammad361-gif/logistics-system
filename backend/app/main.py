@@ -9,7 +9,7 @@ import time
 
 from app.config import settings
 from app.core.limiter import limiter
-from app.api.v1 import auth, users, clients, invoices, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop, customers, client_portal, accounting, customs_calculator, customs_references
+from app.api.v1 import auth, users, clients, invoices, invoice_packages, shipping_agents, clearance_agents, market, company, branches, reference, bookings, warehouses, suppliers, products, shop, customers, client_portal, accounting, customs_calculator, customs_references
 
 app = FastAPI(
     title="Logistics System API",
@@ -66,6 +66,7 @@ app.include_router(auth.router,             prefix=f"{API_PREFIX}/auth",        
 app.include_router(users.router,            prefix=f"{API_PREFIX}/users",            tags=["Users"])
 app.include_router(clients.router,          prefix=f"{API_PREFIX}/clients",          tags=["Clients"])
 app.include_router(invoices.router,         prefix=f"{API_PREFIX}/invoices",         tags=["Invoices"])
+app.include_router(invoice_packages.router, prefix=f"{API_PREFIX}/invoice-packages", tags=["Invoice Packages"])
 app.include_router(shipping_agents.router,  prefix=f"{API_PREFIX}/shipping-agents",  tags=["Shipping Agents"])
 app.include_router(clearance_agents.router, prefix=f"{API_PREFIX}/clearance-agents", tags=["Clearance Agents"])
 app.include_router(market.router,           prefix=f"{API_PREFIX}/market",           tags=["Market Board"])

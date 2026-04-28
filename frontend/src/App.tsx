@@ -18,8 +18,8 @@ import Dashboard       from '@/pages/Dashboard'
 import Clients         from '@/pages/Clients'
 import ClientProfile   from '@/pages/Clients/profile'
 import Accounting      from '@/pages/Accounting'
-import Invoices        from '@/pages/Invoices'
-import InvoiceEdit     from '@/pages/Invoices/edit'
+import Invoices        from '@/pages/InvoicePackages'
+import InvoicePackageProfile from '@/pages/InvoicePackages/profile'
 import ShippingAgents       from '@/pages/ShippingAgents'
 import ShippingAgentProfile from '@/pages/ShippingAgents/profile'
 import ClearanceAgents from '@/pages/ClearanceAgents'
@@ -103,7 +103,8 @@ export default function App() {
             <Route path="/clients/:id"         element={<AppLayout><ClientProfile /></AppLayout>} />
             <Route path="/accounting"          element={<AppLayout><Accounting /></AppLayout>} />
             <Route path="/invoices"            element={<AppLayout><Invoices /></AppLayout>} />
-            <Route path="/invoices/:id/edit"   element={<AppLayout><InvoiceEdit /></AppLayout>} />
+            <Route path="/invoices/:id"        element={<AppLayout><InvoicePackageProfile /></AppLayout>} />
+            <Route path="/invoices/:id/edit"   element={<Navigate to="/invoices" replace />} />
             <Route path="/shipping-agents"          element={<AppLayout><ShippingAgents /></AppLayout>} />
             <Route path="/shipping-agents/:id"     element={<AppLayout><ShippingAgentProfile /></AppLayout>} />
             <Route path="/clearance-agents"    element={<AppLayout><ClearanceAgents /></AppLayout>} />

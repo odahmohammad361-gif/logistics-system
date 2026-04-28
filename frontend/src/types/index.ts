@@ -146,6 +146,133 @@ export interface InvoiceListResponse {
   results: Invoice[]
 }
 
+export type InvoicePackageSource = 'manual' | 'shop_order' | 'external_upload' | 'container_cargo' | string
+export type InvoicePackageStatus = 'draft' | 'active' | 'approved' | 'closed' | 'cancelled' | string
+export type InvoiceDocumentType = 'PI' | 'CI' | 'PL' | 'SC' | 'CO' | 'BL' | 'OTHER'
+
+export interface InvoicePackageItem {
+  id: number
+  product_id: number | null
+  hs_code_ref_id: number | null
+  description: string
+  description_ar: string | null
+  details: string | null
+  details_ar: string | null
+  product_image_path: string | null
+  hs_code: string | null
+  customs_unit_basis: string | null
+  customs_unit_quantity: number | null
+  quantity: number
+  unit: string | null
+  unit_price: number
+  total_price: number
+  cartons: number | null
+  pcs_per_carton: number | null
+  gross_weight: number | null
+  net_weight: number | null
+  cbm: number | null
+  carton_length_cm: number | null
+  carton_width_cm: number | null
+  carton_height_cm: number | null
+  volumetric_weight_kg: number | null
+  chargeable_weight_kg: number | null
+  source_product_snapshot_json: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface InvoicePackageDocument {
+  id: number
+  package_id: number
+  legacy_invoice_id: number | null
+  document_type: InvoiceDocumentType
+  document_number: string
+  language: 'en' | 'ar'
+  status: string
+  issue_date: string | null
+  due_date: string | null
+  pdf_path: string | null
+  notes: string | null
+  created_by_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InvoicePackageFile {
+  id: number
+  package_id: number
+  document_id: number | null
+  document_type: InvoiceDocumentType
+  custom_file_type: string | null
+  file_path: string
+  original_filename: string | null
+  content_type: string | null
+  file_size: number | null
+  extraction_status: string
+  extraction_json: string | null
+  uploaded_by_id: number | null
+  created_at: string
+}
+
+export interface InvoicePackageActivity {
+  id: number
+  package_id: number
+  action: string
+  summary: string | null
+  changed_by_id: number | null
+  created_at: string
+}
+
+export interface InvoicePackage {
+  id: number
+  package_number: string
+  source_type: InvoicePackageSource
+  status: InvoicePackageStatus
+  title: string | null
+  client_id: number | null
+  client: ClientShort | null
+  buyer_name: string | null
+  booking_id: number | null
+  booking_cargo_line_id: number | null
+  origin: string | null
+  destination: string | null
+  port_of_loading: string | null
+  port_of_discharge: string | null
+  shipping_term: string | null
+  payment_terms: string | null
+  shipping_marks: string | null
+  container_no: string | null
+  seal_no: string | null
+  bl_number: string | null
+  vessel_name: string | null
+  voyage_number: string | null
+  awb_number: string | null
+  flight_number: string | null
+  currency: string
+  subtotal: number
+  discount: number
+  total: number
+  notes: string | null
+  notes_ar: string | null
+  branch_id: number | null
+  is_active: boolean
+  created_by_id: number | null
+  created_at: string
+  updated_at: string
+  items: InvoicePackageItem[]
+  documents: InvoicePackageDocument[]
+  files: InvoicePackageFile[]
+  activity_log: InvoicePackageActivity[]
+}
+
+export interface InvoicePackageListResponse {
+  total: number
+  page: number
+  page_size: number
+  results: InvoicePackage[]
+}
+
 // ── Shipping Agent ────────────────────────────────────────────────────────────
 export interface AgentCarrierRate {
   id: number
@@ -500,6 +627,9 @@ export interface BookingCargoLine {
   client: { id: number; name: string; name_ar: string | null; client_code: string }
   invoice_id: number | null
   invoice_number: string | null
+  invoice_package_id: number | null
+  invoice_package_number: string | null
+  invoice_package_status: string | null
   sort_order: number
   goods_source: 'company_buying_service' | 'client_ready_goods' | null
   is_full_container_client: boolean
@@ -524,6 +654,8 @@ export interface BookingCargoLine {
     confidence?: string
     invoice_id?: number | null
     invoice_number?: string | null
+    invoice_package_id?: number | null
+    invoice_package_number?: string | null
     invoice_no?: string | null
     source_documents?: Array<{ id: number; type: string; filename: string | null; characters?: number }>
     goods?: Array<{
@@ -998,6 +1130,52 @@ export interface ShippingCalculatorResult {
   total_cbm: number
   usd_to_cny_rate: number
   options: ShippingOption[]
+}
+
+export interface ShopOrderItem {
+  id: number
+  product_id: number | null
+  product_code: string | null
+  product_name: string
+  product_name_ar: string | null
+  hs_code: string | null
+  cartons: string
+  pcs_per_carton: string | null
+  quantity: string
+  unit_price_usd: string
+  total_price_usd: string
+  cbm: string | null
+  gross_weight_kg: string | null
+  net_weight_kg: string | null
+  notes: string | null
+  sort_order: number
+  created_at: string
+}
+
+export interface ShopOrder {
+  id: number
+  order_number: string
+  customer_id: number
+  client_id: number | null
+  invoice_package_id: number | null
+  invoice_package_number: string | null
+  status: string
+  destination: string | null
+  currency: string
+  subtotal_usd: string
+  total_cartons: string
+  total_pieces: string
+  total_cbm: string
+  total_gross_weight_kg: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  items: ShopOrderItem[]
+}
+
+export interface ShopOrderListResponse {
+  total: number
+  results: ShopOrder[]
 }
 
 // ── Accounting ───────────────────────────────────────────────────────────────

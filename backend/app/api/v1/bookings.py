@@ -23,6 +23,7 @@ from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, Boo
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
 from app.models.invoice import Invoice
+from app.models.invoice_package import InvoicePackage
 from app.models.shipping_agent import AgentCarrierRate
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate
 from app.schemas.booking import (
@@ -448,6 +449,30 @@ def _validate_invoice_selection(db: Session, invoice_id: int | None, client_id: 
     return invoice
 
 
+def _validate_invoice_package_selection(
+    db: Session,
+    invoice_package_id: int | None,
+    client_id: int | None,
+    booking_id: int | None = None,
+    line_id: int | None = None,
+) -> InvoicePackage | None:
+    if not invoice_package_id:
+        return None
+    package = db.query(InvoicePackage).filter(
+        InvoicePackage.id == invoice_package_id,
+        InvoicePackage.is_active == True,  # noqa: E712
+    ).first()
+    if not package:
+        raise HTTPException(404, "Invoice package not found")
+    if package.client_id and client_id and package.client_id != client_id:
+        raise HTTPException(400, "Selected invoice package belongs to a different client")
+    if package.booking_id and booking_id and package.booking_id != booking_id:
+        raise HTTPException(400, "Selected invoice package belongs to a different container")
+    if package.booking_cargo_line_id and package.booking_cargo_line_id != line_id:
+        raise HTTPException(400, "Selected invoice package belongs to a different cargo line")
+    return package
+
+
 def _validate_goods_source(source: str | None) -> str | None:
     if not source:
         return None
@@ -563,6 +588,61 @@ def _invoice_snapshot(invoice: Invoice | None) -> dict | None:
     }
 
 
+def _package_item_snapshot(item) -> dict:
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "description": item.description,
+        "description_ar": item.description_ar,
+        "details": item.details,
+        "details_ar": item.details_ar,
+        "hs_code": item.hs_code,
+        "customs_unit_basis": item.customs_unit_basis,
+        "customs_unit_quantity": item.customs_unit_quantity,
+        "quantity": item.quantity,
+        "unit": item.unit,
+        "unit_price": item.unit_price,
+        "total_price": item.total_price,
+        "cartons": item.cartons,
+        "pcs_per_carton": item.pcs_per_carton,
+        "gross_weight": item.gross_weight,
+        "net_weight": item.net_weight,
+        "cbm": item.cbm,
+        "sort_order": item.sort_order,
+    }
+
+
+def _invoice_package_snapshot(package: InvoicePackage | None) -> dict | None:
+    if not package:
+        return None
+    return {
+        "id": package.id,
+        "package_number": package.package_number,
+        "source_type": package.source_type,
+        "status": package.status,
+        "client_id": package.client_id,
+        "buyer_name": package.buyer_name,
+        "booking_id": package.booking_id,
+        "booking_cargo_line_id": package.booking_cargo_line_id,
+        "origin": package.origin,
+        "destination": package.destination,
+        "port_of_loading": package.port_of_loading,
+        "port_of_discharge": package.port_of_discharge,
+        "shipping_term": package.shipping_term,
+        "shipping_marks": package.shipping_marks,
+        "container_no": package.container_no,
+        "seal_no": package.seal_no,
+        "bl_number": package.bl_number,
+        "vessel_name": package.vessel_name,
+        "voyage_number": package.voyage_number,
+        "subtotal": package.subtotal,
+        "discount": package.discount,
+        "total": package.total,
+        "currency": package.currency,
+        "items": [_package_item_snapshot(item) for item in package.items],
+    }
+
+
 def _cargo_goods_payload(line: BookingCargoLine) -> dict:
     extracted = line.extracted_goods if isinstance(line.extracted_goods, dict) else {}
     goods = extracted.get("goods") if isinstance(extracted.get("goods"), list) else []
@@ -577,6 +657,8 @@ def _cargo_goods_payload(line: BookingCargoLine) -> dict:
         "linked_invoice": {
             "invoice_id": line.invoice_id or extracted.get("invoice_id"),
             "invoice_number": line.invoice.invoice_number if line.invoice else extracted.get("invoice_number") or extracted.get("invoice_no"),
+            "invoice_package_id": line.invoice_package_id or extracted.get("invoice_package_id"),
+            "invoice_package_number": line.invoice_package.package_number if line.invoice_package else extracted.get("invoice_package_number"),
         },
         "summary": {
             "description": line.description,
@@ -751,6 +833,9 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
         ),
         invoice_id=line.invoice_id,
         invoice_number=line.invoice.invoice_number if line.invoice else None,
+        invoice_package_id=line.invoice_package_id,
+        invoice_package_number=line.invoice_package.package_number if line.invoice_package else None,
+        invoice_package_status=line.invoice_package.status if line.invoice_package else None,
         sort_order=line.sort_order,
         goods_source=line.goods_source,
         is_full_container_client=bool(line.is_full_container_client),
@@ -1222,6 +1307,8 @@ def download_booking_archive_zip(
                     "linked_invoice": {
                         "invoice_id": line.invoice_id,
                         "invoice_number": line.invoice.invoice_number if line.invoice else None,
+                        "invoice_package_id": line.invoice_package_id,
+                        "invoice_package_number": line.invoice_package.package_number if line.invoice_package else None,
                     },
                     "clearance_through_us": line.clearance_through_us,
                     "clearance_agent_id": line.clearance_agent_id,
@@ -1241,6 +1328,8 @@ def download_booking_archive_zip(
                     _zip_json(zf, f"{client_root}/goods-list.json", _cargo_goods_payload(line))
                 if line.invoice:
                     _zip_json(zf, f"{client_root}/linked-invoice.json", _invoice_snapshot(line.invoice))
+                if line.invoice_package:
+                    _zip_json(zf, f"{client_root}/linked-invoice-package.json", _invoice_package_snapshot(line.invoice_package))
 
                 for img in line.images:
                     filename = _safe_filename(img.original_filename or os.path.basename(img.file_path), f"cargo-photo-{img.id}")
@@ -1413,12 +1502,14 @@ def add_cargo_line(
     _assert_full_container_rules(b, payload.is_full_container_client)
     _assert_cargo_capacity(b, payload.cbm)
     _validate_invoice_selection(db, payload.invoice_id, payload.client_id)
+    package = _validate_invoice_package_selection(db, payload.invoice_package_id, payload.client_id, booking_id)
     _validate_clearance_selection(db, payload, b)
 
     line = BookingCargoLine(
         booking_id=booking_id,
         client_id=payload.client_id,
         invoice_id=payload.invoice_id,
+        invoice_package_id=payload.invoice_package_id,
         sort_order=payload.sort_order,
         goods_source=_validate_goods_source(payload.goods_source),
         is_full_container_client=payload.is_full_container_client,
@@ -1449,6 +1540,11 @@ def add_cargo_line(
     if payload.is_full_container_client:
         _refresh_booking_rate_snapshot(db, b)
     db.flush()
+    if package:
+        package.booking_id = b.id
+        package.booking_cargo_line_id = line.id
+        if not package.client_id:
+            package.client_id = line.client_id
     _recalculate_freight_shares(db, b)
     db.commit()
     db.refresh(line)
@@ -1480,6 +1576,9 @@ def update_cargo_line(
         data["goods_source"] = _validate_goods_source(data["goods_source"])
     effective_invoice_id = data.get("invoice_id", line.invoice_id)
     _validate_invoice_selection(db, effective_invoice_id, line.client_id)
+    previous_package_id = line.invoice_package_id
+    effective_package_id = data.get("invoice_package_id", line.invoice_package_id)
+    package = _validate_invoice_package_selection(db, effective_package_id, line.client_id, booking_id, line.id)
     merged = {
         "clearance_through_us": line.clearance_through_us,
         "clearance_agent_id": line.clearance_agent_id,
@@ -1501,6 +1600,16 @@ def update_cargo_line(
         data["clearance_agent_rate_id"] = None
     for field, value in data.items():
         setattr(line, field, value)
+    if "invoice_package_id" in data and previous_package_id and previous_package_id != line.invoice_package_id:
+        old_package = db.query(InvoicePackage).filter(InvoicePackage.id == previous_package_id).first()
+        if old_package and old_package.booking_cargo_line_id == line.id:
+            old_package.booking_cargo_line_id = None
+    if "invoice_package_id" in data and line.invoice_package_id:
+        if package:
+            package.booking_id = booking_id
+            package.booking_cargo_line_id = line.id
+            if not package.client_id:
+                package.client_id = line.client_id
 
     if b and b.mode == "AIR":
         _compute_air_weights(line)

@@ -58,6 +58,9 @@ DOC_TITLES = {
     "CI":          ("COMMERCIAL INVOICE", "فاتورة تجارية"),
     "PL":          ("PACKING LIST", "قائمة التعبئة والتغليف"),
     "SC":          ("SALES CONTRACT", "عقد بيع"),
+    "CO":          ("CERTIFICATE OF ORIGIN", "شهادة منشأ"),
+    "BL":          ("BILL OF LADING", "بوليصة شحن"),
+    "OTHER":       ("DOCUMENT", "مستند"),
 }
 
 LABELS = {
@@ -508,7 +511,14 @@ def _build_html(inv, company, lang: str) -> str:
 
     # Bank info
     bank_html = ""
-    has_bank = any([inv.bank_account_name, inv.bank_account_no, inv.bank_swift])
+    has_bank = any([
+        inv.bank_account_name,
+        inv.bank_account_no,
+        inv.bank_swift,
+        company.bank_account_name if company else None,
+        company.bank_account_no if company else None,
+        company.bank_swift if company else None,
+    ])
     if has_bank and inv_type not in ("PL",):
         bname = inv.bank_account_name or (company.bank_account_name if company else "")
         bno = inv.bank_account_no or (company.bank_account_no if company else "")

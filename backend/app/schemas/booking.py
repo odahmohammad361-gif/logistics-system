@@ -62,6 +62,7 @@ class BookingCargoDocumentResponse(BaseModel):
 class BookingCargoLineCreate(BaseModel):
     client_id: int
     invoice_id: Optional[int] = None
+    invoice_package_id: Optional[int] = None
     sort_order: int = 0
     goods_source: Optional[str] = None
     is_full_container_client: bool = False
@@ -89,6 +90,7 @@ class BookingCargoLineCreate(BaseModel):
 
 class BookingCargoLineUpdate(BaseModel):
     invoice_id: Optional[int] = None
+    invoice_package_id: Optional[int] = None
     sort_order: Optional[int] = None
     goods_source: Optional[str] = None
     is_full_container_client: Optional[bool] = None
@@ -120,6 +122,9 @@ class BookingCargoLineResponse(BaseModel):
     client: ClientShort
     invoice_id: Optional[int] = None
     invoice_number: Optional[str] = None
+    invoice_package_id: Optional[int] = None
+    invoice_package_number: Optional[str] = None
+    invoice_package_status: Optional[str] = None
     sort_order: int
     goods_source: Optional[str] = None
     is_full_container_client: bool = False

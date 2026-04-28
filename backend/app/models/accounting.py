@@ -47,6 +47,7 @@ class AccountingEntry(Base):
     notes = Column(Text, nullable=True)
 
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
+    invoice_package_id = Column(Integer, ForeignKey("invoice_packages.id"), nullable=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True, index=True)
     shipping_agent_id = Column(Integer, ForeignKey("shipping_agents.id"), nullable=True, index=True)
@@ -63,6 +64,7 @@ class AccountingEntry(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     client = relationship("Client", foreign_keys=[client_id])
+    invoice_package = relationship("InvoicePackage", foreign_keys=[invoice_package_id])
     invoice = relationship("Invoice", foreign_keys=[invoice_id])
     booking = relationship("Booking", foreign_keys=[booking_id])
     shipping_agent = relationship("ShippingAgent", foreign_keys=[shipping_agent_id])

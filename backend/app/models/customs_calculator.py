@@ -17,6 +17,7 @@ class CustomsEstimate(Base):
     notes = Column(Text, nullable=True)
 
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
+    invoice_package_id = Column(Integer, ForeignKey("invoice_packages.id"), nullable=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True, index=True)
     booking_cargo_line_id = Column(Integer, ForeignKey("booking_cargo_lines.id"), nullable=True, index=True)
@@ -36,6 +37,7 @@ class CustomsEstimate(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     client = relationship("Client", foreign_keys=[client_id])
+    invoice_package = relationship("InvoicePackage", foreign_keys=[invoice_package_id])
     invoice = relationship("Invoice", foreign_keys=[invoice_id])
     booking = relationship("Booking", foreign_keys=[booking_id])
     cargo_line = relationship("BookingCargoLine", foreign_keys=[booking_cargo_line_id])

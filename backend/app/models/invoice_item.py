@@ -9,6 +9,7 @@ class InvoiceItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    hs_code_ref_id = Column(Integer, ForeignKey("hs_code_references.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Product info
     description = Column(Text, nullable=False)           # English name
@@ -19,6 +20,8 @@ class InvoiceItem(Base):
 
     # Trade fields
     hs_code = Column(String(20), nullable=True)
+    customs_unit_basis = Column(String(30), nullable=True)
+    customs_unit_quantity = Column(Numeric(14, 4), nullable=True)
     quantity = Column(Numeric(12, 2), nullable=False, default=0)  # pieces/pairs
     unit = Column(String(30), nullable=True)              # pcs, pairs, kg...
     unit_price = Column(Numeric(14, 4), nullable=False, default=0)
@@ -26,6 +29,7 @@ class InvoiceItem(Base):
 
     # Packing / weight
     cartons = Column(Integer, nullable=True)              # CTN count
+    pcs_per_carton = Column(Numeric(14, 3), nullable=True)
     gross_weight = Column(Numeric(10, 3), nullable=True)  # KG
     net_weight = Column(Numeric(10, 3), nullable=True)
     cbm = Column(Numeric(10, 4), nullable=True)           # cubic meters
@@ -42,3 +46,4 @@ class InvoiceItem(Base):
 
     invoice = relationship("Invoice", back_populates="items")
     product = relationship("Product", foreign_keys=[product_id])
+    hs_code_ref = relationship("HSCodeReference", foreign_keys=[hs_code_ref_id])

@@ -26,6 +26,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, index=True)
+    package_id = Column(Integer, ForeignKey("invoice_packages.id", ondelete="SET NULL"), nullable=True, index=True)
     invoice_number = Column(String(60), unique=True, nullable=False, index=True)
     invoice_type = Column(Enum(InvoiceType), nullable=False)
     status = Column(Enum(InvoiceStatus), nullable=False, default=InvoiceStatus.DRAFT)
