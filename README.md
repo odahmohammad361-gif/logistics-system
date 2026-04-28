@@ -37,7 +37,7 @@ Current focus before the next round:
 | Module | Current Behavior |
 | --- | --- |
 | Clients | Client profiles, branch assignment, generated client codes |
-| Invoices | Legacy PI/CI/PL/SC remains; new invoice package foundation is being introduced for cleaner document, shop, container, customs, and accounting links |
+| Invoices | Invoice package flow is active for PI/CI/PL/SC-style documents, shop orders, container cargo links, customs, and accounting; legacy invoice records stay only for compatibility |
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |

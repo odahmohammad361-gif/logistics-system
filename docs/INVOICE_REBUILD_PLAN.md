@@ -7,12 +7,12 @@ Current implementation status:
 
 - Stage 0 cleanup is available as `backend/scripts/cleanup_seeded_invoices.py`.
 - Stage 1 database foundation is added through the invoice package migration.
-- Stage 2 package-first backend API is started at `/api/v1/invoice-packages`.
-- Stage 3 UI replacement is started: `/invoices` now opens invoice package cards and `/invoices/{id}` opens the package profile.
+- Stage 2 package-first backend API is active at `/api/v1/invoice-packages`.
+- Stage 3 UI replacement is active: `/invoices` now opens invoice package cards and `/invoices/{id}` opens the package profile.
 - Stage 4 document generation now has package PDF download output for package documents.
-- Stage 5 container cargo connection is started: client cargo lines can link invoice packages and import package items.
-- Stage 6 shop order connection is started: shop product orders create shop order records and invoice packages.
-- Stage 7 legacy invoice UI cleanup is started: old invoice edit route now redirects away from the legacy form.
+- Stage 5 container cargo connection is active: client cargo lines can link invoice packages and import package items.
+- Stage 6 shop order connection is active: shop product orders create shop order records and invoice packages.
+- Stage 7 legacy invoice UI cleanup is active: old invoice edit route now redirects away from the legacy form.
 
 ---
 
