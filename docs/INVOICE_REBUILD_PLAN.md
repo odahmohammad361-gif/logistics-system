@@ -1,18 +1,16 @@
 # Invoice Rebuild Plan
 > Last updated: 2026-04-28
 
-The invoice system should be rebuilt as an **Invoice Package** system. Old seeded invoice samples are not important and can be cleaned before/while the rebuild starts.
+Plan changed: the active invoice workflow is now the **client profile invoice generator**. The standalone invoice/invoice-package section is removed from the main UI to avoid duplicate workflows.
 
 Current implementation status:
 
-- Stage 0 cleanup is available as `backend/scripts/cleanup_seeded_invoices.py`.
-- Stage 1 database foundation is added through the invoice package migration.
-- Stage 2 package-first backend API is active at `/api/v1/invoice-packages`.
-- Stage 3 UI replacement is active: `/invoices` now opens invoice package cards and `/invoices/{id}` opens the package profile.
-- Stage 4 document generation now has package PDF download output for package documents.
-- Stage 5 container cargo connection is active: client cargo lines can link invoice packages and import package items.
-- Stage 6 shop order connection is active: shop product orders create shop order records and invoice packages.
-- Stage 7 legacy invoice UI cleanup is active: old invoice edit route now redirects away from the legacy form.
+- Stage 0 cleanup is available as `backend/scripts/cleanup_seeded_invoices.py` and now targets only old seeded invoice numbers like `PI-2026-0001`, not active client-profile invoices like `PI-JO0001-2026-0001`.
+- Client profile invoices remain active through `backend/app/api/v1/invoices.py`.
+- Standalone `/invoices` UI routes now redirect to `/clients`.
+- The invoice-package frontend pages, service, and API route were removed from the active application surface.
+- Invoice-package tables/models may remain in the database for existing stored records, but staff should not use them as a working section.
+- Container cargo lines should link/import normal client invoices through `invoice_id`.
 
 ---
 
@@ -33,12 +31,12 @@ Make invoices simple, understandable, and connected to:
 
 ## Stage 0 — Backup And Clean Old Seed Samples
 
-Before rebuilding:
+Before rebuilding or testing cleanup:
 
 1. Backup/export the current invoice tables if needed.
-2. Delete old seeded/sample invoice records.
-3. Delete old seeded/sample invoice item records.
-4. Keep this cleanup separate from the new invoice package migration so bugs are easier to find.
+2. Delete only old seeded/sample invoice records that match the old seed number format.
+3. Delete only invoice item records that belong to those seeded invoices.
+4. Keep this cleanup separate from other container/customs/accounting changes so bugs are easier to find.
 
 Current old tables to clean:
 
@@ -58,12 +56,13 @@ backend/uploads/invoice_items
 Important:
 - Do not delete real client/container/accounting records during invoice cleanup.
 - If a container or accounting row references an old invoice, clear or migrate the reference first.
+- The cleanup script is a dry run by default and should not be used to remove active client invoices.
 
 ---
 
 ## Stage 1 — New Clean Database
 
-Create new invoice package foundation. Initial tables are now added:
+Earlier work created internal package tables. After the plan change, those tables are kept only as stored/internal records unless we later decide to migrate them or remove them with a dedicated cleanup migration.
 
 ```text
 invoice_packages
@@ -73,64 +72,56 @@ invoice_files
 invoice_activity_log
 ```
 
-Main rule:
+Current main rule:
 
 ```text
-Invoice Package = the case file
-PI / CI / PL / SC / CO / B/L = documents inside the package
+Client profile invoice = source of truth
+PI / CI / PL / SC = invoice types generated from the client profile
 ```
 
 ---
 
 ## Stage 2 — New Backend API
 
-New API should be package-first. Initial endpoints are now added:
+The package-first API is no longer active in the application router. The active invoice API is:
 
 ```text
-GET    /api/v1/invoice-packages
-POST   /api/v1/invoice-packages
-GET    /api/v1/invoice-packages/{id}
-PATCH  /api/v1/invoice-packages/{id}
-POST   /api/v1/invoice-packages/{id}/items
-PATCH  /api/v1/invoice-packages/{id}/items/{item_id}
-DELETE /api/v1/invoice-packages/{id}/items/{item_id}
-POST   /api/v1/invoice-packages/{id}/documents/generate
-GET    /api/v1/invoice-packages/{id}/documents/{document_id}/pdf
-POST   /api/v1/invoice-packages/{id}/files
+GET    /api/v1/invoices
+POST   /api/v1/invoices
+GET    /api/v1/invoices/{id}
+PATCH  /api/v1/invoices/{id}
+DELETE /api/v1/invoices/{id}
+GET    /api/v1/invoices/{id}/pdf
+POST   /api/v1/invoices/{id}/stamp
+POST   /api/v1/invoices/{id}/background
+POST   /api/v1/invoices/import-excel
 ```
 
-Old invoice API can stay temporarily, but the new UI should stop depending on the old large form.
+The client profile uses this API directly.
 
 ---
 
-## Stage 3 — New UI
+## Stage 3 — Active Client Profile UI
 
-Replace the current complicated create/edit modal with:
+The active invoice UI lives inside each client profile:
 
 ```text
-Invoice Packages Page
-  -> cards/table
-  -> filters by client, source, status, document type
-
-Invoice Package Profile
-  -> Overview
-  -> Client
-  -> Items
-  -> Packing
-  -> Shipping
-  -> Documents
-  -> Files/OCR
-  -> Accounting
-  -> History
+Client Profile
+  -> invoices panel
+  -> create/edit invoice modal
+  -> invoice items
+  -> packing/shipping fields
+  -> PDF preview/download
+  -> stamp/background upload
 ```
 
-Use simple table-style item editing instead of one huge form.
+The standalone invoice section was removed from the main navigation to avoid duplicate workflows.
 
-Initial UI status:
+Current UI status:
 
-- `/invoices` shows invoice package cards with source/status/client/totals.
-- `/invoices/{id}` shows profile tabs for overview, items, shipping, documents, files, accounting, and history.
-- The old legacy invoice edit page still exists for compatibility while the package UI is completed.
+- `/clients/{id}` is the place to create, edit, download, and delete invoices.
+- `/invoices`, `/invoices/{id}`, and `/invoices/{id}/edit` redirect to `/clients`.
+- Deleted standalone package pages are not part of the active UI.
 
 ---
 
@@ -172,20 +163,19 @@ BL = بوليصة شحن
 
 Current status:
 
-- Generated package document records can now be downloaded as print-ready PDFs in English or Arabic.
-- The PDF renderer uses the invoice package items, package shipping fields, linked client/manual buyer, and company settings.
+- Generated client invoices can now be downloaded as print-ready PDFs in English or Arabic.
+- The PDF renderer uses invoice items, invoice shipping fields, linked client/manual buyer, company settings, stamp, and optional document background.
 
 ---
 
 ## Stage 5 — Connections To Other Sections
 
-Use `invoice_package_id` wherever another section needs invoice data:
+Use `invoice_id` wherever another section needs client invoice data:
 
 ```text
-booking_cargo_lines -> invoice_package_id
-customs_estimates -> invoice_package_id
-accounting_entries -> invoice_package_id
-shop orders later -> invoice_package_id
+booking_cargo_lines -> invoice_id
+customs_estimates -> invoice_id
+accounting_entries -> invoice_id
 ```
 
 Containers should read:
@@ -194,15 +184,13 @@ Containers should read:
 - Goods/items
 - Packing list values
 - Uploaded documents
-- Invoice package files
+- Client invoice records
 
 Current status:
 
-- Container client cargo lines expose `invoice_package_id` and package number/status.
-- A container cargo card can create a linked invoice package directly when none exists.
-- The cargo edit form can select a matching invoice package and import its item rows into the cargo goods list.
-- The cargo card links directly back to the package profile.
-- Container ZIP export now includes linked invoice package JSON snapshots.
+- Container client cargo lines expose `invoice_id` and invoice number.
+- The cargo edit form can select a matching client invoice and import its item rows into the cargo goods list.
+- Invoice package creation/selection was removed from the container UI.
 
 Customs and clearance should read:
 
@@ -218,7 +206,7 @@ Accounting should read:
 - Invoice total
 - Payment status
 - Receipts
-- Linked package/document number
+- Linked invoice/document number
 
 ---
 
@@ -229,45 +217,45 @@ When a website customer buys through the shop later:
 ```text
 shop customer/order
   -> internal client
-  -> invoice package
-  -> PI first
-  -> later CI / PL / SC from same package
+  -> shop order record
+  -> staff creates/updates client invoice from client profile when needed
 ```
 
 Current status:
 
 - `shop_orders` and `shop_order_items` store website order requests.
-- `POST /api/v1/shop/orders?token=...` creates a shop order and an invoice package with source `shop_order`.
+- `POST /api/v1/shop/orders?token=...` creates a shop order request.
 - `GET /api/v1/shop/orders?token=...` lists the customer shop orders.
 - The shop product page can submit an order request from a logged-in shop customer.
-- If the shop customer email already exists as an internal client, the invoice package links to that client; otherwise it is created as a manual buyer package.
+- If the shop customer email already exists as an internal client, staff can use that client profile to generate PI / CI / PL / SC.
 
 ---
 
 ## Stage 7 — Old System Cleanup
 
-After the new package system works:
+Cleanup rule:
 
-1. Hide old invoice create/edit UI.
-2. Keep old records readable only if needed.
-3. Migrate useful old records into packages if any are worth keeping.
-4. Drop old invoice tables only after containers, customs, and accounting no longer rely on them.
+1. Keep the client-profile invoice generator.
+2. Keep old stored records readable only if needed.
+3. Do not expose the standalone package section in the UI.
+4. Drop internal package tables only in a future dedicated migration if nothing still references them.
 
 Current status:
 
-- `/invoices` and `/invoices/{id}` use the invoice package UI.
-- `/invoices/{id}/edit` redirects to `/invoices` so staff do not enter the old large invoice editor by accident.
-- Legacy invoice API/tables are still kept for reading and compatibility until the package system is fully tested.
+- `/invoices`, `/invoices/{id}`, and `/invoices/{id}/edit` redirect to `/clients`.
+- Client invoices are created, edited, previewed, downloaded, and deleted inside the client profile.
+- Legacy client invoice API/tables remain active because they are the working client invoice generator.
 
 ---
 
 ## Arabic Summary / ملخص عربي
 
-النظام الجديد يجب أن يعتمد على فكرة:
+بعد تغيير الخطة، النظام الفعلي يعتمد على فكرة:
 
 ```text
-ملف فاتورة واحد = Invoice Package
-والملف يحتوي بداخله على PI / CI / PL / SC / CO / B/L
+فاتورة العميل تدار من داخل ملف العميل
+والفاتورة نفسها يمكن أن تكون PI / CI / PL / SC
+ولا يوجد قسم فواتير مستقل في القائمة الرئيسية
 ```
 
 قبل البدء يجب تنظيف عينات الفواتير القديمة التي تم إدخالها من seed:

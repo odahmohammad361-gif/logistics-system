@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { getEligibleClients } from '@/services/bookingService'
 import { getClearanceAgents } from '@/services/agentService'
 import { getInvoices } from '@/services/invoiceService'
-import { getInvoicePackages } from '@/services/invoicePackageService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -55,7 +54,6 @@ function clearanceMode(mode: BookingMode) {
 interface FormValues {
   client_id:          string
   invoice_id:         string
-  invoice_package_id: string
   goods_source:       string
   is_full_container_client: boolean
   description:        string
@@ -125,7 +123,6 @@ export default function CargoLineForm({
   const [goodsRows, setGoodsRows] = useState<GoodsRow[]>([])
   const selectedClientId = watch('client_id')
   const selectedInvoiceId = watch('invoice_id')
-  const selectedInvoicePackageId = watch('invoice_package_id')
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
@@ -146,16 +143,6 @@ export default function CargoLineForm({
   const { data: invoicesData } = useQuery({
     queryKey: ['cargo-line-invoices'],
     queryFn: () => getInvoices({ page: 1, page_size: 100 }),
-    enabled: open,
-  })
-
-  const { data: invoicePackagesData } = useQuery({
-    queryKey: ['cargo-line-invoice-packages', selectedClientId],
-    queryFn: () => getInvoicePackages({
-      page: 1,
-      page_size: 100,
-      client_id: selectedClientId || undefined,
-    }),
     enabled: open,
   })
 
@@ -196,25 +183,9 @@ export default function CargoLineForm({
       }))
   }, [invoicesData, selectedClientId])
 
-  const invoicePackageOptions = useMemo(() => {
-    const packages = invoicePackagesData?.results ?? []
-    return packages
-      .filter(pkg => !selectedClientId || !pkg.client_id || String(pkg.client_id) === selectedClientId)
-      .filter(pkg => !pkg.booking_cargo_line_id || pkg.booking_cargo_line_id === initial?.id)
-      .map(pkg => ({
-        value: String(pkg.id),
-        label: `${pkg.package_number} — ${pkg.status} — ${Number(pkg.total || 0).toFixed(2)} ${pkg.currency || 'USD'}`,
-      }))
-  }, [invoicePackagesData, selectedClientId, initial?.id])
-
   const selectedInvoice = useMemo(
     () => (invoicesData?.results ?? []).find(inv => String(inv.id) === selectedInvoiceId),
     [invoicesData, selectedInvoiceId],
-  )
-
-  const selectedInvoicePackage = useMemo(
-    () => (invoicePackagesData?.results ?? []).find(pkg => String(pkg.id) === selectedInvoicePackageId),
-    [invoicePackagesData, selectedInvoicePackageId],
   )
 
   const clearanceRateOptions = useMemo(() => {
@@ -288,7 +259,6 @@ export default function CargoLineForm({
       reset({
         client_id:        String(initial.client.id),
         invoice_id:       initial.invoice_id != null ? String(initial.invoice_id) : '',
-        invoice_package_id: initial.invoice_package_id != null ? String(initial.invoice_package_id) : '',
         goods_source:     initial.goods_source ?? 'client_ready_goods',
         is_full_container_client: initial.is_full_container_client ?? false,
         description:      initial.extracted_goods?.goods?.length && initial.description?.trim().startsWith('1.') ? '' : (initial.description ?? ''),
@@ -312,7 +282,7 @@ export default function CargoLineForm({
       })
     } else {
       reset({
-        client_id:'', invoice_id:'', invoice_package_id:'', goods_source:'client_ready_goods', is_full_container_client:false,
+        client_id:'', invoice_id:'', goods_source:'client_ready_goods', is_full_container_client:false,
         description:'', description_ar:'', hs_code:'', shipping_marks:'',
         cartons:'', gross_weight_kg:'', net_weight_kg:'', cbm:'',
         carton_length_cm:'', carton_width_cm:'', carton_height_cm:'',
@@ -368,13 +338,12 @@ export default function CargoLineForm({
         gross_weight_kg: toNum(row.gross_weight_kg),
         cbm: toNum(row.cbm),
         hs_code: row.hs_code.trim() || null,
-        source: selectedInvoicePackageId ? 'linked_invoice_package' : selectedInvoiceId ? 'linked_invoice' : (initial?.extracted_goods?.goods?.length ? 'document_or_manual' : 'manual'),
+        source: selectedInvoiceId ? 'linked_invoice' : (initial?.extracted_goods?.goods?.length ? 'document_or_manual' : 'manual'),
       }))
       .filter(row => row.description || row.cartons != null || row.quantity != null || row.gross_weight_kg != null || row.cbm != null || row.hs_code)
     await onSubmit({
       client_id:          parseInt(vals.client_id),
       invoice_id:         vals.invoice_id ? parseInt(vals.invoice_id) : null,
-      invoice_package_id: vals.invoice_package_id ? parseInt(vals.invoice_package_id) : null,
       goods_source:       vals.goods_source || 'client_ready_goods',
       is_full_container_client: Boolean(vals.is_full_container_client),
       description:        vals.description      || null,
@@ -401,9 +370,7 @@ export default function CargoLineForm({
             version: 1,
             updated_at: new Date().toISOString(),
             invoice_id: vals.invoice_id ? parseInt(vals.invoice_id) : null,
-            invoice_package_id: vals.invoice_package_id ? parseInt(vals.invoice_package_id) : null,
             invoice_number: selectedInvoice?.invoice_number ?? initial?.invoice_number ?? null,
-            invoice_package_number: selectedInvoicePackage?.package_number ?? initial?.invoice_package_number ?? null,
             goods: cleanedGoods,
           }
         : null,
@@ -423,29 +390,6 @@ export default function CargoLineForm({
     }))
     setGoodsRows(rows)
     setValue('goods_source', 'company_buying_service')
-    setValue('cartons', sumRows(rows, 'cartons'))
-    setValue('gross_weight_kg', sumRows(rows, 'gross_weight_kg'))
-    setValue('cbm', sumRows(rows, 'cbm', 4))
-    const hsCodes = Array.from(new Set(rows.map(row => row.hs_code.trim()).filter(Boolean)))
-    setValue('hs_code', hsCodes.length === 1 ? hsCodes[0] : '')
-    if (!watch('description')) {
-      setValue('description', rows.map((row, idx) => `${idx + 1}. ${row.description}`).filter(Boolean).join('\n'))
-    }
-  }
-
-  function importSelectedInvoicePackageGoods() {
-    if (!selectedInvoicePackage) return
-    const rows = (selectedInvoicePackage.items ?? []).map(item => ({
-      product_id: item.product_id != null ? String(item.product_id) : '',
-      description: item.description ?? '',
-      cartons: item.cartons != null ? String(item.cartons) : '',
-      quantity: item.quantity != null ? String(item.quantity) : '',
-      gross_weight_kg: item.gross_weight != null ? String(item.gross_weight) : '',
-      cbm: item.cbm != null ? String(item.cbm) : '',
-      hs_code: item.hs_code ?? '',
-    }))
-    setGoodsRows(rows)
-    setValue('goods_source', selectedInvoicePackage.source_type === 'shop_order' ? 'company_buying_service' : 'client_ready_goods')
     setValue('cartons', sumRows(rows, 'cartons'))
     setValue('gross_weight_kg', sumRows(rows, 'gross_weight_kg'))
     setValue('cbm', sumRows(rows, 'cbm', 4))
@@ -532,14 +476,6 @@ export default function CargoLineForm({
               : (isAr ? 'لا توجد فواتير مطابقة' : 'No matching invoices')}
             {...register('invoice_id')}
           />
-          <Select
-            label={isAr ? 'ملف الفاتورة المرتبط' : 'Linked Invoice Package'}
-            options={invoicePackageOptions}
-            placeholder={invoicePackageOptions.length
-              ? (isAr ? 'اختياري: اختر ملف فاتورة العميل' : 'Optional: select client invoice package')
-              : (isAr ? 'لا توجد ملفات فواتير مطابقة' : 'No matching invoice packages')}
-            {...register('invoice_package_id')}
-          />
           <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-white/[0.02] px-3 py-2">
             <div>
               <p className="text-xs font-semibold text-brand-text">
@@ -557,27 +493,6 @@ export default function CargoLineForm({
               variant="secondary"
               onClick={importSelectedInvoiceGoods}
               disabled={!selectedInvoice}
-            >
-              {isAr ? 'استيراد' : 'Import'}
-            </Button>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-white/[0.02] px-3 py-2">
-            <div>
-              <p className="text-xs font-semibold text-brand-text">
-                {isAr ? 'استيراد بنود ملف الفاتورة' : 'Import package items'}
-              </p>
-              <p className="text-[11px] text-brand-text-muted">
-                {isAr
-                  ? 'ينقل أصناف ملف الفاتورة الجديد إلى قائمة بضاعة هذا العميل داخل الحاوية.'
-                  : 'Copies the new invoice package items into this client cargo goods list.'}
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={importSelectedInvoicePackageGoods}
-              disabled={!selectedInvoicePackage}
             >
               {isAr ? 'استيراد' : 'Import'}
             </Button>

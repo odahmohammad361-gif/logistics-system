@@ -90,7 +90,6 @@ Key fields:
 
 Connections:
 - `clients.id` -> `invoices.client_id`
-- `clients.id` -> `invoice_packages.client_id`
 - `clients.id` -> `shop_orders.client_id` when a website customer email matches an internal client
 - `clients.id` -> `booking_cargo_lines.client_id`
 - `clients.id` -> `shipping_quotes.client_id`
@@ -111,7 +110,7 @@ Key fields:
 Important:
 - A `customer` is not automatically an operational `client`.
 - Customer-to-client migration is handled through the customers API.
-- Website shop orders are stored in `shop_orders`; each order can create an `invoice_package`.
+- Website shop orders are stored in `shop_orders`; staff can later manage the client invoice from the client profile.
 
 ### `suppliers`
 Supplier/shop source records.
@@ -224,16 +223,14 @@ Key fields:
 ## 5. Invoices
 
 ```text
-clients -> invoice_packages -> invoice_package_items -> products / hs_code_references
+clients -> invoices -> invoice_items -> products / hs_code_references
 customers -> shop_orders -> shop_order_items -> products
-shop_orders -> invoice_packages
-invoice_packages -> invoice_documents
-invoice_packages -> invoice_files
-legacy: clients -> invoices -> invoice_items -> products (optional source link)
+stored/internal only: invoice_packages -> invoice_package_items / invoice_documents / invoice_files
 ```
 
 ### `invoice_packages`
-New package-first invoice foundation. This is the future main invoice object.
+Stored/internal package tables from the paused rebuild. They are not exposed as a standalone UI section now.
+The active shop, booking, and frontend APIs no longer create or select invoice packages; these tables remain only so old stored rows do not break the database.
 
 Key fields:
 - `package_number`
@@ -258,15 +255,16 @@ Connections:
 - `invoice_packages.id` -> legacy `invoices.package_id`
 
 Rule:
-- The package is the case file. PI, CI, PL, SC, CO, B/L are documents/files inside the package.
+- Keep existing package records for history/internal use only. Active staff invoice work happens in `invoices`.
+- Existing foreign-key columns may remain in tables, but the active API surface should use `invoice_id` for client invoices.
 
 ### `shop_orders`
-Website customer order requests. Creating a shop order also creates an invoice package with `source_type = shop_order`.
+Website customer order requests.
 
 Key fields:
 - `order_number`
 - `customer_id`, optional `client_id`
-- `invoice_package_id`
+- `invoice_package_id` may exist as an old nullable/internal column, but new shop orders do not use it.
 - `status`, `destination`, `currency`
 - Totals: `subtotal_usd`, `total_cartons`, `total_pieces`, `total_cbm`, `total_gross_weight_kg`
 - `notes`
@@ -282,7 +280,7 @@ Key fields:
 - `cbm`, `gross_weight_kg`, `net_weight_kg`
 
 ### `invoice_package_items`
-New package item/goods table.
+Internal package item/goods table from the paused rebuild.
 
 Key fields:
 - `package_id`
@@ -322,10 +320,10 @@ Key fields:
 - `package_id`, `action`, `summary`, `changed_by_id`, `created_at`
 
 ### `invoices`
-Legacy PI, CI, PL, SC, price offers, and dummy/manual invoice records. The new rebuild should move UI and integrations toward `invoice_packages`.
+Active client-profile PI, CI, PL, SC, price offer, and manual invoice records.
 
 Key fields:
-- `package_id` optional link to the new package system
+- `package_id` optional stored/internal link from the paused package rebuild
 - `invoice_number`, `invoice_type`: `price_offer`, `PI`, `CI`, `PL`, `SC`
 - `status`: `draft`, `sent`, `approved`, `paid`, `cancelled`, `dummy`
 - Buyer: `client_id` or manual `buyer_name`
@@ -730,8 +728,8 @@ All admin API routes are under `/api/v1`.
 | `/customers` | `customers`, migration into `clients` |
 | `/shop` | public products, customer auth, shop orders, shipping calculator |
 | `/client-portal` | `clients`, invoices, bookings |
-| `/invoices` | legacy `invoices`, `invoice_items` |
-| `/invoice-packages` | `invoice_packages`, `invoice_package_items`, `invoice_documents`, `invoice_files`, `invoice_activity_log` |
+| `/invoices` | active client profile invoice API: `invoices`, `invoice_items` |
+| `/invoice-packages` | inactive/removed from active router; tables may remain for stored package records |
 | `/bookings` | `bookings`, cargo lines, cargo docs/images, loading photos |
 | `/shipping-agents` | shipping agents, current rates, history, contracts, quotes |
 | `/clearance-agents` | clearance agents, rates, edit log |

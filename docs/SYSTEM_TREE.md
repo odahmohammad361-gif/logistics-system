@@ -30,9 +30,9 @@ Logistics System
 │   ├── Bank line matching
 │   └── Reports / CSV export
 │
-├── Invoices
-│   ├── Invoice package cards
-│   ├── Package profile
+├── Client Invoice Records
+│   ├── Managed from the client profile, not the main sidebar
+│   ├── Legacy client invoice generator
 │   ├── PI / CI / PL / SC / CO / B/L documents
 │   ├── Package item snapshots
 │   ├── Optional product source link
@@ -146,7 +146,7 @@ Logistics System
     ├── Public product browsing
     ├── Website customer signup/login
     ├── Shop order request from product page
-    ├── Shop order creates invoice package
+    ├── Shop order request record
     ├── Public shipping calculator
     ├── Client portal login
     ├── Client invoice view
@@ -170,17 +170,13 @@ PRODUCT FOUNDATION
 
 INVOICE FOUNDATION
   clients
-    -> invoice_packages
-      -> invoice_package_items
+    -> invoices
+      -> invoice_items
         -> products / hs_code_references (optional source)
-      -> invoice_documents
-      -> invoice_files
   customers
     -> shop_orders
       -> shop_order_items
-      -> invoice_packages
-  legacy invoices
-    -> invoice_items
+      -> internal stored records only when needed; no standalone invoice UI
 
 FREIGHT FOUNDATION
   shipping_agents
@@ -194,8 +190,7 @@ CONTAINER OPERATIONS
   bookings
     -> booking_cargo_lines
       -> clients
-      -> invoice_packages
-      -> legacy invoices
+      -> client invoices
       -> booking_cargo_documents
       -> booking_cargo_images
       -> clearance_agents
@@ -238,24 +233,23 @@ ACCOUNTING FOUNDATION
 
 ```text
 Product/HS setup
-  -> Product selected in invoice package or shop order
-  -> Invoice package item saves a snapshot
-  -> Container client cargo line can link invoice package
-  -> Cargo goods list can import invoice package item data
+  -> Product selected in client invoice or shop order
+  -> Invoice item saves a snapshot
+  -> Container client cargo line can link client invoice
+  -> Cargo goods list can import invoice item data
   -> Customs calculator can import cargo/invoice goods
 ```
 
-The package item keeps its own saved text and numbers. Product changes later do not rewrite old package documents.
+The invoice item keeps its own saved text and numbers. Product changes later do not rewrite old invoice documents.
 
-#### A2. Shop order to invoice package
+#### A2. Shop order records
 
 ```text
 Website customer login
   -> Product page order request
   -> shop_orders / shop_order_items
-  -> invoice_packages with source_type = shop_order
-  -> PI / CI / PL / SC can be generated from the package
-  -> Container cargo line can link the same package later
+  -> internal order records
+  -> staff can create/manage client invoices from the client profile
 ```
 
 #### B. Shipping agent to container
@@ -329,8 +323,8 @@ Accounting should become the human-accountant-style source for company money mov
 | --- | --- | --- | --- |
 | Clients | `frontend/src/pages/Clients/` | `backend/app/api/v1/clients.py` | `client.py` |
 | Accounting | `frontend/src/pages/Accounting/` | `backend/app/api/v1/accounting.py` | `accounting.py` |
-| Invoices | `frontend/src/pages/InvoicePackages/`, legacy `frontend/src/pages/Invoices/` | `backend/app/api/v1/invoice_packages.py`, legacy `invoices.py` | `invoice_package.py`, legacy `invoice.py` |
-| Shop Orders | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `shop_order.py`, `customer.py`, `invoice_package.py` |
+| Client Invoices | `frontend/src/pages/Clients/profile.tsx`, `frontend/src/components/invoice/` | `backend/app/api/v1/invoices.py` | `invoice.py`, `invoice_item.py` |
+| Shop Orders | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `shop_order.py`, `customer.py` |
 | Containers | `frontend/src/pages/Containers/`, `frontend/src/components/booking/` | `backend/app/api/v1/bookings.py` | `booking.py` |
 | Shipping Agents | `frontend/src/pages/ShippingAgents/` | `backend/app/api/v1/shipping_agents.py` | `shipping_agent.py`, `shipping_quote.py` |
 | Clearance Agents | `frontend/src/pages/ClearanceAgents/` | `backend/app/api/v1/clearance_agents.py` | `clearance_agent.py` |
@@ -393,10 +387,11 @@ Update docs when any of these changed:
 │   ├── مطابقة حركات البنك
 │   └── تقارير وتصدير CSV
 │
-├── الفواتير
-│   ├── بطاقات ملفات الفواتير
-│   ├── ملف فاتورة يحتوي PI / CI / PL / SC / CO / B/L
-│   ├── أصناف ملف الفاتورة كنسخة محفوظة
+├── سجلات فواتير العملاء
+│   ├── تدار من داخل ملف العميل وليس من القائمة الرئيسية
+│   ├── مولد الفواتير الحالي داخل ملف العميل
+│   ├── فاتورة عميل بنوع PI / CI / PL / SC
+│   ├── أصناف الفاتورة كنسخة محفوظة
 │   ├── رابط اختياري للمنتج الأصلي
 │   ├── رابط بضائع الحاوية
 │   ├── رابط طلب المتجر
@@ -508,7 +503,7 @@ Update docs when any of these changed:
     ├── تصفح المنتجات
     ├── تسجيل ودخول عميل الموقع
     ├── إنشاء طلب من صفحة المنتج
-    ├── الطلب ينشئ ملف فاتورة
+    ├── الطلب يبقى كطلب متجر داخلي
     ├── حاسبة شحن عامة
     ├── دخول بوابة العميل
     ├── عرض فواتير العميل
@@ -532,15 +527,12 @@ Update docs when any of these changed:
 
 أساس الفواتير
   العملاء الداخليين
-    -> ملفات الفواتير
-      -> أصناف ملف الفاتورة
-      -> المستندات والملفات
+    -> الفواتير داخل ملف العميل
+      -> أصناف الفاتورة
   عملاء الموقع
     -> طلبات المتجر
       -> أصناف طلب المتجر
-      -> ملفات الفواتير
-  الفواتير القديمة
-    -> أصناف الفواتير القديمة
+      -> سجلات داخلية فقط بدون واجهة فواتير مستقلة
 
 أساس الشحن
   وكلاء الشحن
@@ -554,8 +546,7 @@ Update docs when any of these changed:
   الحاويات
     -> بضائع العملاء
       -> العملاء
-      -> ملفات الفواتير
-      -> الفواتير القديمة
+      -> فواتير العميل
       -> المستندات
       -> الصور
       -> وكلاء التخليص
@@ -670,8 +661,8 @@ Update docs when any of these changed:
 | --- | --- | --- | --- |
 | العملاء | `frontend/src/pages/Clients/` | `backend/app/api/v1/clients.py` | `client.py` |
 | الحسابات | `frontend/src/pages/Accounting/` | `backend/app/api/v1/accounting.py` | `accounting.py` |
-| الفواتير | `frontend/src/pages/InvoicePackages/` | `backend/app/api/v1/invoice_packages.py`, legacy `invoices.py` | `invoice_package.py`, legacy `invoice.py` |
-| المتجر | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `customer.py`, `shop_order.py`, `invoice_package.py` |
+| فواتير العملاء | `frontend/src/pages/Clients/profile.tsx`, `frontend/src/components/invoice/` | `backend/app/api/v1/invoices.py` | `invoice.py`, `invoice_item.py` |
+| المتجر | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `customer.py`, `shop_order.py` |
 | الحاويات | `frontend/src/pages/Containers/` | `backend/app/api/v1/bookings.py` | `booking.py` |
 | وكلاء الشحن | `frontend/src/pages/ShippingAgents/` | `backend/app/api/v1/shipping_agents.py` | `shipping_agent.py`, `shipping_quote.py` |
 | وكلاء التخليص | `frontend/src/pages/ClearanceAgents/` | `backend/app/api/v1/clearance_agents.py` | `clearance_agent.py` |

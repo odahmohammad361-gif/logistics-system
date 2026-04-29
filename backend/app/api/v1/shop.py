@@ -4,7 +4,6 @@ Customer signup / login / profile + shipping calculator.
 """
 import secrets
 from decimal import Decimal
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -15,7 +14,6 @@ from app.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.customer import Customer
 from app.models.client import Client
-from app.models.invoice_package import InvoiceActivityLog, InvoicePackage, InvoicePackageItem
 from app.models.shipping_quote import ShippingQuote
 from app.models.clearance_agent import ClearanceAgent
 from app.models.market_rate import MarketRate
@@ -76,15 +74,6 @@ def _generate_order_number(db: Session) -> str:
     return f"SHOP-{year}-{count + 1:04d}"
 
 
-def _generate_package_number(db: Session) -> str:
-    from datetime import date
-
-    year = date.today().year
-    pattern = f"PKG-{year}-%"
-    count = db.query(InvoicePackage).filter(InvoicePackage.package_number.like(pattern)).count()
-    return f"PKG-{year}-{count + 1:04d}"
-
-
 def _customer_client(db: Session, customer: Customer) -> Client | None:
     return db.query(Client).filter(
         Client.email == customer.email,
@@ -98,8 +87,6 @@ def _serialize_order(order: ShopOrder) -> dict:
         "order_number": order.order_number,
         "customer_id": order.customer_id,
         "client_id": order.client_id,
-        "invoice_package_id": order.invoice_package_id,
-        "invoice_package_number": order.invoice_package.package_number if order.invoice_package else None,
         "status": order.status,
         "destination": order.destination,
         "currency": order.currency,
@@ -146,51 +133,6 @@ def _build_shop_order_item(order_id: int, product: Product, cartons: Decimal, so
         notes=notes,
         sort_order=sort_order,
     )
-
-
-def _create_package_from_shop_order(db: Session, order: ShopOrder, customer: Customer) -> InvoicePackage:
-    package = InvoicePackage(
-        package_number=_generate_package_number(db),
-        source_type="shop_order",
-        status="active",
-        title=f"Shop order {order.order_number}",
-        client_id=order.client_id,
-        buyer_name=None if order.client_id else customer.full_name,
-        destination=order.destination,
-        currency="USD",
-        notes=order.notes,
-    )
-    db.add(package)
-    db.flush()
-
-    for item in order.items:
-        db.add(InvoicePackageItem(
-            package_id=package.id,
-            product_id=item.product_id,
-            description=item.product_name,
-            description_ar=item.product_name_ar,
-            hs_code=item.hs_code,
-            quantity=item.quantity,
-            unit="pcs",
-            unit_price=item.unit_price_usd,
-            total_price=item.total_price_usd,
-            cartons=item.cartons,
-            pcs_per_carton=item.pcs_per_carton,
-            gross_weight=item.gross_weight_kg,
-            net_weight=item.net_weight_kg,
-            cbm=item.cbm,
-            sort_order=item.sort_order,
-        ))
-    db.flush()
-    package.subtotal = order.subtotal_usd
-    package.total = order.subtotal_usd
-    db.add(InvoiceActivityLog(
-        package_id=package.id,
-        action="shop_order_create",
-        summary=f"Created from shop order {order.order_number}",
-    ))
-    order.invoice_package_id = package.id
-    return package
 
 
 # ── Customer auth ──────────────────────────────────────────────────────────────
@@ -242,7 +184,7 @@ def get_me(
     return customer
 
 
-# ── Shop orders → invoice packages ────────────────────────────────────────────
+# ── Shop orders ───────────────────────────────────────────────────────────────
 
 @router.post("/orders", response_model=ShopOrderResponse, status_code=status.HTTP_201_CREATED)
 def create_shop_order(
@@ -296,8 +238,6 @@ def create_shop_order(
     order.total_pieces = total_pieces.quantize(Decimal("0.001"))
     order.total_cbm = total_cbm.quantize(Decimal("0.0001"))
     order.total_gross_weight_kg = total_gross.quantize(Decimal("0.001")) if gross_seen else None
-    db.flush()
-    _create_package_from_shop_order(db, order, customer)
     db.commit()
     db.refresh(order)
     return _serialize_order(order)

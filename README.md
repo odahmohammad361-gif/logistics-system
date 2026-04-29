@@ -37,7 +37,7 @@ Current focus before the next round:
 | Module | Current Behavior |
 | --- | --- |
 | Clients | Client profiles, branch assignment, generated client codes |
-| Invoices | Invoice package flow is active for PI/CI/PL/SC-style documents, shop orders, container cargo links, customs, and accounting; legacy invoice records stay only for compatibility |
+| Client Invoices | Managed inside each client profile and linked to container cargo when needed; the standalone invoice sidebar section is hidden to avoid duplicate workflows |
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
@@ -56,7 +56,7 @@ Keep these docs updated when a partner pushes model, API, or workflow changes:
 
 - [`docs/DATABASE_STRUCTURE.md`](docs/DATABASE_STRUCTURE.md) — current database tables, relationships, file storage, API prefix map, and Arabic summary.
 - [`docs/SYSTEM_TREE.md`](docs/SYSTEM_TREE.md) — bilingual English/Arabic system tree showing how clients, invoices, containers, agents, products, HS/customs, and accounting connect.
-- [`docs/INVOICE_REBUILD_PLAN.md`](docs/INVOICE_REBUILD_PLAN.md) — clean invoice package rebuild plan, including cleanup of old seeded invoice samples.
+- [`docs/INVOICE_REBUILD_PLAN.md`](docs/INVOICE_REBUILD_PLAN.md) — client-profile invoice cleanup plan, including cleanup of old seeded invoice samples.
 - This `README.md` — setup, deployment, current focus, and follow-up TODO.
 
 Quick review commands after pulling:

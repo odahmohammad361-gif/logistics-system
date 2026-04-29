@@ -1,11 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Users, FileText, DollarSign } from 'lucide-react'
+import { Users, Container, DollarSign } from 'lucide-react'
 import StatCard from '@/components/dashboard/StatCard'
-import RecentActivity from '@/components/dashboard/RecentActivity'
 import TopClientsWidget from '@/components/dashboard/TopClientsWidget'
 import { getClients } from '@/services/clientService'
-import { getInvoices } from '@/services/invoiceService'
+import { getBookings } from '@/services/bookingService'
 import { getBoard } from '@/services/marketService'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -29,7 +28,7 @@ export default function DashboardPage() {
   const isAr     = lang === 'ar'
 
   const { data: clients,    isLoading: lc } = useQuery({ queryKey: ['clients-count'],    queryFn: () => getClients({ page: 1, page_size: 1 }) })
-  const { data: invoices,   isLoading: li } = useQuery({ queryKey: ['invoices-count'],   queryFn: () => getInvoices({ page: 1, page_size: 1 }) })
+  const { data: bookings,   isLoading: lb } = useQuery({ queryKey: ['bookings-count'],   queryFn: () => getBookings({ page: 1, page_size: 1 }) })
   const { data: board }                      = useQuery({ queryKey: ['board'], queryFn: getBoard, refetchInterval: 60_000 })
 
   const usdJod = board?.rates?.rates?.find((r) => r.currency === 'JOD')?.rate
@@ -82,11 +81,11 @@ export default function DashboardPage() {
           loading={lc}
         />
         <StatCard
-          title={t('invoices.title', 'الفواتير')}
-          value={invoices?.total ?? '—'}
-          icon={FileText}
+          title={t('nav.containers', 'Containers')}
+          value={bookings?.total ?? '—'}
+          icon={Container}
           color="blue"
-          loading={li}
+          loading={lb}
         />
         <StatCard
           title="USD / JOD"
@@ -98,8 +97,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Widgets ────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecentActivity />
+      <div className="grid grid-cols-1 gap-4">
         <TopClientsWidget />
       </div>
     </div>

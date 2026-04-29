@@ -44,8 +44,6 @@ class ShopOrderResponse(BaseModel):
     order_number: str
     customer_id: int
     client_id: Optional[int]
-    invoice_package_id: Optional[int]
-    invoice_package_number: Optional[str] = None
     status: str
     destination: Optional[str]
     currency: str

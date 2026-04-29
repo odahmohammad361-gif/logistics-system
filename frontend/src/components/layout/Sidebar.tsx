@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, FileText, Ship,
+  LayoutDashboard, Users, Ship,
   Anchor, TrendingUp, UserCog, ChevronLeft, ChevronRight,
   LogOut, Building2, Container, Warehouse, Store, Package, FolderInput,
   Landmark, Calculator, BookOpenCheck,
@@ -15,7 +15,6 @@ const NAV = [
   { to: '/dashboard',        icon: LayoutDashboard, key: 'dashboard' },
   { to: '/clients',          icon: Users,           key: 'clients' },
   { to: '/accounting',       icon: Landmark,        key: 'accounting' },
-  { to: '/invoices',         icon: FileText,        key: 'invoices' },
   { to: '/containers',       icon: Container,       key: 'containers' },
   { to: '/shipping-agents',  icon: Ship,            key: 'shipping_agents' },
   { to: '/clearance-agents', icon: Anchor,          key: 'clearance_agents' },

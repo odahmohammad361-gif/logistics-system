@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""Clean old seeded/sample invoice records before the invoice package rebuild.
+"""Clean old seeded/sample invoice records without touching active client invoices.
 
-This intentionally targets the legacy invoice tables only:
+This intentionally targets only the old seed invoice-number shape:
+    PO-2026-0001
+    PI-2026-0001
+    CI-2026-0001
+
+Active client-profile invoices use client codes in the number, for example:
+    PI-JO0001-2026-0001
+
+Affected tables:
     invoices
     invoice_items
 
@@ -19,6 +27,7 @@ Also delete legacy uploaded invoice files:
 """
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,6 +42,7 @@ from app.models.invoice_package import InvoiceDocument
 
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+SEEDED_INVOICE_RE = re.compile(r"^(PO|PI|CI|PL|SC)-\d{4}-\d{4}$")
 
 
 def local_upload_path(value: str | None) -> str | None:
@@ -48,20 +58,50 @@ def local_upload_path(value: str | None) -> str | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--yes", action="store_true", help="Actually delete legacy invoice rows.")
-    parser.add_argument("--delete-files", action="store_true", help="Delete legacy uploaded invoice files from disk.")
+    parser.add_argument("--yes", action="store_true", help="Actually delete matching seeded invoice rows.")
+    parser.add_argument("--delete-files", action="store_true", help="Delete matching seeded uploaded invoice files from disk.")
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
-        invoices = db.query(Invoice).all()
-        items = db.query(InvoiceItem).all()
-        linked_cargo = db.query(BookingCargoLine).filter(BookingCargoLine.invoice_id.isnot(None)).count()
-        linked_accounting = db.query(AccountingEntry).filter(AccountingEntry.invoice_id.isnot(None)).count()
-        linked_estimates = db.query(CustomsEstimate).filter(CustomsEstimate.invoice_id.isnot(None)).count()
-        linked_documents = db.query(InvoiceDocument).filter(InvoiceDocument.legacy_invoice_id.isnot(None)).count()
+        invoices = [
+            inv for inv in db.query(Invoice).all()
+            if SEEDED_INVOICE_RE.match(inv.invoice_number or "")
+        ]
+        invoice_ids = [inv.id for inv in invoices]
+        items = (
+            db.query(InvoiceItem)
+            .filter(InvoiceItem.invoice_id.in_(invoice_ids))
+            .all()
+            if invoice_ids else []
+        )
+        linked_cargo = (
+            db.query(BookingCargoLine)
+            .filter(BookingCargoLine.invoice_id.in_(invoice_ids))
+            .count()
+            if invoice_ids else 0
+        )
+        linked_accounting = (
+            db.query(AccountingEntry)
+            .filter(AccountingEntry.invoice_id.in_(invoice_ids))
+            .count()
+            if invoice_ids else 0
+        )
+        linked_estimates = (
+            db.query(CustomsEstimate)
+            .filter(CustomsEstimate.invoice_id.in_(invoice_ids))
+            .count()
+            if invoice_ids else 0
+        )
+        linked_documents = (
+            db.query(InvoiceDocument)
+            .filter(InvoiceDocument.legacy_invoice_id.in_(invoice_ids))
+            .count()
+            if invoice_ids else 0
+        )
 
-        print("Legacy invoice cleanup")
+        print("Seeded invoice cleanup")
+        print("  matching pattern: (PO|PI|CI|PL|SC)-YYYY-0000")
         print(f"  invoices: {len(invoices)}")
         print(f"  invoice_items: {len(items)}")
         print(f"  booking cargo invoice links to clear: {linked_cargo}")
@@ -70,7 +110,11 @@ def main() -> None:
         print(f"  package document legacy links to clear: {linked_documents}")
 
         if not args.yes:
-            print("\nDry run only. Re-run with --yes to delete legacy invoices.")
+            print("\nDry run only. Re-run with --yes to delete only the matching seeded invoices.")
+            return
+
+        if not invoice_ids:
+            print("No matching seeded invoices found.")
             return
 
         file_paths: set[str] = set()
@@ -85,12 +129,12 @@ def main() -> None:
                 if path:
                     file_paths.add(path)
 
-        db.query(BookingCargoLine).filter(BookingCargoLine.invoice_id.isnot(None)).update({"invoice_id": None}, synchronize_session=False)
-        db.query(AccountingEntry).filter(AccountingEntry.invoice_id.isnot(None)).update({"invoice_id": None}, synchronize_session=False)
-        db.query(CustomsEstimate).filter(CustomsEstimate.invoice_id.isnot(None)).update({"invoice_id": None}, synchronize_session=False)
-        db.query(InvoiceDocument).filter(InvoiceDocument.legacy_invoice_id.isnot(None)).update({"legacy_invoice_id": None}, synchronize_session=False)
-        db.query(InvoiceItem).delete(synchronize_session=False)
-        db.query(Invoice).delete(synchronize_session=False)
+        db.query(BookingCargoLine).filter(BookingCargoLine.invoice_id.in_(invoice_ids)).update({"invoice_id": None}, synchronize_session=False)
+        db.query(AccountingEntry).filter(AccountingEntry.invoice_id.in_(invoice_ids)).update({"invoice_id": None}, synchronize_session=False)
+        db.query(CustomsEstimate).filter(CustomsEstimate.invoice_id.in_(invoice_ids)).update({"invoice_id": None}, synchronize_session=False)
+        db.query(InvoiceDocument).filter(InvoiceDocument.legacy_invoice_id.in_(invoice_ids)).update({"legacy_invoice_id": None}, synchronize_session=False)
+        db.query(InvoiceItem).filter(InvoiceItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+        db.query(Invoice).filter(Invoice.id.in_(invoice_ids)).delete(synchronize_session=False)
         db.commit()
 
         deleted_files = 0
@@ -101,7 +145,7 @@ def main() -> None:
                     deleted_files += 1
             print(f"  deleted files: {deleted_files}")
 
-        print("Done. Legacy invoice rows were cleaned.")
+        print("Done. Matching seeded invoice rows were cleaned.")
     finally:
         db.close()
 

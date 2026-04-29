@@ -330,7 +330,7 @@ export default function ProductDetail() {
                 >
                   {orderMutation.isPending
                     ? (isAr ? 'جاري إنشاء الطلب...' : 'Creating order...')
-                    : (isAr ? 'إنشاء طلب وربطه بملف فاتورة' : 'Create order and invoice package')}
+                    : (isAr ? 'إنشاء طلب' : 'Create order')}
                 </button>
               ) : (
                 <Link
@@ -345,11 +345,6 @@ export default function ProductDetail() {
                   <p className="font-semibold">
                     {isAr ? 'تم إنشاء الطلب' : 'Order created'}: {createdOrder.order_number}
                   </p>
-                  {createdOrder.invoice_package_number && (
-                    <p className="text-xs mt-1 opacity-80">
-                      {isAr ? 'ملف الفاتورة' : 'Invoice package'}: {createdOrder.invoice_package_number}
-                    </p>
-                  )}
                 </div>
               )}
               {orderMutation.isError && (

@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import {
   ArrowRight, ArrowLeft, User, Phone, Mail, MapPin, Building2,
   Hash, Calendar, FileText, TrendingUp, Package,
-  ExternalLink, Barcode, CheckCircle2, XCircle, Plus, Eye, Pencil,
+  Barcode, CheckCircle2, XCircle, Plus, Eye, Pencil,
   Trash2, Download, ChevronDown, Loader2, KeyRound, Copy, RefreshCw,
 } from 'lucide-react'
 import { getClient } from '@/services/clientService'
@@ -396,9 +396,6 @@ export default function ClientProfile() {
                   <Plus size={13} /> {t('clients.inv_new')}
                 </Button>
               )}
-              <Link to={`/invoices?client_id=${clientId}`} className="btn-ghost text-xs gap-1">
-                {t('clients.inv_view_all')} <ExternalLink size={12} />
-              </Link>
             </div>
           </div>
 
