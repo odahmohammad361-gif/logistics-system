@@ -47,6 +47,7 @@ def create_client(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.STAFF)),
 ):
+    branch = None
     branch_code = "JO"  # default branch
     if payload.branch_id:
         branch = db.query(Branch).filter(Branch.id == payload.branch_id).first()
@@ -55,9 +56,14 @@ def create_client(
         branch_code = branch.code
 
     client_code = _generate_client_code(db, branch_code)
+    data = payload.model_dump()
+    if branch:
+        data["country"] = branch.country
+        if not data.get("city") and branch.city:
+            data["city"] = branch.city
 
     client = Client(
-        **payload.model_dump(),
+        **data,
         client_code=client_code,
         created_by_id=current_user.id,
     )
@@ -171,12 +177,19 @@ def update_client(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
+    branch = None
     if payload.branch_id is not None:
         branch = db.query(Branch).filter(Branch.id == payload.branch_id).first()
         if not branch:
             raise HTTPException(status_code=404, detail="Branch not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if branch:
+        data["country"] = branch.country
+        if not data.get("city") and branch.city:
+            data["city"] = branch.city
+
+    for field, value in data.items():
         setattr(client, field, value)
 
     db.commit()

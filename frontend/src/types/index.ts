@@ -24,6 +24,8 @@ export interface Branch {
   name_ar: string
   code: string
   country: string
+  city?: string | null
+  address?: string | null
 }
 
 // ── Client ───────────────────────────────────────────────────────────────────

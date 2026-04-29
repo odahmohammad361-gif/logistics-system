@@ -15,6 +15,8 @@ class BranchOut(BaseModel):
     name_ar: str
     code: str
     country: str
+    city: Optional[str] = None
+    address: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

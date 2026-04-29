@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Building2, MapPin, Phone, Globe, Mail, Plus, Pencil, Trash2, Warehouse } from 'lucide-react'
+import { Building2, MapPin, Phone, Globe, Plus, Pencil, Trash2, Warehouse } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from '@/services/warehouseService'
+import { getBranches } from '@/services/branchService'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -18,12 +19,6 @@ import {
 import type { CompanyWarehouse } from '@/types'
 import clsx from 'clsx'
 
-const BRANCHES = [
-  { key: 'china',  flag: '🇨🇳', name_ar: 'الفرع الصيني',   name_en: 'China Branch',  city: 'Guangzhou', details: 'Guangdong Province, China', phone: '', email: '' },
-  { key: 'jordan', flag: '🇯🇴', name_ar: 'الفرع الأردني',  name_en: 'Jordan Branch', city: 'Amman',     details: 'Amman, Jordan',            phone: '', email: '' },
-  { key: 'iraq',   flag: '🇮🇶', name_ar: 'الفرع العراقي', name_en: 'Iraq Branch',   city: 'Baghdad',   details: 'Baghdad, Iraq',            phone: '', email: '' },
-]
-
 interface WHForm {
   name: string
   name_ar: string
@@ -34,6 +29,14 @@ interface WHForm {
   contact_name: string
   phone: string
   notes: string
+}
+
+function branchFlag(value: string | null | undefined) {
+  const key = (value ?? '').toLowerCase()
+  if (key.includes('jordan') || key === 'jo') return '🇯🇴'
+  if (key.includes('china') || key === 'cn') return '🇨🇳'
+  if (key.includes('iraq') || key === 'iq') return '🇮🇶'
+  return '🌍'
 }
 
 export default function CompanyPage() {
@@ -49,6 +52,12 @@ export default function CompanyPage() {
   const { data: whData } = useQuery({
     queryKey: ['warehouses'],
     queryFn:  () => getWarehouses(),
+  })
+
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: getBranches,
+    staleTime: Infinity,
   })
 
   const whForm = useForm<WHForm>({ defaultValues: { warehouse_type: 'loading', country: 'China' } })
@@ -139,29 +148,29 @@ export default function CompanyPage() {
           {t('company.branches')}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {BRANCHES.map((branch) => (
-            <div key={branch.key} className="card space-y-3">
+          {branches.map((branch) => (
+            <div key={branch.id} className="card space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{branch.flag}</span>
+                <span className="text-2xl">{branchFlag(branch.country || branch.code)}</span>
                 <div>
                   <p className="text-sm font-semibold text-white">
-                    {isAr ? branch.name_ar : branch.name_en}
+                    {isAr ? branch.name_ar : branch.name}
                   </p>
-                  <p className="text-xs text-gray-500">{branch.city}</p>
+                  <p className="text-xs text-gray-500">{[branch.city, branch.country].filter(Boolean).join(', ') || branch.country}</p>
                 </div>
               </div>
               <div className="space-y-1.5 text-xs text-gray-400">
                 <div className="flex items-center gap-2">
                   <MapPin size={12} className="text-gray-500" />
-                  <span>{branch.details}</span>
+                  <span>{branch.address || [branch.city, branch.country].filter(Boolean).join(', ') || '—'}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Phone size={12} className="text-gray-500" />
-                  <span className="text-gray-600">{t('company.contact_pending')}</span>
-                </div>
+                <span className="inline-flex rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] text-brand-text-muted">{branch.code}</span>
               </div>
             </div>
           ))}
+          {branches.length === 0 && (
+            <p className="text-xs text-brand-text-muted py-4">{t('common.no_data')}</p>
+          )}
         </div>
       </div>
 

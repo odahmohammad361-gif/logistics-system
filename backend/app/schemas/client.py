@@ -15,6 +15,9 @@ class BranchShort(BaseModel):
     name: str
     name_ar: str
     code: str
+    country: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -12,9 +12,9 @@ from app.models.user import User, UserRole
 from app.core.security import hash_password
 
 DEFAULT_BRANCHES = [
-    {"name": "Jordan", "name_ar": "الأردن",  "code": "JO", "country": "Jordan"},
-    {"name": "China",  "name_ar": "الصين",   "code": "CN", "country": "China"},
-    {"name": "Iraq",   "name_ar": "العراق",  "code": "IQ", "country": "Iraq"},
+    {"name": "Jordan", "name_ar": "الأردن",  "code": "JO", "country": "Jordan", "city": "Amman"},
+    {"name": "China",  "name_ar": "الصين",   "code": "CN", "country": "China", "city": "Guangzhou"},
+    {"name": "Iraq",   "name_ar": "العراق",  "code": "IQ", "country": "Iraq", "city": "Baghdad"},
 ]
 
 ADMIN_EMAIL    = "admin@logistics.jo"

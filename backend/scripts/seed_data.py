@@ -42,9 +42,9 @@ try:
     # ── 1. BRANCHES ───────────────────────────────────────────────────────────────
     print("Seeding branches...")
     branch_rows = [
-        dict(name="Jordan Branch",  name_ar="فرع الأردن",  code="JO", country="Jordan"),
-        dict(name="Iraq Branch",    name_ar="فرع العراق",  code="IQ", country="Iraq"),
-        dict(name="China Office",   name_ar="مكتب الصين",  code="CN", country="China"),
+        dict(name="Jordan Branch",  name_ar="فرع الأردن",  code="JO", country="Jordan", city="Amman"),
+        dict(name="Iraq Branch",    name_ar="فرع العراق",  code="IQ", country="Iraq", city="Baghdad"),
+        dict(name="China Office",   name_ar="مكتب الصين",  code="CN", country="China", city="Guangzhou"),
     ]
     for r in branch_rows:
         if not skip(Branch, code=r["code"]):

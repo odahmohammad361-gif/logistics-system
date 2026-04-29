@@ -148,6 +148,7 @@ def migrate_to_client(
             f"A client with email {c.email} already exists (code: {existing.client_code})",
         )
 
+    branch = None
     branch_code = "JO"
     if payload.branch_id:
         branch = db.query(Branch).filter(Branch.id == payload.branch_id).first()
@@ -155,13 +156,16 @@ def migrate_to_client(
             raise HTTPException(404, "Branch not found")
         branch_code = branch.code
 
+    client_country = branch.country if branch else (payload.country or c.country)
+    client_city = payload.city or (branch.city if branch else None)
+
     client = Client(
         name=payload.name or c.full_name,
         name_ar=payload.name_ar,
         phone=payload.phone or c.phone,
         email=payload.email or c.email,
-        country=payload.country or c.country,
-        city=payload.city or None,
+        country=client_country,
+        city=client_city,
         address=payload.address or None,
         branch_id=payload.branch_id,
         notes=payload.notes or c.notes,

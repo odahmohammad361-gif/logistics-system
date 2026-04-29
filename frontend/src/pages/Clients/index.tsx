@@ -232,6 +232,7 @@ export default function ClientsPage() {
   const clientCountry = watch('country')
   const clientCity = watch('city')
   const clientPhone = watch('phone')
+  const clientBranchId = watch('branch_id')
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) => {
@@ -268,6 +269,7 @@ export default function ClientsPage() {
   const migrateCountry = watchM('country')
   const migrateCity = watchM('city')
   const migratePhone = watchM('phone')
+  const migrateBranchId = watchM('branch_id')
 
   const migrateMut = useMutation({
     mutationFn: (v: MigrateFormValues) =>
@@ -297,28 +299,29 @@ export default function ClientsPage() {
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', name_ar: '', phone: '', email: '', address: '', city: '', country: 'Jordan', branch_id: String(branches[0]?.id ?? ''), notes: '' })
+    reset({ name: '', name_ar: '', phone: '', email: '', address: '', city: '', country: 'Jordan', branch_id: defaultBranchIdForCountry('Jordan'), notes: '' })
     clearErrors(); setModal(true)
   }
   function openEdit(c: Client) {
+    const country = normalizeCountryValue(c.branch?.country) || normalizeCountryValue(c.country) || 'Jordan'
     setEditing(c)
     reset({
       name: c.name, name_ar: c.name_ar ?? '', phone: c.phone ?? '', email: c.email ?? '', address: c.address ?? '',
-      city: c.city ?? '', country: normalizeCountryValue(c.country) || 'Jordan', branch_id: c.branch ? String(c.branch.id) : '', notes: c.notes ?? '',
+      city: c.city ?? '', country, branch_id: c.branch ? String(c.branch.id) : defaultBranchIdForCountry(country), notes: c.notes ?? '',
     })
     clearErrors(); setModal(true)
   }
   function openMigrate(c: CustomerAdmin) {
+    const country = normalizeCountryValue(c.country) || 'Jordan'
     setMigrating(c)
     resetM({
       name: c.full_name, name_ar: '', phone: c.phone, email: c.email,
-      city: '', country: normalizeCountryValue(c.country) || 'Jordan', address: '', branch_id: String(branches[0]?.id ?? ''), notes: c.notes ?? '',
+      city: '', country, address: '', branch_id: defaultBranchIdForCountry(country), notes: c.notes ?? '',
     })
   }
 
   function handleBarcodeDecoded(code: string) { setSearch(code); setPage(1) }
 
-  const branchOptions = branches.map((b) => ({ value: String(b.id), label: b.name }))
   const dateLocale    = isAr ? 'ar-JO' : 'en-GB'
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
   const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
@@ -327,6 +330,35 @@ export default function ClientsPage() {
   const countryOptions = localizedCountryOptions(isAr)
   const clientRegionOptions = localizedRegionOptions(clientCountry, isAr)
   const migrateRegionOptions = localizedRegionOptions(migrateCountry, isAr)
+  const clientBranchOptions = branchOptionsForCountry(clientCountry)
+  const migrateBranchOptions = branchOptionsForCountry(migrateCountry)
+
+  function branchCountry(branch: { country?: string | null }) {
+    return normalizeCountryValue(branch.country) || ''
+  }
+
+  function branchMatchesCountry(branch: { country?: string | null }, country: string | null | undefined) {
+    const normalizedCountry = normalizeCountryValue(country)
+    return !normalizedCountry || branchCountry(branch) === normalizedCountry
+  }
+
+  function branchLabel(branch: { name: string; name_ar?: string | null; code: string; country?: string | null; city?: string | null }) {
+    const name = isAr ? (branch.name_ar || branch.name) : branch.name
+    return [name, branch.city, branch.code].filter(Boolean).join(' · ')
+  }
+
+  function branchOptionsForCountry(country: string | null | undefined) {
+    const filtered = branches.filter((branch) => branchMatchesCountry(branch, country))
+    return [
+      { value: '', label: isAr ? '— اختر الفرع —' : '— Select branch —' },
+      ...filtered.map((branch) => ({ value: String(branch.id), label: branchLabel(branch) })),
+    ]
+  }
+
+  function defaultBranchIdForCountry(country: string | null | undefined) {
+    const match = branches.find((branch) => branchMatchesCountry(branch, country))
+    return match ? String(match.id) : ''
+  }
 
   useEffect(() => {
     const allowed = localizedRegionOptions(clientCountry, false, false).map(option => option.value)
@@ -337,6 +369,38 @@ export default function ClientsPage() {
     const allowed = localizedRegionOptions(migrateCountry, false, false).map(option => option.value)
     if (migrateCity && allowed.length && !allowed.includes(migrateCity)) setValueM('city', '')
   }, [migrateCountry, migrateCity, setValueM])
+
+  useEffect(() => {
+    if (!branches.length || !clientCountry) return
+    const selected = branches.find((branch) => String(branch.id) === clientBranchId)
+    if (selected && branchMatchesCountry(selected, clientCountry)) return
+    const nextBranchId = defaultBranchIdForCountry(clientCountry)
+    if (nextBranchId !== clientBranchId) setValue('branch_id', nextBranchId, { shouldDirty: true })
+  }, [branches, clientCountry, clientBranchId, setValue])
+
+  useEffect(() => {
+    const selected = branches.find((branch) => String(branch.id) === clientBranchId)
+    if (!selected) return
+    const nextCountry = branchCountry(selected)
+    if (nextCountry && nextCountry !== clientCountry) setValue('country', nextCountry, { shouldDirty: true })
+    if (!clientCity && selected.city) setValue('city', selected.city, { shouldDirty: true })
+  }, [branches, clientBranchId, clientCountry, clientCity, setValue])
+
+  useEffect(() => {
+    if (!branches.length || !migrateCountry) return
+    const selected = branches.find((branch) => String(branch.id) === migrateBranchId)
+    if (selected && branchMatchesCountry(selected, migrateCountry)) return
+    const nextBranchId = defaultBranchIdForCountry(migrateCountry)
+    if (nextBranchId !== migrateBranchId) setValueM('branch_id', nextBranchId, { shouldDirty: true })
+  }, [branches, migrateCountry, migrateBranchId, setValueM])
+
+  useEffect(() => {
+    const selected = branches.find((branch) => String(branch.id) === migrateBranchId)
+    if (!selected) return
+    const nextCountry = branchCountry(selected)
+    if (nextCountry && nextCountry !== migrateCountry) setValueM('country', nextCountry, { shouldDirty: true })
+    if (!migrateCity && selected.city) setValueM('city', selected.city, { shouldDirty: true })
+  }, [branches, migrateBranchId, migrateCountry, migrateCity, setValueM])
 
   // ── Main clients columns ──────────────────────────────────────────────────
   const columns = [
@@ -698,6 +762,10 @@ export default function ClientsPage() {
             </FormRow>
             <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
+              <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...register('country')} />
+              <Select label={t('clients.branch')} options={clientBranchOptions} {...register('branch_id')} />
+            </FormRow>
+            <FormRow>
               <PhoneInput
                 label={t('clients.phone')}
                 value={clientPhone}
@@ -707,11 +775,9 @@ export default function ClientsPage() {
               />
               <Input type="email" label={t('clients.email')} {...register('email', { validate: (v) => validateEmailValue(v) || emailError })} error={errors.email?.message} />
             </FormRow>
-            <Select label={t('clients.branch')} options={branchOptions} {...register('branch_id')} />
           </FormSection>
           <FormSection title={t('common.address')}>
             <FormRow>
-              <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...register('country')} />
               <Select
                 label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
                 options={clientRegionOptions}
@@ -776,6 +842,10 @@ export default function ClientsPage() {
                 </FormRow>
                 <input type="hidden" {...regM('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
                 <FormRow>
+                  <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...regM('country')} />
+                  <Select label={t('clients.branch')} options={migrateBranchOptions} {...regM('branch_id')} />
+                </FormRow>
+                <FormRow>
                   <PhoneInput
                     label={t('clients.phone')}
                     value={migratePhone}
@@ -785,11 +855,9 @@ export default function ClientsPage() {
                   />
                   <Input type="email" label={t('clients.email')} {...regM('email', { validate: (v) => validateEmailValue(v) || emailError })} error={errM.email?.message} />
                 </FormRow>
-                <Select label={t('clients.branch')} options={branchOptions} {...regM('branch_id')} />
               </FormSection>
               <FormSection title={t('common.address')}>
                 <FormRow>
-                  <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...regM('country')} />
                   <Select
                     label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
                     options={migrateRegionOptions}
