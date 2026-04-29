@@ -2,6 +2,7 @@ import base64
 import io
 import os
 import shutil
+import uuid
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body, status
 from fastapi.responses import Response
@@ -86,6 +87,47 @@ def _validate_product_ids(db: Session, items_data: list) -> None:
         raise HTTPException(404, f"Product not found: {sorted(missing)[0]}")
 
 
+def _relative_upload_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    normalized = path.replace("\\", "/")
+    if normalized.startswith("uploads/"):
+        return normalized[len("uploads/"):]
+    uploads_marker = "/uploads/"
+    if uploads_marker in normalized:
+        return normalized.split(uploads_marker, 1)[1]
+    return normalized
+
+
+def _product_main_image_path(product: Product | None) -> str | None:
+    if not product or not product.photos:
+        return None
+    photo = next((p for p in product.photos if p.is_main), product.photos[0])
+    return _relative_upload_path(photo.file_path)
+
+
+def _save_item_image_data(data_str: str | None) -> str | None:
+    if not data_str:
+        return None
+    if "," in data_str:
+        header, b64data = data_str.split(",", 1)
+        ext = "jpg" if "jpeg" in header or "jpg" in header else "png"
+    else:
+        b64data = data_str
+        ext = "png"
+    try:
+        img_bytes = base64.b64decode(b64data)
+    except Exception:
+        raise HTTPException(400, "Invalid item image data")
+
+    img_dir = os.path.join(UPLOAD_DIR, "products")
+    os.makedirs(img_dir, exist_ok=True)
+    filename = f"item_{uuid.uuid4().hex}.{ext}"
+    with open(os.path.join(img_dir, filename), "wb") as f:
+        f.write(img_bytes)
+    return os.path.join("products", filename)
+
+
 def _add_invoice_item(
     db: Session,
     invoice_id: int,
@@ -95,6 +137,13 @@ def _add_invoice_item(
 ) -> None:
     tp = Decimal(str(item_data.unit_price)) * Decimal(str(item_data.quantity))
     vol_w, chrg_w = _compute_air_weights(item_data)
+    product = db.query(Product).filter(Product.id == item_data.product_id).first() if item_data.product_id else None
+    image_path = (
+        _save_item_image_data(getattr(item_data, "product_image_data", None))
+        or _product_main_image_path(product)
+        or _relative_upload_path(getattr(item_data, "product_image_path", None))
+        or _relative_upload_path(product_image_path)
+    )
     item = InvoiceItem(
         invoice_id=invoice_id,
         product_id=item_data.product_id,
@@ -102,13 +151,16 @@ def _add_invoice_item(
         description_ar=item_data.description_ar,
         details=item_data.details,
         details_ar=item_data.details_ar,
-        product_image_path=product_image_path,
+        product_image_path=image_path,
         hs_code=item_data.hs_code,
+        customs_unit_basis=item_data.customs_unit_basis,
+        customs_unit_quantity=item_data.customs_unit_quantity,
         quantity=item_data.quantity,
         unit=item_data.unit,
         unit_price=item_data.unit_price,
         total_price=tp,
         cartons=item_data.cartons,
+        pcs_per_carton=item_data.pcs_per_carton,
         gross_weight=item_data.gross_weight,
         net_weight=item_data.net_weight,
         cbm=item_data.cbm,

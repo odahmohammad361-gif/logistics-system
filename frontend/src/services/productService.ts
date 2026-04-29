@@ -43,6 +43,9 @@ export const updateHSCodeReference = (id: number, data: unknown) =>
 export const createProduct = (data: unknown) =>
   api.post<Product>('/products/admin', data).then((r) => r.data)
 
+export const createProductFromInvoiceItem = (data: unknown) =>
+  api.post<Product>('/products/admin/from-invoice-item', data).then((r) => r.data)
+
 export const updateProduct = (id: number, data: unknown) =>
   api.patch<Product>(`/products/admin/${id}`, data).then((r) => r.data)
 
@@ -54,6 +57,14 @@ export const uploadProductPhoto = (productId: number, file: File, isMain = false
   form.append('file', file)
   form.append('is_main', String(isMain))
   return api.post<Product>(`/products/admin/${productId}/photos`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data)
+}
+
+export const uploadProductPhotos = (productId: number, files: File[]) => {
+  const form = new FormData()
+  files.slice(0, 20).forEach((file) => form.append('files', file))
+  return api.post<Product>(`/products/admin/${productId}/photos/bulk`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then((r) => r.data)
 }

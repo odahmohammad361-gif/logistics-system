@@ -7,6 +7,7 @@ interface Props {
   onFile: (file: File) => void
   accept?: string
   className?: string
+  enablePaste?: boolean
 }
 
 /**
@@ -21,6 +22,7 @@ export default function ImageUploadZone({
   onFile,
   accept = 'image/png,image/jpeg',
   className = '',
+  enablePaste = true,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -43,6 +45,7 @@ export default function ImageUploadZone({
 
   // Clipboard paste listener
   useEffect(() => {
+    if (!enablePaste) return
     const onPaste = (e: ClipboardEvent) => {
       const items = Array.from(e.clipboardData?.items ?? [])
       const imgItem = items.find((i) => i.type.startsWith('image/'))
@@ -53,7 +56,7 @@ export default function ImageUploadZone({
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [handleFile])
+  }, [enablePaste, handleFile])
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()

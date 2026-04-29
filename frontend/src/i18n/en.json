@@ -538,6 +538,7 @@
     },
     "units": {
       "pcs": "pcs",
+      "dozen": "dozen",
       "pairs": "pairs",
       "sets": "sets",
       "kg": "kg",

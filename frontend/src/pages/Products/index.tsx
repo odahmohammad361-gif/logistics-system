@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Pencil, Trash2, ImagePlus, X, Package, Database, Save } from 'lucide-react'
 import {
   adminListProducts, createProduct, updateProduct, deleteProduct,
-  uploadProductPhoto, deleteProductPhoto, listProductTaxonomy,
+  uploadProductPhotos, deleteProductPhoto, listProductTaxonomy,
   createProductMainCategory, updateProductMainCategory,
   createProductSubcategory, updateProductSubcategory,
   createProductTypeReference, updateProductTypeReference,
@@ -376,8 +376,8 @@ export default function ProductsPage() {
   })
 
   const uploadMut = useMutation({
-    mutationFn: ({ productId, file }: { productId: number; file: File }) =>
-      uploadProductPhoto(productId, file),
+    mutationFn: ({ productId, files }: { productId: number; files: File[] }) =>
+      uploadProductPhotos(productId, files),
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['products-admin'] })
       setPhotosProduct(updated)
@@ -1010,10 +1010,11 @@ export default function ProductsPage() {
               ref={photoInputRef}
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) uploadMut.mutate({ productId: photosProduct.id, file })
+                const files = Array.from(e.target.files ?? []).filter((file) => file.type.startsWith('image/')).slice(0, 20)
+                if (files.length) uploadMut.mutate({ productId: photosProduct.id, files })
                 if (photoInputRef.current) photoInputRef.current.value = ''
               }}
             />

@@ -1,3 +1,4 @@
+import base64
 import os
 import uuid
 import shutil
@@ -61,6 +62,28 @@ class BulkImportConfig(BaseModel):
     default_category: Optional[str] = None
 
 
+class ProductFromInvoiceItem(BaseModel):
+    name: str
+    name_ar: Optional[str] = None
+    description: Optional[str] = None
+    description_ar: Optional[str] = None
+    hs_code: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    unit: Optional[str] = None
+    unit_price: float = 0
+    currency: str = "USD"
+    cartons: Optional[int] = None
+    pcs_per_carton: Optional[float] = None
+    quantity: Optional[float] = None
+    cbm: Optional[float] = None
+    gross_weight: Optional[float] = None
+    net_weight: Optional[float] = None
+    carton_length_cm: Optional[float] = None
+    carton_width_cm: Optional[float] = None
+    carton_height_cm: Optional[float] = None
+    product_image_data: Optional[str] = None
+
+
 def _save_photo(file: UploadFile) -> str:
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -71,6 +94,47 @@ def _save_photo(file: UploadFile) -> str:
     with open(path, "wb") as f:
         f.write(file.file.read())
     return path
+
+
+def _save_photo_data(data_str: str | None) -> str | None:
+    if not data_str:
+        return None
+    if "," in data_str:
+        header, b64data = data_str.split(",", 1)
+        ext = ".jpg" if "jpeg" in header or "jpg" in header else ".png"
+    else:
+        b64data = data_str
+        ext = ".png"
+    try:
+        img_bytes = base64.b64decode(b64data)
+    except Exception:
+        raise HTTPException(400, "Invalid product image data")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    path = os.path.join(UPLOAD_DIR, filename)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(img_bytes)
+    return path
+
+
+def _generate_invoice_product_code(db: Session) -> str:
+    prefix = "INV-"
+    count = db.query(Product).filter(Product.code.like(f"{prefix}%")).count()
+    while True:
+        code = f"{prefix}{str(count + 1).zfill(5)}"
+        if not db.query(Product).filter(Product.code == code).first():
+            return code
+        count += 1
+
+
+def _per_piece_price(unit_price: float, unit: str | None, pcs_per_carton: float) -> float:
+    unit_key = (unit or "pcs").lower()
+    divisor = 1.0
+    if unit_key in {"carton", "cartons", "ctn"}:
+        divisor = pcs_per_carton or 1.0
+    elif unit_key in {"dozen", "dozens", "dz"}:
+        divisor = 12.0
+    return round((unit_price or 0) / divisor, 4)
 
 
 def _remove_file_if_local(path: str | None) -> None:
@@ -370,6 +434,55 @@ def create_product(
     return product
 
 
+@router.post("/admin/from-invoice-item", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+def create_product_from_invoice_item(
+    payload: ProductFromInvoiceItem,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    cartons = payload.cartons or 1
+    quantity = payload.quantity or 0
+    pcs_per_carton = int(round(payload.pcs_per_carton or ((quantity / cartons) if cartons and quantity else 1))) or 1
+    cbm_per_carton = (payload.cbm or 0) / cartons if cartons else 0
+    gross_per_carton = (payload.gross_weight or 0) / cartons if cartons else None
+    net_per_carton = (payload.net_weight or 0) / cartons if cartons else None
+    per_piece = _per_piece_price(payload.unit_price, payload.unit, pcs_per_carton)
+    currency = (payload.currency or "USD").upper()
+
+    product = Product(
+        code=_generate_invoice_product_code(db),
+        name=payload.name.strip(),
+        name_ar=payload.name_ar or None,
+        description=payload.description or None,
+        description_ar=payload.description_ar or None,
+        price_usd=per_piece if currency != "CNY" else None,
+        price_cny=per_piece if currency == "CNY" else 0,
+        hs_code=payload.hs_code or None,
+        customs_unit_basis=payload.customs_unit_basis or payload.unit or None,
+        pcs_per_carton=pcs_per_carton,
+        cbm_per_carton=cbm_per_carton or 0,
+        min_order_cartons=max(int(cartons), 1),
+        gross_weight_kg_per_carton=gross_per_carton or None,
+        net_weight_kg_per_carton=net_per_carton or None,
+        carton_length_cm=payload.carton_length_cm,
+        carton_width_cm=payload.carton_width_cm,
+        carton_height_cm=payload.carton_height_cm,
+        is_active=True,
+        is_featured=False,
+    )
+    _apply_reference_defaults(product, db)
+    db.add(product)
+    db.flush()
+
+    image_path = _save_photo_data(payload.product_image_data)
+    if image_path:
+        db.add(ProductPhoto(product_id=product.id, file_path=image_path, is_main=True, sort_order=0))
+
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 @router.patch("/admin/{product_id}", response_model=ProductResponse)
 def update_product(
     product_id: int,
@@ -431,6 +544,36 @@ def upload_photo(
     sort_order = len(product.photos)
     photo = ProductPhoto(product_id=product_id, file_path=path, is_main=is_main or sort_order == 0, sort_order=sort_order)
     db.add(photo)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/admin/{product_id}/photos/bulk", response_model=ProductResponse)
+def upload_photos_bulk(
+    product_id: int,
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(404, "Product not found")
+    if not files:
+        raise HTTPException(400, "No photos uploaded")
+    if len(files) > 20:
+        raise HTTPException(400, "Maximum 20 photos per upload")
+
+    sort_order = len(product.photos)
+    has_main = any(photo.is_main for photo in product.photos)
+    for offset, file in enumerate(files):
+        path = _save_photo(file)
+        db.add(ProductPhoto(
+            product_id=product_id,
+            file_path=path,
+            is_main=not has_main and offset == 0,
+            sort_order=sort_order + offset,
+        ))
     db.commit()
     db.refresh(product)
     return product

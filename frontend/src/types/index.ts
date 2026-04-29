@@ -66,11 +66,14 @@ export interface InvoiceItem {
   details?: string | null
   details_ar?: string | null
   hs_code: string | null
+  customs_unit_basis?: string | null
+  customs_unit_quantity?: number | null
   quantity: number
   unit?: string | null
   unit_price: number
   total_price: number
   cartons?: number | null
+  pcs_per_carton?: number | null
   gross_weight?: number | null
   net_weight?: number | null
   cbm?: number | null

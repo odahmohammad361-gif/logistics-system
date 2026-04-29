@@ -14,11 +14,16 @@ class InvoiceItemCreate(BaseModel):
     description_ar: Optional[str] = None
     details: Optional[str] = None
     details_ar: Optional[str] = None
+    product_image_data: Optional[str] = None
+    product_image_path: Optional[str] = None
     hs_code: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    customs_unit_quantity: Optional[Decimal] = None
     quantity: Decimal = Decimal("0")
     unit: Optional[str] = None
     unit_price: Decimal = Decimal("0")
     cartons: Optional[int] = None
+    pcs_per_carton: Optional[Decimal] = None
     gross_weight: Optional[Decimal] = None
     net_weight: Optional[Decimal] = None
     cbm: Optional[Decimal] = None
@@ -35,11 +40,16 @@ class InvoiceItemUpdate(BaseModel):
     description_ar: Optional[str] = None
     details: Optional[str] = None
     details_ar: Optional[str] = None
+    product_image_data: Optional[str] = None
+    product_image_path: Optional[str] = None
     hs_code: Optional[str] = None
+    customs_unit_basis: Optional[str] = None
+    customs_unit_quantity: Optional[Decimal] = None
     quantity: Optional[Decimal] = None
     unit: Optional[str] = None
     unit_price: Optional[Decimal] = None
     cartons: Optional[int] = None
+    pcs_per_carton: Optional[Decimal] = None
     gross_weight: Optional[Decimal] = None
     net_weight: Optional[Decimal] = None
     cbm: Optional[Decimal] = None
@@ -58,11 +68,14 @@ class InvoiceItemResponse(BaseModel):
     details_ar: Optional[str]
     product_image_path: Optional[str]
     hs_code: Optional[str]
+    customs_unit_basis: Optional[str]
+    customs_unit_quantity: Optional[Decimal]
     quantity: Decimal
     unit: Optional[str]
     unit_price: Decimal
     total_price: Decimal
     cartons: Optional[int]
+    pcs_per_carton: Optional[Decimal]
     gross_weight: Optional[Decimal]
     net_weight: Optional[Decimal]
     cbm: Optional[Decimal]

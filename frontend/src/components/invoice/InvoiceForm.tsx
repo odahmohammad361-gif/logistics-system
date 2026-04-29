@@ -1,17 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Trash2, FileSpreadsheet, ChevronDown, ChevronUp,
   Package, Ship, Banknote, FileText,
-  StickyNote, AlertCircle,
+  StickyNote, AlertCircle, ImagePlus,
 } from 'lucide-react'
 import { Input, Select, Textarea, FormRow } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { Invoice, Product } from '@/types'
-import { listProducts } from '@/services/productService'
+import { createProductFromInvoiceItem, listProducts } from '@/services/productService'
 import {
   localizedPaymentTermOptions, localizedShippingTermOptions,
   calcVolumetricWeight, calcChargeableWeight,
@@ -27,7 +27,21 @@ import clsx from 'clsx'
 
 const CURRENCIES = ['USD', 'EUR', 'CNY', 'JOD', 'IQD', 'SAR', 'AED']
 
-const UNIT_VALUES = ['pcs','pairs','sets','kg','tons','cbm','rolls','bags','boxes','cartons'] as const
+const UNIT_VALUES = ['pcs','dozen','pairs','sets','kg','tons','cbm','rolls','bags','boxes','cartons'] as const
+
+const BASIS_TO_UNIT: Record<string, string> = {
+  piece: 'pcs',
+  pieces: 'pcs',
+  pcs: 'pcs',
+  dozen: 'dozen',
+  dz: 'dozen',
+  carton: 'cartons',
+  cartons: 'cartons',
+  ctn: 'cartons',
+  kg: 'kg',
+  bag: 'bags',
+  bags: 'bags',
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type TabId = 'info' | 'shipping' | 'items' | 'bank' | 'notes'
@@ -44,13 +58,20 @@ interface ItemFormValues {
   details: string
   details_ar: string
   hs_code: string
+  customs_unit_basis: string
+  customs_unit_quantity: number | null
   quantity: number
   unit: string
   unit_price: number
   cartons: number | null
+  pcs_per_carton: number | null
   gross_weight: number | null
   net_weight: number | null
   cbm: number | null
+  product_image_path: string
+  product_image_data: string
+  product_image_name: string
+  save_to_products: boolean
   carton_length_cm: number | null
   carton_width_cm: number | null
   carton_height_cm: number | null
@@ -106,11 +127,41 @@ function defaultItem(): ItemFormValues {
   return {
     product_id: null,
     description: '', description_ar: '', details: '', details_ar: '',
-    hs_code: '', quantity: 1, unit: 'pcs', unit_price: 0,
-    cartons: null, gross_weight: null, net_weight: null, cbm: null,
+    hs_code: '', customs_unit_basis: '', customs_unit_quantity: null,
+    quantity: 1, unit: 'pcs', unit_price: 0,
+    cartons: null, pcs_per_carton: null, gross_weight: null, net_weight: null, cbm: null,
+    product_image_path: '', product_image_data: '', product_image_name: '', save_to_products: false,
     carton_length_cm: null, carton_width_cm: null, carton_height_cm: null,
     sort_order: 0,
   }
+}
+
+function num(value: unknown, fallback = 0) {
+  const n = Number(value ?? fallback)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function productImageUrl(product: Product | undefined) {
+  const photo = product?.photos?.find((p) => p.is_main) ?? product?.photos?.[0]
+  return photo ? `/uploads/products/${photo.file_path.split('/').pop()}` : ''
+}
+
+function invoiceItemImageUrl(path: string | null | undefined) {
+  if (!path) return ''
+  return path.startsWith('http') ? path : `/uploads/${path.replace(/^uploads\//, '')}`
+}
+
+function unitFromBasis(value: string | null | undefined) {
+  return BASIS_TO_UNIT[(value ?? '').toLowerCase()] ?? ''
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 function airCalc(item: ItemFormValues) {
@@ -177,6 +228,8 @@ export default function InvoiceForm({
   const [tabErrors, setTabErrors]         = useState<Partial<Record<TabId, boolean>>>({})
   // No toggle needed — both client dropdown and buyer_name field are always shown (both optional)
   const [clientError, setClientError] = useState<string | null>(null)
+  const bulkPhotoInputRef = useRef<HTMLInputElement>(null)
+  const queryClient = useQueryClient()
 
   const { data: productsData } = useQuery({
     queryKey: ['invoice-products'],
@@ -222,13 +275,20 @@ export default function InvoiceForm({
         details:        item.details ?? '',
         details_ar:     item.details_ar ?? '',
         hs_code:        item.hs_code ?? '',
+        customs_unit_basis: item.customs_unit_basis ?? '',
+        customs_unit_quantity: item.customs_unit_quantity ? Number(item.customs_unit_quantity) : null,
         quantity:       Number(item.quantity),
         unit:           item.unit ?? 'pcs',
         unit_price:     Number(item.unit_price),
         cartons:        item.cartons ?? null,
+        pcs_per_carton: item.pcs_per_carton ? Number(item.pcs_per_carton) : null,
         gross_weight:   item.gross_weight ? Number(item.gross_weight) : null,
         net_weight:     item.net_weight  ? Number(item.net_weight)  : null,
         cbm:            item.cbm ? Number(item.cbm) : null,
+        product_image_path: item.product_image_path ?? '',
+        product_image_data: '',
+        product_image_name: '',
+        save_to_products: false,
         carton_length_cm: item.carton_length_cm ? Number(item.carton_length_cm) : null,
         carton_width_cm:  item.carton_width_cm  ? Number(item.carton_width_cm)  : null,
         carton_height_cm: item.carton_height_cm ? Number(item.carton_height_cm) : null,
@@ -263,6 +323,57 @@ export default function InvoiceForm({
     return `${product.code} — ${name}${hsCode ? ` — HS ${hsCode}` : ''}`
   }
 
+  function productUnitChoices(product: Product | undefined) {
+    const preferred = unitFromBasis(product?.customs_unit_basis ?? product?.product_type?.default_customs_unit_basis)
+    const units = new Set<string>()
+    if (preferred) units.add(preferred)
+    units.add('pcs')
+    if (product?.pcs_per_carton) units.add('cartons')
+    units.add('dozen')
+    return Array.from(units)
+  }
+
+  function unitOptionsForItem(item: ItemFormValues) {
+    const product = products.find((p) => p.id === item.product_id)
+    const units = product ? productUnitChoices(product) : UNIT_VALUES
+    return units.map((value) => {
+      const pieces = product && value === 'cartons' ? ` (${product.pcs_per_carton} ${t('invoices.units.pcs')})` : ''
+      return { value, label: `${t(`invoices.units.${value}`, value)}${pieces}` }
+    })
+  }
+
+  function productUnitPrice(product: Product, unit: string) {
+    const perPiece = watchCurrency === 'CNY'
+      ? num(product.price_cny)
+      : num(product.price_usd ?? product.price_cny)
+    if (unit === 'cartons') return Number((perPiece * num(product.pcs_per_carton, 1)).toFixed(4))
+    if (unit === 'dozen') return Number((perPiece * 12).toFixed(4))
+    return perPiece
+  }
+
+  function applyProductUnitToItem(index: number, unit: string, product?: Product) {
+    const selected = product ?? products.find((p) => p.id === watchItems[index]?.product_id)
+    if (!selected) return
+    const cartons = Math.max(num(selected.min_order_cartons, 1), 1)
+    const pcsPerCarton = Math.max(num(selected.pcs_per_carton, 1), 1)
+    const totalPieces = cartons * pcsPerCarton
+    const customsBasis = selected.customs_unit_basis ?? selected.product_type?.default_customs_unit_basis ?? ''
+
+    setValue(`items.${index}.unit`, unit)
+    setValue(`items.${index}.unit_price`, productUnitPrice(selected, unit))
+    setValue(`items.${index}.cartons`, cartons)
+    setValue(`items.${index}.pcs_per_carton`, pcsPerCarton)
+    setValue(`items.${index}.customs_unit_basis`, customsBasis)
+    setValue(`items.${index}.customs_unit_quantity`, unit === 'dozen' ? Math.ceil(totalPieces / 12) : unit === 'cartons' ? cartons : totalPieces)
+    if (unit === 'cartons') setValue(`items.${index}.quantity`, cartons)
+    else if (unit === 'dozen') setValue(`items.${index}.quantity`, Math.ceil(totalPieces / 12))
+    else setValue(`items.${index}.quantity`, totalPieces)
+
+    if (selected.gross_weight_kg_per_carton) setValue(`items.${index}.gross_weight`, Number((cartons * num(selected.gross_weight_kg_per_carton)).toFixed(3)))
+    if (selected.net_weight_kg_per_carton) setValue(`items.${index}.net_weight`, Number((cartons * num(selected.net_weight_kg_per_carton)).toFixed(3)))
+    if (selected.cbm_per_carton) setValue(`items.${index}.cbm`, Number((cartons * num(selected.cbm_per_carton)).toFixed(4)))
+  }
+
   function applyProductToItem(index: number, productId: string) {
     const product = products.find((item) => String(item.id) === productId)
     if (!product) {
@@ -271,23 +382,20 @@ export default function InvoiceForm({
     }
 
     const current = watchItems[index]
-    const cartons = Number(current?.cartons || 0)
     setValue(`items.${index}.product_id`, product.id)
     setValue(`items.${index}.description`, product.name)
     setValue(`items.${index}.description_ar`, product.name_ar ?? '')
     setValue(`items.${index}.details`, product.description ?? '')
     setValue(`items.${index}.details_ar`, product.description_ar ?? '')
     setValue(`items.${index}.hs_code`, product.hs_code_ref?.hs_code ?? product.hs_code ?? '')
-    setValue(`items.${index}.unit`, 'pcs')
-    if (watchCurrency === 'USD' && product.price_usd) setValue(`items.${index}.unit_price`, Number(product.price_usd))
-    if (watchCurrency === 'CNY' && product.price_cny) setValue(`items.${index}.unit_price`, Number(product.price_cny))
-    if (product.gross_weight_kg_per_carton) setValue(`items.${index}.gross_weight`, Number(product.gross_weight_kg_per_carton))
-    if (product.net_weight_kg_per_carton) setValue(`items.${index}.net_weight`, Number(product.net_weight_kg_per_carton))
-    if (product.carton_length_cm) setValue(`items.${index}.carton_length_cm`, Number(product.carton_length_cm))
-    if (product.carton_width_cm) setValue(`items.${index}.carton_width_cm`, Number(product.carton_width_cm))
-    if (product.carton_height_cm) setValue(`items.${index}.carton_height_cm`, Number(product.carton_height_cm))
-    if (cartons > 0 && product.pcs_per_carton) setValue(`items.${index}.quantity`, cartons * Number(product.pcs_per_carton))
-    if (cartons > 0 && product.cbm_per_carton) setValue(`items.${index}.cbm`, Number((cartons * Number(product.cbm_per_carton)).toFixed(4)))
+    setValue(`items.${index}.product_image_path`, productImageUrl(product))
+    setValue(`items.${index}.product_image_data`, '')
+    setValue(`items.${index}.save_to_products`, false)
+    if (product.carton_length_cm) setValue(`items.${index}.carton_length_cm`, num(product.carton_length_cm))
+    if (product.carton_width_cm) setValue(`items.${index}.carton_width_cm`, num(product.carton_width_cm))
+    if (product.carton_height_cm) setValue(`items.${index}.carton_height_cm`, num(product.carton_height_cm))
+    const defaultUnit = unitFromBasis(product.customs_unit_basis ?? product.product_type?.default_customs_unit_basis) || 'pcs'
+    applyProductUnitToItem(index, defaultUnit, product)
   }
 
   function handleExcelImport(items: ParsedItem[]) {
@@ -296,11 +404,13 @@ export default function InvoiceForm({
       description: item.description, description_ar: '',
       details: item.details,        details_ar: '',
       hs_code: item.hs_code,
+      customs_unit_basis: '', customs_unit_quantity: null,
       quantity: item.quantity ?? 1,
       unit: 'pcs',
       unit_price: item.unit_price ?? 0,
-      cartons: item.cartons, gross_weight: item.gross_weight,
+      cartons: item.cartons, pcs_per_carton: null, gross_weight: item.gross_weight,
       net_weight: item.net_weight, cbm: item.cbm,
+      product_image_path: '', product_image_data: '', product_image_name: '', save_to_products: false,
       carton_length_cm: null, carton_width_cm: null, carton_height_cm: null,
       sort_order: idx,
     })))
@@ -347,17 +457,73 @@ export default function InvoiceForm({
     }
   }
 
+  async function saveManualProducts(data: FormValues) {
+    let createdProduct = false
+    const items = await Promise.all(data.items.map(async (item) => {
+      if (!item.save_to_products || item.product_id || !item.description.trim()) return item
+      const product = await createProductFromInvoiceItem({
+        name: item.description,
+        name_ar: item.description_ar || undefined,
+        description: item.details || undefined,
+        description_ar: item.details_ar || undefined,
+        hs_code: item.hs_code || undefined,
+        customs_unit_basis: item.customs_unit_basis || item.unit || undefined,
+        unit: item.unit || 'pcs',
+        unit_price: item.unit_price || 0,
+        currency: data.currency || 'USD',
+        cartons: item.cartons || undefined,
+        pcs_per_carton: item.pcs_per_carton || undefined,
+        quantity: item.quantity || undefined,
+        cbm: item.cbm || undefined,
+        gross_weight: item.gross_weight || undefined,
+        net_weight: item.net_weight || undefined,
+        carton_length_cm: item.carton_length_cm || undefined,
+        carton_width_cm: item.carton_width_cm || undefined,
+        carton_height_cm: item.carton_height_cm || undefined,
+        product_image_data: item.product_image_data || undefined,
+      })
+      createdProduct = true
+      return {
+        ...item,
+        product_id: product.id,
+        product_image_data: '',
+        product_image_path: productImageUrl(product),
+        save_to_products: false,
+      }
+    }))
+    if (createdProduct) {
+      queryClient.invalidateQueries({ queryKey: ['invoice-products'] })
+    }
+    return { ...data, items }
+  }
+
+  async function addPhotoRows(files: File[]) {
+    const selected = files.filter((file) => file.type.startsWith('image/')).slice(0, 20)
+    if (!selected.length) return
+    const rows = await Promise.all(selected.map(async (file, idx): Promise<ItemFormValues> => ({
+      ...defaultItem(),
+      description: file.name.replace(/\.[^.]+$/, ''),
+      product_image_data: await fileToDataUrl(file),
+      product_image_name: file.name,
+      sort_order: fields.length + idx,
+    })))
+    const onlyBlank = fields.length === 1 && !watchItems[0]?.description && !watchItems[0]?.product_id
+    if (onlyBlank) replace(rows)
+    else append(rows)
+  }
+
   return (
     <>
       <form
-        onSubmit={handleSubmit((data) => {
-          const s = sanitize(data)
+        onSubmit={handleSubmit(async (data) => {
           // Must have either a real client or a buyer name
-          if (!lockedClient && !s.client_id && !s.buyer_name) {
+          if (!lockedClient && !data.client_id && !data.buyer_name) {
             setClientError(t('invoices.client_required'))
             setActiveTab('info')
             return
           }
+          const withProducts = await saveManualProducts(data)
+          const s = sanitize(withProducts)
           setClientError(null)
           return onSubmit(s as FormValues)
         }, onInvalid)}
@@ -541,16 +707,35 @@ export default function InvoiceForm({
                   </span>
                 )}
               </div>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setExcelImport(true)}>
-                <FileSpreadsheet size={13} />
-                {t('invoices.import_excel')}
-              </Button>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={bulkPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    void addPhotoRows(Array.from(event.target.files ?? []))
+                    event.target.value = ''
+                  }}
+                />
+                <Button type="button" variant="secondary" size="sm" onClick={() => bulkPhotoInputRef.current?.click()}>
+                  <ImagePlus size={13} />
+                  {isRTL ? 'إضافة صور كأصناف' : 'Add Photos'}
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setExcelImport(true)}>
+                  <FileSpreadsheet size={13} />
+                  {t('invoices.import_excel')}
+                </Button>
+              </div>
             </div>
 
             {/* Items */}
             <div className="space-y-3">
               {fields.map((field, i) => {
                 const item     = watchItems[i] ?? {}
+                const selectedProduct = products.find((product) => product.id === item.product_id)
+                const imagePreview = item.product_image_data || productImageUrl(selectedProduct) || invoiceItemImageUrl(item.product_image_path)
                 const calc     = isAir ? airCalc(item as ItemFormValues) : null
                 const expanded = expandedItems[i] ?? false
                 const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0)
@@ -562,6 +747,9 @@ export default function InvoiceForm({
                   >
                     {/* Item Header */}
                     <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.02] border-b border-brand-border/50">
+                      {imagePreview && (
+                        <img src={imagePreview} alt="" className="h-9 w-9 rounded-md object-cover border border-brand-border bg-black/20" />
+                      )}
                       <div className="w-6 h-6 rounded-md bg-brand-primary/15 flex items-center justify-center text-[10px] font-bold text-brand-primary shrink-0">
                         {i + 1}
                       </div>
@@ -609,6 +797,19 @@ export default function InvoiceForm({
                             ))}
                           </select>
                         </div>
+                        <div className="space-y-1.5">
+                          <label className="label-base">{isRTL ? 'الصورة' : 'Photo'}</label>
+                          <ImageUploadZone
+                            label={isRTL ? 'صورة الصنف' : 'Item photo'}
+                            currentImageUrl={imagePreview}
+                            enablePaste={false}
+                            onFile={async (file) => {
+                              setValue(`items.${i}.product_image_data`, await fileToDataUrl(file), { shouldDirty: true })
+                              setValue(`items.${i}.product_image_name`, file.name, { shouldDirty: true })
+                              setValue(`items.${i}.product_image_path`, '', { shouldDirty: true })
+                            }}
+                          />
+                        </div>
                         <Input
                           label={t('invoices.item_name')}
                           placeholder={t('invoices.item_name_placeholder')}
@@ -636,9 +837,11 @@ export default function InvoiceForm({
                           <label className="label-base">{t('invoices.item_unit')}</label>
                           <select
                             className="input-base"
-                            {...register(`items.${i}.unit`)}
+                            {...register(`items.${i}.unit`, {
+                              onChange: (event) => applyProductUnitToItem(i, event.target.value),
+                            })}
                           >
-                            {UNITS.map((u) => (
+                            {unitOptionsForItem(item as ItemFormValues).map((u) => (
                               <option key={u.value} value={u.value} style={{ background: '#061220' }}>{u.label}</option>
                             ))}
                           </select>
@@ -662,8 +865,16 @@ export default function InvoiceForm({
                       {/* HS Code */}
                       <FormRow>
                         <Input label={t('invoices.hs_code')} placeholder="6109.10" {...register(`items.${i}.hs_code`)} />
-                        <div className="invisible sm:block" />
+                        <Input type="number" label={isRTL ? 'القطع في الكرتون' : 'PCS / Carton'} min={0}
+                          {...register(`items.${i}.pcs_per_carton`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })} />
                       </FormRow>
+
+                      {!item.product_id && (
+                        <label className="flex items-center gap-2 rounded-lg border border-brand-border bg-white/[0.015] px-3 py-2 text-xs text-brand-text-muted">
+                          <input type="checkbox" className="rounded" {...register(`items.${i}.save_to_products`)} />
+                          <span>{isRTL ? 'حفظ هذا الصنف في قائمة المنتجات بعد حفظ الفاتورة' : 'Save this manual item to product list after saving invoice'}</span>
+                        </label>
+                      )}
 
                       {/* Packing / Weight */}
                       <div className="p-3 rounded-lg border border-brand-border/50 bg-white/[0.015] space-y-3">
