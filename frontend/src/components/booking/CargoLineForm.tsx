@@ -353,7 +353,9 @@ export default function CargoLineForm({
   }
   function applyLineHsCode(hsCode: string, ref?: typeof hsReferences[number]) {
     setValue('hs_code', hsCode)
-    if (!watch('description') && ref) setValue('description', isAr && ref.description_ar ? ref.description_ar : ref.description)
+    if (!ref) return
+    if (!watch('description')) setValue('description', ref.description)
+    if (!watch('description_ar') && ref.description_ar) setValue('description_ar', ref.description_ar)
   }
   function applyGoodsRowHsCode(index: number, hsCode: string) {
     updateGoodsRow(index, 'hs_code', hsCode)
@@ -428,6 +430,13 @@ export default function CargoLineForm({
     setValue('hs_code', hsCodes.length === 1 ? hsCodes[0] : '')
     if (!watch('description')) {
       setValue('description', goodsDescriptionFromRows(rows))
+    }
+    if (!watch('description_ar')) {
+      const arabicDescription = (selectedInvoice.items ?? [])
+        .map((item, idx) => item.description_ar?.trim() ? `${idx + 1}. ${item.description_ar.trim()}` : '')
+        .filter(Boolean)
+        .join('\n')
+      if (arabicDescription) setValue('description_ar', arabicDescription)
     }
   }
 

@@ -916,8 +916,7 @@ export default function InvoiceForm({
                         <Input
                           label={t('invoices.item_details_label')}
                           placeholder={t('invoices.item_details_placeholder')}
-                          {...register(`items.${i}.details`, { validate: (v) => validateEnglishNameValue(v, true) || englishTextError })}
-                          error={errors.items?.[i]?.details?.message as string | undefined}
+                          {...register(`items.${i}.details`)}
                         />
                       </div>
 
@@ -1052,8 +1051,7 @@ export default function InvoiceForm({
                             <Input
                               label={t('invoices.item_details_en')}
                               dir="rtl"
-                              {...register(`items.${i}.details_ar`, { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
-                              error={errors.items?.[i]?.details_ar?.message as string | undefined}
+                              {...register(`items.${i}.details_ar`)}
                             />
                           </FormRow>
                         </div>

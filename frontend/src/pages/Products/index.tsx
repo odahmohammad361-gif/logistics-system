@@ -12,7 +12,12 @@ import {
 import { getSuppliers } from '@/services/supplierService'
 import { getRates } from '@/services/marketService'
 import { useAuth } from '@/hooks/useAuth'
-import { validateArabicNameValue, validateEnglishNameValue } from '@/constants/contact'
+import {
+  containsArabicScript,
+  containsLatinScript,
+  validateArabicNameValue,
+  validateEnglishNameValue,
+} from '@/constants/contact'
 import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -126,11 +131,19 @@ export default function ProductsPage() {
   const selectedProductTypeId = watch('product_type_id')
   const selectedHsCodeRefId = watch('hs_code_ref_id')
   const watchedPriceCny = watch('price_cny')
+  const watchedDescription = watch('description')
+  const watchedDescriptionAr = watch('description_ar')
   const isAr = i18n.language === 'ar'
   const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
   const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
   const managerTaxonomyData = referenceTaxonomyData ?? taxonomyData
   const usdToCnyRate = ratesData?.rates.find((item) => item.currency === 'CNY')?.rate ?? FALLBACK_USD_TO_CNY
+  const descriptionLanguageWarning = containsArabicScript(watchedDescription)
+    ? (isAr ? 'تنبيه: تفاصيل البضاعة الإنجليزية تحتوي على أحرف عربية.' : 'Warning: English goods details contain Arabic letters.')
+    : ''
+  const descriptionArLanguageWarning = containsLatinScript(watchedDescriptionAr)
+    ? (isAr ? 'تنبيه: تفاصيل البضاعة العربية تحتوي على أحرف إنجليزية.' : 'Warning: Arabic goods details contain English letters.')
+    : ''
 
   useEffect(() => {
     const price = Number(watchedPriceCny)
@@ -977,14 +990,14 @@ export default function ProductsPage() {
           <FormSection title={t('products.description')}>
             <Input
               label="Description (EN)"
-              {...register('description', { validate: (v) => validateEnglishNameValue(v, true) || englishTextError })}
-              error={errors.description?.message}
+              {...register('description')}
+              hint={descriptionLanguageWarning}
             />
             <Input
               label="Description (AR)"
               dir="rtl"
-              {...register('description_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
-              error={errors.description_ar?.message}
+              {...register('description_ar')}
+              hint={descriptionArLanguageWarning}
             />
           </FormSection>
 
