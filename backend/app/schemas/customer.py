@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
+from app.schemas.contact_validators import clean_required_phone
 
 
 class CustomerSignup(BaseModel):
@@ -11,6 +12,11 @@ class CustomerSignup(BaseModel):
     telegram: Optional[str] = None
     country: str
     password: str
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_required_phone(v)
 
 
 class CustomerLogin(BaseModel):

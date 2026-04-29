@@ -17,6 +17,14 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { Input, Select, FormRow, FormSection, Textarea } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import {
+  localizedCountryOptions,
+  localizedRegionOptions,
+  normalizeCountryValue,
+  validateEmailValue,
+  validatePhoneValue,
+} from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { Client, CustomerAdmin } from '@/types'
 import clsx from 'clsx'
@@ -210,7 +218,18 @@ export default function ClientsPage() {
   })
 
   // ── Main client form ──────────────────────────────────────────────────────
-  const { register, handleSubmit, reset, clearErrors, formState: { errors } } = useForm<FormValues>()
+  const {
+    register,
+    handleSubmit,
+    reset,
+    clearErrors,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<FormValues>()
+  const clientCountry = watch('country')
+  const clientCity = watch('city')
+  const clientPhone = watch('phone')
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) => {
@@ -235,7 +254,17 @@ export default function ClientsPage() {
   })
 
   // ── Migrate form ──────────────────────────────────────────────────────────
-  const { register: regM, handleSubmit: handleMigrate, reset: resetM, formState: { errors: errM } } = useForm<MigrateFormValues>()
+  const {
+    register: regM,
+    handleSubmit: handleMigrate,
+    reset: resetM,
+    watch: watchM,
+    setValue: setValueM,
+    formState: { errors: errM },
+  } = useForm<MigrateFormValues>()
+  const migrateCountry = watchM('country')
+  const migrateCity = watchM('city')
+  const migratePhone = watchM('phone')
 
   const migrateMut = useMutation({
     mutationFn: (v: MigrateFormValues) =>
@@ -264,14 +293,14 @@ export default function ClientsPage() {
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', phone: '', email: '', address: '', city: '', country: '', branch_id: String(branches[0]?.id ?? ''), notes: '' })
+    reset({ name: '', phone: '', email: '', address: '', city: '', country: 'Jordan', branch_id: String(branches[0]?.id ?? ''), notes: '' })
     clearErrors(); setModal(true)
   }
   function openEdit(c: Client) {
     setEditing(c)
     reset({
       name: c.name, phone: c.phone ?? '', email: c.email ?? '', address: c.address ?? '',
-      city: c.city ?? '', country: c.country ?? '', branch_id: c.branch ? String(c.branch.id) : '', notes: c.notes ?? '',
+      city: c.city ?? '', country: normalizeCountryValue(c.country) || 'Jordan', branch_id: c.branch ? String(c.branch.id) : '', notes: c.notes ?? '',
     })
     clearErrors(); setModal(true)
   }
@@ -279,7 +308,7 @@ export default function ClientsPage() {
     setMigrating(c)
     resetM({
       name: c.full_name, phone: c.phone, email: c.email,
-      city: '', country: c.country, address: '', branch_id: String(branches[0]?.id ?? ''), notes: c.notes ?? '',
+      city: '', country: normalizeCountryValue(c.country) || 'Jordan', address: '', branch_id: String(branches[0]?.id ?? ''), notes: c.notes ?? '',
     })
   }
 
@@ -287,6 +316,21 @@ export default function ClientsPage() {
 
   const branchOptions = branches.map((b) => ({ value: String(b.id), label: b.name }))
   const dateLocale    = isAr ? 'ar-JO' : 'en-GB'
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const countryOptions = localizedCountryOptions(isAr)
+  const clientRegionOptions = localizedRegionOptions(clientCountry, isAr)
+  const migrateRegionOptions = localizedRegionOptions(migrateCountry, isAr)
+
+  useEffect(() => {
+    const allowed = localizedRegionOptions(clientCountry, false, false).map(option => option.value)
+    if (clientCity && allowed.length && !allowed.includes(clientCity)) setValue('city', '')
+  }, [clientCountry, clientCity, setValue])
+
+  useEffect(() => {
+    const allowed = localizedRegionOptions(migrateCountry, false, false).map(option => option.value)
+    if (migrateCity && allowed.length && !allowed.includes(migrateCity)) setValueM('city', '')
+  }, [migrateCountry, migrateCity, setValueM])
 
   // ── Main clients columns ──────────────────────────────────────────────────
   const columns = [
@@ -635,18 +679,30 @@ export default function ClientsPage() {
           <FormSection title={t('clients.basic_info')}>
             <Input label={t('clients.name')} {...register('name', { required: true })}
               error={errors.name ? t('clients.required') : undefined} />
+            <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
-              <Input label={t('clients.phone')} {...register('phone')} />
-              <Input type="email" label={t('clients.email')} {...register('email')} />
+              <PhoneInput
+                label={t('clients.phone')}
+                value={clientPhone}
+                country={clientCountry}
+                onChange={(value) => setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                error={errors.phone?.message}
+              />
+              <Input type="email" label={t('clients.email')} {...register('email', { validate: (v) => validateEmailValue(v) || emailError })} error={errors.email?.message} />
             </FormRow>
             <Select label={t('clients.branch')} options={branchOptions} {...register('branch_id')} />
           </FormSection>
           <FormSection title={t('common.address')}>
-            <Input label={t('clients.address_detail')} {...register('address')} />
             <FormRow>
-              <Input label={t('clients.city')}    {...register('city')} />
-              <Input label={t('clients.country')} {...register('country')} />
+              <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...register('country')} />
+              <Select
+                label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
+                options={clientRegionOptions}
+                disabled={!clientCountry}
+                {...register('city')}
+              />
             </FormRow>
+            <Input label={t('clients.address_detail')} {...register('address')} />
           </FormSection>
           <Input label={t('clients.notes')} {...register('notes')} />
         </form>
@@ -690,18 +746,30 @@ export default function ClientsPage() {
               <FormSection title={t('clients.basic_info')}>
                 <Input label={t('clients.name')} {...regM('name', { required: true })}
                   error={errM.name ? t('clients.required') : undefined} />
+                <input type="hidden" {...regM('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
                 <FormRow>
-                  <Input label={t('clients.phone')} {...regM('phone')} />
-                  <Input type="email" label={t('clients.email')} {...regM('email')} />
+                  <PhoneInput
+                    label={t('clients.phone')}
+                    value={migratePhone}
+                    country={migrateCountry}
+                    onChange={(value) => setValueM('phone', value, { shouldValidate: true, shouldDirty: true })}
+                    error={errM.phone?.message}
+                  />
+                  <Input type="email" label={t('clients.email')} {...regM('email', { validate: (v) => validateEmailValue(v) || emailError })} error={errM.email?.message} />
                 </FormRow>
                 <Select label={t('clients.branch')} options={branchOptions} {...regM('branch_id')} />
               </FormSection>
               <FormSection title={t('common.address')}>
-                <Input label={t('clients.address_detail')} {...regM('address')} />
                 <FormRow>
-                  <Input label={t('clients.city')}    {...regM('city')} />
-                  <Input label={t('clients.country')} {...regM('country')} />
+                  <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...regM('country')} />
+                  <Select
+                    label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
+                    options={migrateRegionOptions}
+                    disabled={!migrateCountry}
+                    {...regM('city')}
+                  />
                 </FormRow>
+                <Input label={t('clients.address_detail')} {...regM('address')} />
               </FormSection>
               <Textarea label={t('clients.notes')} {...regM('notes')} />
             </form>

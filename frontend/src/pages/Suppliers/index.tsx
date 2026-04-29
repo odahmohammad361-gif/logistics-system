@@ -8,6 +8,8 @@ import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { validatePhoneValue } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { Supplier } from '@/types'
 
@@ -22,7 +24,8 @@ interface FormValues {
 }
 
 export default function SuppliersPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   const { isAdmin } = useAuth()
   const qc = useQueryClient()
 
@@ -36,7 +39,9 @@ export default function SuppliersPage() {
     queryFn: () => getSuppliers(search ? { search } : undefined),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>()
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const phoneValue = watch('phone')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) =>
@@ -211,9 +216,16 @@ export default function SuppliersPage() {
           </FormSection>
 
           <FormSection title={t('common.contact')}>
+            <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
               <Input label={t('suppliers.wechat')} {...register('wechat_id')} />
-              <Input label={t('common.phone')} {...register('phone')} />
+              <PhoneInput
+                label={t('common.phone')}
+                value={phoneValue}
+                country="China"
+                onChange={(value) => setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                error={errors.phone?.message}
+              />
             </FormRow>
           </FormSection>
 

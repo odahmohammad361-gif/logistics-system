@@ -11,6 +11,13 @@ import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import {
+  localizedRegionOptions,
+  normalizeCountryValue,
+  validateEmailValue,
+  validatePhoneValue,
+} from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { ShippingAgent } from '@/types'
 import clsx from 'clsx'
@@ -127,10 +134,17 @@ export default function ShippingAgentsPage() {
 
   // Watch country to update city options
   const watchCountry = agentForm.watch('country')
-  const cityOptions = [
-    { value: '', label: isAr ? '— اختر مدينة —' : '— Select city —' },
-    ...(CITIES_BY_COUNTRY[watchCountry] ?? []).map(c => ({ value: c, label: c })),
-  ]
+  const watchPhone = agentForm.watch('phone')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const contactRegionOptions = localizedRegionOptions(watchCountry, isAr)
+  const legacyCityOptions = CITIES_BY_COUNTRY[watchCountry] ?? []
+  const cityOptions = contactRegionOptions.length > 1
+    ? contactRegionOptions
+    : [
+        { value: '', label: isAr ? '— اختر مدينة —' : '— Select city —' },
+        ...legacyCityOptions.map(c => ({ value: c, label: c })),
+      ]
   const countryOptions = [
     { value: '', label: isAr ? '— اختر دولة —' : '— Select country —' },
     ...AGENT_COUNTRIES.map(c => ({ value: c.value, label: c.label })),
@@ -174,7 +188,7 @@ export default function ShippingAgentsPage() {
   function openCreateAgent() {
     setEditingAgent(null)
     agentForm.reset({
-      name: '', phone: '', email: '', wechat_id: '', country: '',
+      name: '', phone: '', email: '', wechat_id: '', country: 'China',
       warehouse_city: '', warehouse_address: '',
       serves_sea: true, serves_air: false,
       transit_sea_days: '', transit_air_days: '', notes: '',
@@ -189,7 +203,7 @@ export default function ShippingAgentsPage() {
       phone: agent.phone ?? '',
       email: agent.email ?? '',
       wechat_id: agent.wechat_id ?? '',
-      country: agent.country ?? '',
+      country: normalizeCountryValue(agent.country) || '',
       warehouse_city: agent.warehouse_city ?? '',
       warehouse_address: (agent as any).warehouse_address ?? '',
       transit_sea_days: agent.transit_sea_days ?? '',
@@ -441,10 +455,17 @@ export default function ShippingAgentsPage() {
               error={agentForm.formState.errors.name ? t('common.required') : undefined}
             />
             <FormRow>
-              <Input label={t('common.phone')} {...agentForm.register('phone')} />
+              <input type="hidden" {...agentForm.register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
+              <PhoneInput
+                label={t('common.phone')}
+                value={watchPhone}
+                country={watchCountry}
+                onChange={(value) => agentForm.setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                error={agentForm.formState.errors.phone?.message}
+              />
               <Input label="WeChat ID" {...agentForm.register('wechat_id')} />
             </FormRow>
-            <Input type="email" label={t('common.email')} {...agentForm.register('email')} />
+            <Input type="email" label={t('common.email')} {...agentForm.register('email', { validate: (v) => validateEmailValue(v) || emailError })} error={agentForm.formState.errors.email?.message} />
           </FormSection>
 
           {/* Service modes */}

@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
 from app.models.invoice import InvoiceType, InvoiceStatus
+from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
 
 
 # ── Invoice Item ────────────────────────────────────────────────────────────
@@ -222,6 +223,16 @@ class CompanySettingsUpdate(BaseModel):
     bank_swift: Optional[str] = None
     bank_name: Optional[str] = None
     bank_address: Optional[str] = None
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
 
 
 class CompanySettingsResponse(BaseModel):

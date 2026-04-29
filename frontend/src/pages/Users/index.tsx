@@ -10,6 +10,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { Input, Select, FormRow } from '@/components/ui/Form'
+import { validateEmailValue } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { User, Branch } from '@/types'
 
@@ -44,6 +45,7 @@ export default function UsersPage() {
   })
 
   const { register, handleSubmit, reset, clearErrors, formState: { errors } } = useForm<FormValues>()
+  const emailError = t('common.invalid_email', 'Enter a valid email address')
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) => {
@@ -163,7 +165,13 @@ export default function UsersPage() {
           )}
           <FormRow>
             <Input label={t('users.full_name', 'الاسم')} {...register('full_name', { required: true })} error={errors.full_name ? t('common.required', 'مطلوب') : undefined} />
-            <Input type="email" label={t('common.email', 'البريد الإلكتروني')} {...register('email', { required: true })} error={errors.email ? t('common.required', 'مطلوب') : undefined} disabled={!!editing} />
+            <Input
+              type="email"
+              label={t('common.email', 'البريد الإلكتروني')}
+              {...register('email', { required: true, validate: (v) => validateEmailValue(v, false) || emailError })}
+              error={errors.email ? (errors.email.message || t('common.required', 'مطلوب')) : undefined}
+              disabled={!!editing}
+            />
           </FormRow>
           <FormRow>
             <Select label={t('users.role', 'الدور')} options={ROLES.map((r) => ({ value: r, label: t(`users.roles.${r}`, r) }))} {...register('role')} />

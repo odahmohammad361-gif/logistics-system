@@ -1,8 +1,9 @@
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from app.models.shipping_quote import QuoteServiceMode, QuoteStatus, Incoterm
+from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
 
 
 class CarrierRateResponse(BaseModel):
@@ -53,6 +54,16 @@ class AgentCreate(BaseModel):
     serves_air: bool = False
     notes: Optional[str] = None
 
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
+
 
 class AgentUpdate(BaseModel):
     name: Optional[str] = None
@@ -77,6 +88,16 @@ class AgentUpdate(BaseModel):
     serves_sea: Optional[bool] = None
     serves_air: Optional[bool] = None
     notes: Optional[str] = None
+
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
 
 
 class AgentResponse(BaseModel):

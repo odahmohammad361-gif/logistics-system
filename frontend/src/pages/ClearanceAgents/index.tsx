@@ -8,6 +8,14 @@ import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, Select, FormRow, FormSection, Textarea } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import {
+  localizedCountryOptions,
+  localizedRegionOptions,
+  normalizeCountryValue,
+  validateEmailValue,
+  validatePhoneValue,
+} from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { ClearanceAgent } from '@/types'
 
@@ -62,7 +70,14 @@ export default function ClearanceAgentsPage() {
     }),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>()
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const selectedCountry = watch('country')
+  const phoneValue = watch('phone')
+  const whatsappValue = watch('whatsapp')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const countryOptions = localizedCountryOptions(isAr)
+  const cityOptions = localizedRegionOptions(selectedCountry, isAr)
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) => {
@@ -105,7 +120,7 @@ export default function ClearanceAgentsPage() {
     reset({
       name: '', name_ar: '', contact_person: '',
       phone: '', whatsapp: '', email: '',
-      country: '', city: '', address: '',
+      country: 'Jordan', city: '', address: '',
       license_number: '', bank_name: '', bank_account: '', bank_swift: '',
       notes: '',
     })
@@ -121,7 +136,7 @@ export default function ClearanceAgentsPage() {
       phone: agent.phone ?? '',
       whatsapp: agent.whatsapp ?? '',
       email: agent.email ?? '',
-      country: agent.country ?? '',
+      country: normalizeCountryValue(agent.country) || 'Jordan',
       city: agent.city ?? '',
       address: agent.address ?? '',
       license_number: agent.license_number ?? '',
@@ -281,18 +296,37 @@ export default function ClearanceAgentsPage() {
               <Input label={isAr ? 'الاسم العربي' : 'Arabic Name'} {...register('name_ar')} />
             </FormRow>
             <Input label={isAr ? 'الشخص المسؤول' : 'Contact Person'} {...register('contact_person')} />
+            <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
+            <input type="hidden" {...register('whatsapp', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
-              <Input label={t('common.phone')} {...register('phone')} />
-              <Input label="WhatsApp" {...register('whatsapp')} />
+              <PhoneInput
+                label={t('common.phone')}
+                value={phoneValue}
+                country={selectedCountry}
+                onChange={(value) => setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                error={errors.phone?.message}
+              />
+              <PhoneInput
+                label="WhatsApp"
+                value={whatsappValue}
+                country={selectedCountry}
+                onChange={(value) => setValue('whatsapp', value, { shouldValidate: true, shouldDirty: true })}
+                error={errors.whatsapp?.message}
+              />
             </FormRow>
-            <Input type="email" label={t('common.email')} {...register('email')} />
+            <Input type="email" label={t('common.email')} {...register('email', { validate: (v) => validateEmailValue(v) || emailError })} error={errors.email?.message} />
             <Input label={t('agents.license_number')} {...register('license_number')} />
           </FormSection>
 
           <FormSection title={t('common.location')}>
             <FormRow>
-              <Select label={t('common.country')} options={[{ value: '', label: '—' }, ...COUNTRIES.map(c => ({ value: c, label: c }))]} {...register('country')} />
-              <Input label={t('common.city')} {...register('city')} />
+              <Select label={t('common.country')} options={countryOptions} {...register('country')} />
+              <Select
+                label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
+                options={cityOptions}
+                disabled={!selectedCountry}
+                {...register('city')}
+              />
             </FormRow>
             <Textarea label={isAr ? 'العنوان' : 'Address'} {...register('address')} />
           </FormSection>

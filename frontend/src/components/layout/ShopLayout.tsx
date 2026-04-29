@@ -12,6 +12,8 @@ import { shopLogin, shopSignup } from '@/services/shopService'
 import { clientPortalLogin } from '@/services/clientPortalService'
 import CurrencySelector from '@/components/shop/CurrencySelector'
 import ThemePicker from '@/components/ui/ThemePicker'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { localizedCountryOptions, validateEmailValue, validatePhoneValue } from '@/constants/contact'
 
 interface LoginForm      { email: string; password: string }
 interface ClientLoginForm { client_code: string; password: string }
@@ -46,6 +48,10 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const loginForm       = useForm<LoginForm>()
   const clientLoginForm = useForm<ClientLoginForm>()
   const signupForm      = useForm<SignupForm>()
+  const signupCountry = signupForm.watch('country')
+  const signupPhone = signupForm.watch('phone')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
 
   async function handleLogin(v: LoginForm) {
     setAuthError(''); setAuthLoading(true)
@@ -360,7 +366,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
             <div className="space-y-1.5">
               <label className="label-base">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
               <input type="email" className="input-base w-full" autoComplete="email"
-                {...loginForm.register('email', { required: true })} />
+                {...loginForm.register('email', { required: true, validate: (v) => validateEmailValue(v, false) || emailError })} />
             </div>
             <div className="space-y-1.5">
               <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>
@@ -416,11 +422,18 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="space-y-1.5">
                 <label className="label-base">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
-                <input type="email" className="input-base w-full" {...signupForm.register('email', { required: true })} />
+                <input type="email" className="input-base w-full" {...signupForm.register('email', { required: true, validate: (v) => validateEmailValue(v, false) || emailError })} />
               </div>
               <div className="space-y-1.5">
-                <label className="label-base">{isAr ? 'الهاتف' : 'Phone'}</label>
-                <input className="input-base w-full" {...signupForm.register('phone', { required: true })} />
+                <input type="hidden" {...signupForm.register('phone', { required: true, validate: (v) => validatePhoneValue(v, false) || phoneError })} />
+                <PhoneInput
+                  label={isAr ? 'الهاتف' : 'Phone'}
+                  value={signupPhone}
+                  country={signupCountry}
+                  required
+                  onChange={(value) => signupForm.setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                  error={signupForm.formState.errors.phone?.message}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="label-base">{isAr ? 'تيليجرام (اختياري)' : 'Telegram (optional)'}</label>
@@ -428,7 +441,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="space-y-1.5">
                 <label className="label-base">{isAr ? 'الدولة' : 'Country'}</label>
-                <input className="input-base w-full" {...signupForm.register('country', { required: true })} />
+                <select className="input-base w-full" {...signupForm.register('country', { required: true })}>
+                  {localizedCountryOptions(isAr).map((option) => (
+                    <option key={option.value} value={option.value} style={{ background: '#061220' }}>{option.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="col-span-2 space-y-1.5">
                 <label className="label-base">{isAr ? 'كلمة المرور' : 'Password'}</label>

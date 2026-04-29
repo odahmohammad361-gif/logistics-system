@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
+from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
 
 
 class BranchShort(BaseModel):
@@ -34,6 +35,16 @@ class ClientCreate(BaseModel):
             raise ValueError("Client name cannot be empty")
         return v.strip()
 
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
+
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
@@ -50,6 +61,16 @@ class ClientUpdate(BaseModel):
     branch_id: Optional[int] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
 
 
 class ClientResponse(BaseModel):

@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
 
 
 class ClearanceAgentCreate(BaseModel):
@@ -25,6 +26,16 @@ class ClearanceAgentCreate(BaseModel):
     storage_fee_per_day: Optional[Decimal] = None
     notes: Optional[str] = None
 
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
+
 
 class ClearanceAgentUpdate(BaseModel):
     name: Optional[str] = None
@@ -46,6 +57,16 @@ class ClearanceAgentUpdate(BaseModel):
     handling_fee: Optional[Decimal] = None
     storage_fee_per_day: Optional[Decimal] = None
     notes: Optional[str] = None
+
+    @field_validator("phone", "whatsapp", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
 
 
 class ClearanceAgentRateBase(BaseModel):

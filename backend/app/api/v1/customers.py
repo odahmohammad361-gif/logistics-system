@@ -5,7 +5,7 @@ Includes listing, notes update, migrate-to-client, and deactivation.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
@@ -14,6 +14,7 @@ from app.models.branch import Branch
 from app.models.client import Client
 from app.models.customer import Customer
 from app.models.user import User, UserRole
+from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
 
 router = APIRouter()
 
@@ -34,6 +35,16 @@ class MigrateToClientRequest(BaseModel):
     address:   Optional[str] = None
     branch_id: Optional[int] = None
     notes:     Optional[str] = None
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v):
+        return clean_optional_email(v)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

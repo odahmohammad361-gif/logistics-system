@@ -6,6 +6,8 @@ import { getEligibleClients } from '@/services/bookingService'
 import { getClearanceAgents } from '@/services/agentService'
 import { getInvoices } from '@/services/invoiceService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { validatePhoneValue } from '@/constants/contact'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { BookingCargoLine, BookingMode } from '@/types'
@@ -127,6 +129,7 @@ export default function CargoLineForm({
   const selectedClearanceAgentId = watch('clearance_agent_id')
   const selectedClearanceRateId = watch('clearance_agent_rate_id')
   const watchedCbm = watch('cbm')
+  const manualPhone = watch('manual_clearance_agent_phone')
 
   const { data: eligibleData } = useQuery({
     queryKey: ['eligible-clients', bookingId],
@@ -162,6 +165,7 @@ export default function CargoLineForm({
   const capacityExceeded = mode === 'LCL' && remainingCbm != null && enteredCbm > remainingCbm
   const fillWarning = mode === 'LCL' && capacityCbm != null && capacityCbm > 0 && (Number(usedCbm ?? 0) / capacityCbm) >= 0.9
   const cannotMarkFull = mode === 'LCL' && !initial?.is_full_container_client && existingLineCount > (initial ? 1 : 0)
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
 
   const clearanceAgentOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
@@ -573,9 +577,16 @@ export default function CargoLineForm({
             </FormRow>
           ) : (
             <>
+              <input type="hidden" {...register('manual_clearance_agent_phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
               <FormRow>
                 <Input label={isAr ? 'اسم وكيل التخليص الخارجي' : 'Outside Clearance Agent'} {...register('manual_clearance_agent_name')} />
-                <Input label={t('common.phone')} {...register('manual_clearance_agent_phone')} />
+                <PhoneInput
+                  label={t('common.phone')}
+                  value={manualPhone}
+                  country={bookingDest === 'iraq' ? 'Iraq' : 'Jordan'}
+                  onChange={(value) => setValue('manual_clearance_agent_phone', value, { shouldValidate: true, shouldDirty: true })}
+                  error={errors.manual_clearance_agent_phone?.message}
+                />
               </FormRow>
               <Textarea
                 label={isAr ? 'ملاحظات الوكيل الخارجي' : 'Outside Agent Notes'}

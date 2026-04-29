@@ -8,6 +8,13 @@ import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, Select, FormRow, FormSection, Textarea } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import {
+  localizedCountryOptions,
+  localizedRegionOptions,
+  normalizeCountryValue,
+  validatePhoneValue,
+} from '@/constants/contact'
 import type { CompanyWarehouse } from '@/types'
 import clsx from 'clsx'
 
@@ -15,12 +22,6 @@ const BRANCHES = [
   { key: 'china',  flag: '🇨🇳', name_ar: 'الفرع الصيني',   name_en: 'China Branch',  city: 'Guangzhou', details: 'Guangdong Province, China', phone: '', email: '' },
   { key: 'jordan', flag: '🇯🇴', name_ar: 'الفرع الأردني',  name_en: 'Jordan Branch', city: 'Amman',     details: 'Amman, Jordan',            phone: '', email: '' },
   { key: 'iraq',   flag: '🇮🇶', name_ar: 'الفرع العراقي', name_en: 'Iraq Branch',   city: 'Baghdad',   details: 'Baghdad, Iraq',            phone: '', email: '' },
-]
-
-const COUNTRIES = [
-  { value: 'CN', label: '🇨🇳 China' },
-  { value: 'JO', label: '🇯🇴 Jordan' },
-  { value: 'IQ', label: '🇮🇶 Iraq' },
 ]
 
 interface WHForm {
@@ -50,7 +51,10 @@ export default function CompanyPage() {
     queryFn:  () => getWarehouses(),
   })
 
-  const whForm = useForm<WHForm>({ defaultValues: { warehouse_type: 'loading', country: 'CN' } })
+  const whForm = useForm<WHForm>({ defaultValues: { warehouse_type: 'loading', country: 'China' } })
+  const whCountry = whForm.watch('country')
+  const whPhone = whForm.watch('phone')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
 
   const saveMut = useMutation({
     mutationFn: (v: WHForm) => {
@@ -67,7 +71,7 @@ export default function CompanyPage() {
 
   function openCreate(type: 'loading' | 'unloading') {
     setEditingWH(null)
-    whForm.reset({ warehouse_type: type, country: type === 'loading' ? 'CN' : 'JO' })
+    whForm.reset({ warehouse_type: type, country: type === 'loading' ? 'China' : 'Jordan', city: '', phone: '' })
     setWhModal(true)
   }
 
@@ -77,7 +81,7 @@ export default function CompanyPage() {
       name:           wh.name,
       name_ar:        wh.name_ar       ?? '',
       warehouse_type: wh.warehouse_type,
-      country:        wh.country       ?? '',
+      country:        normalizeCountryValue(wh.country) || '',
       city:           wh.city          ?? '',
       address:        wh.address       ?? '',
       contact_name:   wh.contact_name  ?? '',
@@ -247,15 +251,27 @@ export default function CompanyPage() {
             />
             <Select
               label={t('common.country')}
-              options={COUNTRIES}
+              options={localizedCountryOptions(isAr)}
               placeholder="—"
               {...whForm.register('country')}
             />
           </FormRow>
 
           <FormRow>
-            <Input label={t('common.city')}  {...whForm.register('city')} />
-            <Input label={t('common.phone')} {...whForm.register('phone')} />
+            <Select
+              label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
+              options={localizedRegionOptions(whCountry, isAr)}
+              disabled={!whCountry}
+              {...whForm.register('city')}
+            />
+            <PhoneInput
+              label={t('common.phone')}
+              value={whPhone}
+              country={whCountry}
+              onChange={(value) => whForm.setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+              error={whForm.formState.errors.phone?.message}
+            />
+            <input type="hidden" {...whForm.register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
           </FormRow>
 
           <Textarea label={t('common.address')} {...whForm.register('address')} />

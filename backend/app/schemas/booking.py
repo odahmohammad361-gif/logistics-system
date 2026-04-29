@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import Optional, List
 from decimal import Decimal
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from app.schemas.contact_validators import clean_optional_phone
 
 
 class ClientShort(BaseModel):
@@ -86,6 +87,11 @@ class BookingCargoLineCreate(BaseModel):
     manual_clearance_agent_phone: Optional[str] = None
     manual_clearance_agent_notes: Optional[str] = None
 
+    @field_validator("manual_clearance_agent_phone", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
+
 
 class BookingCargoLineUpdate(BaseModel):
     invoice_id: Optional[int] = None
@@ -112,6 +118,11 @@ class BookingCargoLineUpdate(BaseModel):
     manual_clearance_agent_name: Optional[str] = None
     manual_clearance_agent_phone: Optional[str] = None
     manual_clearance_agent_notes: Optional[str] = None
+
+    @field_validator("manual_clearance_agent_phone", mode="before")
+    @classmethod
+    def valid_phone(cls, v):
+        return clean_optional_phone(v)
 
 
 class BookingCargoLineResponse(BaseModel):

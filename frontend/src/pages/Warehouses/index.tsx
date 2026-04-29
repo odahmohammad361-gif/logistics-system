@@ -7,7 +7,14 @@ import { useAuth } from '@/hooks/useAuth'
 import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { Input, FormRow, FormSection } from '@/components/ui/Form'
+import { Input, Select, FormRow, FormSection } from '@/components/ui/Form'
+import PhoneInput from '@/components/ui/PhoneInput'
+import {
+  localizedCountryOptions,
+  localizedRegionOptions,
+  normalizeCountryValue,
+  validatePhoneValue,
+} from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { CompanyWarehouse } from '@/types'
 
@@ -24,7 +31,8 @@ interface FormValues {
 }
 
 export default function WarehousesPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   const { isStaff, isAdmin } = useAuth()
   const qc = useQueryClient()
 
@@ -39,7 +47,10 @@ export default function WarehousesPage() {
     queryFn: () => getWarehouses(typeFilter ? { warehouse_type: typeFilter } : undefined),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>()
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
+  const selectedCountry = watch('country')
+  const phoneValue = watch('phone')
+  const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) =>
@@ -62,7 +73,7 @@ export default function WarehousesPage() {
 
   function openCreate() {
     setEditing(null)
-    reset({ warehouse_type: 'loading' })
+    reset({ warehouse_type: 'loading', country: 'China', city: '', phone: '' })
     setModalOpen(true)
   }
 
@@ -72,7 +83,7 @@ export default function WarehousesPage() {
       name: wh.name,
       name_ar: wh.name_ar ?? '',
       warehouse_type: wh.warehouse_type,
-      country: wh.country ?? '',
+      country: normalizeCountryValue(wh.country) || '',
       city: wh.city ?? '',
       address: wh.address ?? '',
       contact_name: wh.contact_name ?? '',
@@ -255,16 +266,28 @@ export default function WarehousesPage() {
 
           <FormSection title={t('common.location')}>
             <FormRow>
-              <Input label={t('common.city')} {...register('city')} />
-              <Input label={t('common.country')} {...register('country')} />
+              <Select label={t('common.country')} options={localizedCountryOptions(isAr)} {...register('country')} />
+              <Select
+                label={isAr ? 'المحافظة / المنطقة' : 'Governorate / Region'}
+                options={localizedRegionOptions(selectedCountry, isAr)}
+                disabled={!selectedCountry}
+                {...register('city')}
+              />
             </FormRow>
             <Input label={t('common.address')} {...register('address')} />
           </FormSection>
 
           <FormSection title={t('common.contact')}>
+            <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
               <Input label={t('common.name')} {...register('contact_name')} />
-              <Input label={t('common.phone')} {...register('phone')} />
+              <PhoneInput
+                label={t('common.phone')}
+                value={phoneValue}
+                country={selectedCountry}
+                onChange={(value) => setValue('phone', value, { shouldValidate: true, shouldDirty: true })}
+                error={errors.phone?.message}
+              />
             </FormRow>
           </FormSection>
 
