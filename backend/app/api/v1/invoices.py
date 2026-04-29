@@ -894,6 +894,28 @@ class Base64ImagePayload(BaseModel):
     data: str  # data:image/png;base64,...
 
 
+class InvoiceStatusPayload(BaseModel):
+    status: InvoiceStatus
+
+
+@router.patch("/{invoice_id}/status")
+def update_invoice_status(
+    invoice_id: int,
+    payload: InvoiceStatusPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    inv.status = payload.status
+    db.commit()
+    return {
+        "id": inv.id,
+        "status": inv.status.value if hasattr(inv.status, "value") else inv.status,
+    }
+
+
 @router.post("/{invoice_id}/item/{item_id}/image-base64")
 def upload_item_image_base64(
     invoice_id: int,

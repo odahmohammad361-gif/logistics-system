@@ -17,6 +17,9 @@ export const createInvoice = (data: unknown) =>
 export const updateInvoice = (id: number, data: unknown) =>
   api.patch<Invoice>(`/invoices/${id}`, data).then((r) => r.data)
 
+export const updateInvoiceStatus = (id: number, status: string) =>
+  api.patch<{ id: number; status: string }>(`/invoices/${id}/status`, { status }).then((r) => r.data)
+
 export const deleteInvoice = (id: number) =>
   api.delete(`/invoices/${id}`)
 

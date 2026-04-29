@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { getClient } from '@/services/clientService'
 import {
-  getInvoices, createInvoice, updateInvoice, deleteInvoice, downloadPdf,
+  getInvoices, createInvoice, updateInvoice, updateInvoiceStatus, deleteInvoice, downloadPdf,
   uploadStamp, uploadBackground, createInvoicePayment, downloadPaymentReceiptHtml,
 } from '@/services/invoiceService'
 import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
@@ -286,7 +286,7 @@ export default function ClientProfile() {
   })
 
   const statusMut = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: InvoiceStatus }) => updateInvoice(id, { status }),
+    mutationFn: ({ id, status }: { id: number; status: InvoiceStatus }) => updateInvoiceStatus(id, status),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['invoices', { client_id: clientId }] }); qc.invalidateQueries({ queryKey: ['invoices'] }) },
   })
 
