@@ -1063,7 +1063,7 @@ export default function AccountingPage() {
                 placeholder={t('clients.select')}
               />
               <Select
-                label={t('nav.invoices')}
+                label={t('accounting.form.linked_invoice', 'Linked client invoice')}
                 value={form.invoice_id}
                 onChange={(e) => setField('invoice_id', e.target.value)}
                 options={invoiceOptions}
