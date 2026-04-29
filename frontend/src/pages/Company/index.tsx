@@ -14,6 +14,8 @@ import {
   localizedCountryOptions,
   localizedRegionOptions,
   normalizeCountryValue,
+  validateArabicNameValue,
+  validateEnglishNameValue,
   validatePhoneValue,
 } from '@/constants/contact'
 import type { CompanyWarehouse } from '@/types'
@@ -64,6 +66,8 @@ export default function CompanyPage() {
   const whCountry = whForm.watch('country')
   const whPhone = whForm.watch('phone')
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
 
   const saveMut = useMutation({
     mutationFn: (v: WHForm) => {
@@ -247,8 +251,17 @@ export default function CompanyPage() {
         <div className="space-y-4">
           <FormSection title={t('common.name')}>
             <FormRow>
-              <Input label={t('common.english')} {...whForm.register('name', { required: true })} error={whForm.formState.errors.name ? t('common.required') : undefined} />
-              <Input label={t('common.arabic')} dir="rtl" {...whForm.register('name_ar')} />
+              <Input
+                label={t('common.english')}
+                {...whForm.register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+                error={whForm.formState.errors.name ? (whForm.formState.errors.name.message || t('common.required')) : undefined}
+              />
+              <Input
+                label={t('common.arabic')}
+                dir="rtl"
+                {...whForm.register('name_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                error={whForm.formState.errors.name_ar?.message}
+              />
             </FormRow>
           </FormSection>
 

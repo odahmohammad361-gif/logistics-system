@@ -12,10 +12,12 @@ import {
 import { getSuppliers } from '@/services/supplierService'
 import { getRates } from '@/services/marketService'
 import { useAuth } from '@/hooks/useAuth'
+import { validateArabicNameValue, validateEnglishNameValue } from '@/constants/contact'
 import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
+import HSCodePicker from '@/components/ui/HSCodePicker'
 import { useForm } from 'react-hook-form'
 import type { Product, ProductMainCategory, ProductSubcategory, ProductTypeReference } from '@/types'
 
@@ -125,6 +127,8 @@ export default function ProductsPage() {
   const selectedHsCodeRefId = watch('hs_code_ref_id')
   const watchedPriceCny = watch('price_cny')
   const isAr = i18n.language === 'ar'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
   const managerTaxonomyData = referenceTaxonomyData ?? taxonomyData
   const usdToCnyRate = ratesData?.rates.find((item) => item.currency === 'CNY')?.rate ?? FALLBACK_USD_TO_CNY
 
@@ -300,6 +304,16 @@ export default function ProductsPage() {
 
   function applyHsRef(id: string) {
     setValue('hs_code_ref_id', id)
+  }
+
+  function applyHsCodeRefByCode(hsCode: string) {
+    const ref = hsCodeOptions.find((item) => item.hs_code === hsCode)
+    setValue('hs_code_ref_id', ref ? String(ref.id) : '')
+  }
+
+  function applyReferenceHsCodeByCode(hsCode: string) {
+    const ref = (managerTaxonomyData?.hs_codes ?? []).find((item) => item.hs_code === hsCode)
+    setRefField('hs_code_ref_id', ref ? String(ref.id) : '')
   }
 
   function applyProductType(id: string) {
@@ -710,21 +724,13 @@ export default function ProductsPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="label-base">{t('products.hs_code_reference')}</label>
-                    <select
-                      className="input-base w-full"
-                      value={referenceForm.hs_code_ref_id}
-                      onChange={(e) => setRefField('hs_code_ref_id', e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {(managerTaxonomyData?.hs_codes ?? []).map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.country} · {item.hs_code} · {isAr && item.description_ar ? item.description_ar : item.description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <HSCodePicker
+                    label={t('products.hs_code_reference')}
+                    value={(managerTaxonomyData?.hs_codes ?? []).find((item) => String(item.id) === referenceForm.hs_code_ref_id)?.hs_code ?? ''}
+                    references={managerTaxonomyData?.hs_codes ?? []}
+                    isRTL={isAr}
+                    onChange={applyReferenceHsCodeByCode}
+                  />
                 </FormRow>
               )}
 
@@ -840,10 +846,15 @@ export default function ProductsPage() {
             <FormRow>
               <Input
                 label={t('common.name')}
-                {...register('name', { required: true })}
-                error={errors.name ? t('common.required') : undefined}
+                {...register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+                error={errors.name ? (errors.name.message || t('common.required')) : undefined}
               />
-              <Input label="Arabic Name" {...register('name_ar')} />
+              <Input
+                label="Arabic Name"
+                dir="rtl"
+                {...register('name_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                error={errors.name_ar?.message}
+              />
             </FormRow>
           </FormSection>
 
@@ -878,17 +889,13 @@ export default function ProductsPage() {
               </div>
             </FormRow>
             <FormRow>
-              <div className="space-y-1.5">
-                <label className="label-base">{t('products.hs_code_reference')}</label>
-                <select className="input-base w-full" value={selectedHsCodeRefId || ''} onChange={(e) => applyHsRef(e.target.value)}>
-                  <option value="">—</option>
-                  {hsCodeOptions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.country} · {item.hs_code} · {isAr && item.description_ar ? item.description_ar : item.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <HSCodePicker
+                label={t('products.hs_code_reference')}
+                value={hsCodeOptions.find((item) => String(item.id) === selectedHsCodeRefId)?.hs_code ?? ''}
+                references={hsCodeOptions}
+                isRTL={isAr}
+                onChange={applyHsCodeRefByCode}
+              />
               <Input label={t('products.category')} placeholder="Legacy category text" {...register('category')} />
             </FormRow>
           </FormSection>
@@ -968,8 +975,17 @@ export default function ProductsPage() {
           </FormSection>
 
           <FormSection title={t('products.description')}>
-            <Input label="Description (EN)" {...register('description')} />
-            <Input label="Description (AR)" {...register('description_ar')} />
+            <Input
+              label="Description (EN)"
+              {...register('description', { validate: (v) => validateEnglishNameValue(v, true) || englishTextError })}
+              error={errors.description?.message}
+            />
+            <Input
+              label="Description (AR)"
+              dir="rtl"
+              {...register('description_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+              error={errors.description_ar?.message}
+            />
           </FormSection>
 
           <div className="flex items-center gap-6">

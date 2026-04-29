@@ -5,9 +5,11 @@ import { useQuery } from '@tanstack/react-query'
 import { getEligibleClients } from '@/services/bookingService'
 import { getClearanceAgents } from '@/services/agentService'
 import { getInvoices } from '@/services/invoiceService'
+import { listProductTaxonomy } from '@/services/productService'
 import { Input, Select, Textarea, FormRow, FormSection } from '@/components/ui/Form'
+import HSCodePicker from '@/components/ui/HSCodePicker'
 import PhoneInput from '@/components/ui/PhoneInput'
-import { validatePhoneValue } from '@/constants/contact'
+import { validateArabicNameValue, validateEnglishNameValue, validatePhoneValue } from '@/constants/contact'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { BookingCargoLine, BookingMode } from '@/types'
@@ -123,6 +125,7 @@ export default function CargoLineForm({
   const isAr = i18n.language === 'ar'
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const [goodsRows, setGoodsRows] = useState<GoodsRow[]>([])
+  const [autoImportedInvoiceId, setAutoImportedInvoiceId] = useState('')
   const selectedClientId = watch('client_id')
   const selectedInvoiceId = watch('invoice_id')
   const clearanceThroughUs = watch('clearance_through_us') !== 'manual'
@@ -149,6 +152,12 @@ export default function CargoLineForm({
     enabled: open,
   })
 
+  const { data: taxonomyData } = useQuery({
+    queryKey: ['cargo-line-hs-taxonomy'],
+    queryFn: () => listProductTaxonomy(),
+    enabled: open,
+  })
+
   const bookingDest = eligibleData?.booking_destination ?? null
 
   const clientOptions = useMemo(() => {
@@ -166,6 +175,9 @@ export default function CargoLineForm({
   const fillWarning = mode === 'LCL' && capacityCbm != null && capacityCbm > 0 && (Number(usedCbm ?? 0) / capacityCbm) >= 0.9
   const cannotMarkFull = mode === 'LCL' && !initial?.is_full_container_client && existingLineCount > (initial ? 1 : 0)
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
+  const hsReferences = taxonomyData?.hs_codes ?? []
 
   const clearanceAgentOptions = useMemo(() => {
     const destination = normalizeCountry(bookingDest)
@@ -259,13 +271,14 @@ export default function CargoLineForm({
       hs_code: item.hs_code ?? '',
     })) ?? []
     setGoodsRows(extractedRows)
+    const extractedDescription = goodsDescriptionFromRows(extractedRows)
     if (initial) {
       reset({
         client_id:        String(initial.client.id),
         invoice_id:       initial.invoice_id != null ? String(initial.invoice_id) : '',
         goods_source:     initial.goods_source ?? 'client_ready_goods',
         is_full_container_client: initial.is_full_container_client ?? false,
-        description:      initial.extracted_goods?.goods?.length && initial.description?.trim().startsWith('1.') ? '' : (initial.description ?? ''),
+        description:      initial.extracted_goods?.goods?.length && (!initial.description || initial.description?.trim().startsWith('1.')) ? extractedDescription : (initial.description ?? ''),
         description_ar:   initial.description_ar   ?? '',
         hs_code:          initial.hs_code           ?? '',
         shipping_marks:   initial.shipping_marks    ?? '',
@@ -295,6 +308,7 @@ export default function CargoLineForm({
         manual_clearance_agent_phone:'', manual_clearance_agent_notes:'', notes:'',
       })
     }
+    setAutoImportedInvoiceId('')
   }, [open, initial, reset])
 
   // Auto-calculate volumetric weight for AIR
@@ -330,6 +344,19 @@ export default function CargoLineForm({
   }
   function removeGoodsRow(index: number) {
     setGoodsRows(rows => rows.filter((_, i) => i !== index))
+  }
+  function goodsDescriptionFromRows(rows: GoodsRow[]) {
+    return rows
+      .map((row, idx) => row.description.trim() ? `${idx + 1}. ${row.description.trim()}` : '')
+      .filter(Boolean)
+      .join('\n')
+  }
+  function applyLineHsCode(hsCode: string, ref?: typeof hsReferences[number]) {
+    setValue('hs_code', hsCode)
+    if (!watch('description') && ref) setValue('description', isAr && ref.description_ar ? ref.description_ar : ref.description)
+  }
+  function applyGoodsRowHsCode(index: number, hsCode: string) {
+    updateGoodsRow(index, 'hs_code', hsCode)
   }
 
   async function handleFormSubmit(vals: FormValues) {
@@ -400,9 +427,15 @@ export default function CargoLineForm({
     const hsCodes = Array.from(new Set(rows.map(row => row.hs_code.trim()).filter(Boolean)))
     setValue('hs_code', hsCodes.length === 1 ? hsCodes[0] : '')
     if (!watch('description')) {
-      setValue('description', rows.map((row, idx) => `${idx + 1}. ${row.description}`).filter(Boolean).join('\n'))
+      setValue('description', goodsDescriptionFromRows(rows))
     }
   }
+
+  useEffect(() => {
+    if (!open || !selectedInvoice || selectedInvoiceId === autoImportedInvoiceId) return
+    importSelectedInvoiceGoods()
+    setAutoImportedInvoiceId(selectedInvoiceId)
+  }, [open, selectedInvoiceId, selectedInvoice, autoImportedInvoiceId])
 
   const title = initial ? t('bookings.edit_cargo') : t('bookings.add_client_cargo')
 
@@ -646,7 +679,13 @@ export default function CargoLineForm({
                           <input className="input-base h-8 text-xs text-end" type="number" value={item.cbm} onChange={e => updateGoodsRow(idx, 'cbm', e.target.value)} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input className="input-base h-8 text-xs" value={item.hs_code} onChange={e => updateGoodsRow(idx, 'hs_code', e.target.value)} />
+                          <HSCodePicker
+                            value={item.hs_code}
+                            references={hsReferences}
+                            isRTL={isAr}
+                            className="min-w-48"
+                            onChange={(hsCode) => applyGoodsRowHsCode(idx, hsCode)}
+                          />
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <button type="button" className="text-brand-red hover:underline" onClick={() => removeGoodsRow(idx)}>
@@ -679,11 +718,29 @@ export default function CargoLineForm({
         {/* Description */}
         <FormSection title={isAr ? 'ملاحظات وصف البضاعة' : t('bookings.description')}>
           <FormRow>
-            <Input label={t('common.english')}    {...register('description')} />
-            <Input label={t('common.arabic')} dir="rtl" {...register('description_ar')} />
+            <Input
+              label={t('common.english')}
+              {...register('description', { validate: (v) => validateEnglishNameValue(v, true) || englishTextError })}
+              error={errors.description?.message}
+            />
+            <Input
+              label={t('common.arabic')}
+              dir="rtl"
+              {...register('description_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+              error={errors.description_ar?.message}
+            />
           </FormRow>
           <FormRow>
-            <Input label={t('bookings.hs_code')}        {...register('hs_code')} />
+            <div>
+              <HSCodePicker
+                label={t('bookings.hs_code')}
+                value={watch('hs_code')}
+                references={hsReferences}
+                isRTL={isAr}
+                onChange={applyLineHsCode}
+              />
+              <input type="hidden" {...register('hs_code')} />
+            </div>
             <Input label={t('bookings.shipping_marks')} {...register('shipping_marks')} />
           </FormRow>
         </FormSection>

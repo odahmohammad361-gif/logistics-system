@@ -10,6 +10,7 @@ import {
 import { Input, Select, Textarea, FormRow } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
+import HSCodePicker from '@/components/ui/HSCodePicker'
 import type { Invoice, Product } from '@/types'
 import { createProductFromInvoiceItem, listProducts, listProductTaxonomy } from '@/services/productService'
 import { getRates } from '@/services/marketService'
@@ -17,7 +18,7 @@ import {
   localizedPaymentTermOptions, localizedShippingTermOptions,
   calcVolumetricWeight, calcChargeableWeight,
 } from '@/constants/logistics'
-import { localizedCountryOptions } from '@/constants/contact'
+import { localizedCountryOptions, validateArabicNameValue, validateEnglishNameValue } from '@/constants/contact'
 import ImageUploadZone from './ImageUploadZone'
 import StampPositionPicker from './StampPositionPicker'
 import ExcelImportPanel from './ExcelImportPanel'
@@ -343,6 +344,8 @@ export default function InvoiceForm({
   }
   const shippingTermOptions = localizedShippingTermOptions(isRTL)
   const paymentTermOptions = localizedPaymentTermOptions(isRTL)
+  const englishTextError = isRTL ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isRTL ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
 
   function productLabel(product: Product) {
     const name = isRTL ? product.name_ar || product.name : product.name
@@ -350,33 +353,15 @@ export default function InvoiceForm({
     return `${product.code} — ${name}${hsCode ? ` — HS ${hsCode}` : ''}`
   }
 
-  function hsCodeLabel(ref: typeof hsReferences[number]) {
-    const description = isRTL && ref.description_ar ? ref.description_ar : ref.description
-    const unit = ref.customs_unit_basis ? ` — ${ref.customs_unit_basis}` : ''
-    return `${ref.country} — ${ref.hs_code} — ${description}${unit}`
-  }
-
-  function hsCodeSelectValue(item: Partial<ItemFormValues>) {
-    if (!item.hs_code) return ''
-    const ref = hsReferences.find((entry) => entry.hs_code === item.hs_code)
-    return ref ? `ref:${ref.id}` : `code:${item.hs_code}`
-  }
-
-  function applyHsCodeToItem(index: number, value: string) {
-    if (!value) {
+  function applyHsCodeToItem(index: number, hsCode: string, ref?: typeof hsReferences[number]) {
+    if (!hsCode) {
       setValue(`items.${index}.hs_code`, '')
       setValue(`items.${index}.customs_unit_basis`, '')
       setValue(`items.${index}.customs_unit_quantity`, null)
       return
     }
-    if (value.startsWith('code:')) {
-      setValue(`items.${index}.hs_code`, value.slice(5))
-      return
-    }
-    const refId = Number(value.replace('ref:', ''))
-    const ref = hsReferences.find((entry) => entry.id === refId)
+    setValue(`items.${index}.hs_code`, hsCode)
     if (!ref) return
-    setValue(`items.${index}.hs_code`, ref.hs_code)
     setValue(`items.${index}.customs_unit_basis`, ref.customs_unit_basis ?? '')
     setValue(`items.${index}.customs_unit_quantity`, ref.customs_unit_quantity ? Number(ref.customs_unit_quantity) : null)
   }
@@ -925,13 +910,14 @@ export default function InvoiceForm({
                         <Input
                           label={t('invoices.item_name')}
                           placeholder={t('invoices.item_name_placeholder')}
-                          {...register(`items.${i}.description`, { required: true })}
-                          error={errors.items?.[i]?.description ? t('invoices.item_required') : undefined}
+                          {...register(`items.${i}.description`, { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+                          error={errors.items?.[i]?.description ? ((errors.items?.[i]?.description?.message as string) || t('invoices.item_required')) : undefined}
                         />
                         <Input
                           label={t('invoices.item_details_label')}
                           placeholder={t('invoices.item_details_placeholder')}
-                          {...register(`items.${i}.details`)}
+                          {...register(`items.${i}.details`, { validate: (v) => validateEnglishNameValue(v, true) || englishTextError })}
+                          error={errors.items?.[i]?.details?.message as string | undefined}
                         />
                       </div>
 
@@ -981,25 +967,14 @@ export default function InvoiceForm({
 
                       {/* HS Code */}
                       <FormRow>
-                        <div className="space-y-1.5">
-                          <label className="label-base">{t('invoices.hs_code')}</label>
-                          <select
-                            className="input-base w-full"
-                            value={hsCodeSelectValue(item as ItemFormValues)}
-                            onChange={(event) => applyHsCodeToItem(i, event.target.value)}
-                          >
-                            <option value="">{isRTL ? 'اختر الرمز الجمركي' : 'Select HS code'}</option>
-                            {item.hs_code && !hsReferences.some((ref) => ref.hs_code === item.hs_code) && (
-                              <option value={`code:${item.hs_code}`} style={{ background: '#061220' }}>
-                                {item.hs_code}
-                              </option>
-                            )}
-                            {hsReferences.map((ref) => (
-                              <option key={ref.id} value={`ref:${ref.id}`} style={{ background: '#061220' }}>
-                                {hsCodeLabel(ref)}
-                              </option>
-                            ))}
-                          </select>
+                        <div>
+                          <HSCodePicker
+                            label={t('invoices.hs_code')}
+                            value={item.hs_code}
+                            references={hsReferences}
+                            isRTL={isRTL}
+                            onChange={(hsCode, ref) => applyHsCodeToItem(i, hsCode, ref)}
+                          />
                           <input type="hidden" {...register(`items.${i}.hs_code`)} />
                         </div>
                         <Input type="number" label={isRTL ? 'القطع في الكرتون' : 'PCS / Carton'} min={0}
@@ -1068,8 +1043,18 @@ export default function InvoiceForm({
                         <div className="space-y-3 pt-3 border-t border-brand-border/40">
                           <p className="text-[10px] font-semibold text-brand-text-muted uppercase tracking-wider">{t('invoices.bilingual_section')}</p>
                           <FormRow>
-                            <Input label={t('invoices.item_name_en')}    {...register(`items.${i}.description_ar`)} />
-                            <Input label={t('invoices.item_details_en')} {...register(`items.${i}.details_ar`)} />
+                            <Input
+                              label={t('invoices.item_name_en')}
+                              dir="rtl"
+                              {...register(`items.${i}.description_ar`, { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                              error={errors.items?.[i]?.description_ar?.message as string | undefined}
+                            />
+                            <Input
+                              label={t('invoices.item_details_en')}
+                              dir="rtl"
+                              {...register(`items.${i}.details_ar`, { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                              error={errors.items?.[i]?.details_ar?.message as string | undefined}
+                            />
                           </FormRow>
                         </div>
                       )}

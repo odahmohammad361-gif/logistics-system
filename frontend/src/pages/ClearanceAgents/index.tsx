@@ -13,7 +13,9 @@ import {
   localizedCountryOptions,
   localizedRegionOptions,
   normalizeCountryValue,
+  validateArabicNameValue,
   validateEmailValue,
+  validateEnglishNameValue,
   validatePhoneValue,
 } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
@@ -76,6 +78,8 @@ export default function ClearanceAgentsPage() {
   const whatsappValue = watch('whatsapp')
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
   const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
   const countryOptions = localizedCountryOptions(isAr)
   const cityOptions = localizedRegionOptions(selectedCountry, isAr)
 
@@ -292,8 +296,17 @@ export default function ClearanceAgentsPage() {
         <form onSubmit={handleSubmit((v) => saveMut.mutate(v))} className="space-y-5">
           <FormSection title={t('agents.basic_info')}>
             <FormRow>
-              <Input label={t('agents.name')} {...register('name', { required: true })} error={errors.name ? t('common.required') : undefined} />
-              <Input label={isAr ? 'الاسم العربي' : 'Arabic Name'} {...register('name_ar')} />
+              <Input
+                label={t('agents.name')}
+                {...register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+                error={errors.name ? (errors.name.message || t('common.required')) : undefined}
+              />
+              <Input
+                label={isAr ? 'الاسم العربي' : 'Arabic Name'}
+                dir="rtl"
+                {...register('name_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                error={errors.name_ar?.message}
+              />
             </FormRow>
             <Input label={isAr ? 'الشخص المسؤول' : 'Contact Person'} {...register('contact_person')} />
             <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />

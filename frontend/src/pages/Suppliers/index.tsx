@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Input, FormRow, FormSection } from '@/components/ui/Form'
 import PhoneInput from '@/components/ui/PhoneInput'
-import { validatePhoneValue } from '@/constants/contact'
+import { validateArabicNameValue, validateEnglishNameValue, validatePhoneValue } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
 import type { Supplier } from '@/types'
 
@@ -42,6 +42,8 @@ export default function SuppliersPage() {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>()
   const phoneValue = watch('phone')
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
+  const arabicTextError = isAr ? 'اكتب هذا الحقل بحروف عربية فقط' : 'Use Arabic letters only'
 
   const saveMut = useMutation({
     mutationFn: (v: FormValues) =>
@@ -205,12 +207,17 @@ export default function SuppliersPage() {
               />
               <Input
                 label={t('common.name')}
-                {...register('name', { required: true })}
-                error={errors.name ? t('common.required') : undefined}
+                {...register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+                error={errors.name ? (errors.name.message || t('common.required')) : undefined}
               />
             </FormRow>
             <FormRow>
-              <Input label="Arabic Name" {...register('name_ar')} />
+              <Input
+                label="Arabic Name"
+                dir="rtl"
+                {...register('name_ar', { validate: (v) => validateArabicNameValue(v, true) || arabicTextError })}
+                error={errors.name_ar?.message}
+              />
               <Input label={t('suppliers.market_location')} placeholder="Shahe, Guangzhou" {...register('market_location')} />
             </FormRow>
           </FormSection>

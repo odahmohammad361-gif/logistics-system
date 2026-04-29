@@ -16,6 +16,7 @@ import {
   localizedRegionOptions,
   normalizeCountryValue,
   validateEmailValue,
+  validateEnglishNameValue,
   validatePhoneValue,
 } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
@@ -137,6 +138,7 @@ export default function ShippingAgentsPage() {
   const watchPhone = agentForm.watch('phone')
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
   const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const englishTextError = isAr ? 'اكتب هذا الحقل بحروف إنجليزية فقط' : 'Use English letters only'
   const contactRegionOptions = localizedRegionOptions(watchCountry, isAr)
   const legacyCityOptions = CITIES_BY_COUNTRY[watchCountry] ?? []
   const cityOptions = contactRegionOptions.length > 1
@@ -451,8 +453,8 @@ export default function ShippingAgentsPage() {
           <FormSection title={t('agents.basic_info')}>
             <Input
               label={t('agents.name')}
-              {...agentForm.register('name', { required: true })}
-              error={agentForm.formState.errors.name ? t('common.required') : undefined}
+              {...agentForm.register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishTextError })}
+              error={agentForm.formState.errors.name ? (agentForm.formState.errors.name.message || t('common.required')) : undefined}
             />
             <FormRow>
               <input type="hidden" {...agentForm.register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
