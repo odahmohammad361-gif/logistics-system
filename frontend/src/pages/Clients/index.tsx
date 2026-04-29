@@ -360,6 +360,34 @@ export default function ClientsPage() {
     return match ? String(match.id) : ''
   }
 
+  function applyClientCountry(country: string) {
+    const nextBranch = branches.find((branch) => branchMatchesCountry(branch, country))
+    setValue('branch_id', nextBranch ? String(nextBranch.id) : '', { shouldDirty: true })
+    setValue('city', nextBranch?.city ?? '', { shouldDirty: true })
+  }
+
+  function applyClientBranch(branchId: string) {
+    const branch = branches.find((item) => String(item.id) === branchId)
+    if (!branch) return
+    const country = branchCountry(branch)
+    if (country) setValue('country', country, { shouldDirty: true })
+    setValue('city', branch.city ?? '', { shouldDirty: true })
+  }
+
+  function applyMigrateCountry(country: string) {
+    const nextBranch = branches.find((branch) => branchMatchesCountry(branch, country))
+    setValueM('branch_id', nextBranch ? String(nextBranch.id) : '', { shouldDirty: true })
+    setValueM('city', nextBranch?.city ?? '', { shouldDirty: true })
+  }
+
+  function applyMigrateBranch(branchId: string) {
+    const branch = branches.find((item) => String(item.id) === branchId)
+    if (!branch) return
+    const country = branchCountry(branch)
+    if (country) setValueM('country', country, { shouldDirty: true })
+    setValueM('city', branch.city ?? '', { shouldDirty: true })
+  }
+
   useEffect(() => {
     const allowed = localizedRegionOptions(clientCountry, false, false).map(option => option.value)
     if (clientCity && allowed.length && !allowed.includes(clientCity)) setValue('city', '')
@@ -375,32 +403,29 @@ export default function ClientsPage() {
     const selected = branches.find((branch) => String(branch.id) === clientBranchId)
     if (selected && branchMatchesCountry(selected, clientCountry)) return
     const nextBranchId = defaultBranchIdForCountry(clientCountry)
-    if (nextBranchId !== clientBranchId) setValue('branch_id', nextBranchId, { shouldDirty: true })
-  }, [branches, clientCountry, clientBranchId, setValue])
-
-  useEffect(() => {
-    const selected = branches.find((branch) => String(branch.id) === clientBranchId)
-    if (!selected) return
-    const nextCountry = branchCountry(selected)
-    if (nextCountry && nextCountry !== clientCountry) setValue('country', nextCountry, { shouldDirty: true })
-    if (!clientCity && selected.city) setValue('city', selected.city, { shouldDirty: true })
-  }, [branches, clientBranchId, clientCountry, clientCity, setValue])
+    if (nextBranchId !== clientBranchId) {
+      const nextBranch = branches.find((branch) => String(branch.id) === nextBranchId)
+      setValue('branch_id', nextBranchId, { shouldDirty: true })
+      if (!clientCity && nextBranch?.city) setValue('city', nextBranch.city, { shouldDirty: true })
+    }
+  }, [branches, clientCountry, clientBranchId, clientCity, setValue])
 
   useEffect(() => {
     if (!branches.length || !migrateCountry) return
     const selected = branches.find((branch) => String(branch.id) === migrateBranchId)
     if (selected && branchMatchesCountry(selected, migrateCountry)) return
     const nextBranchId = defaultBranchIdForCountry(migrateCountry)
-    if (nextBranchId !== migrateBranchId) setValueM('branch_id', nextBranchId, { shouldDirty: true })
-  }, [branches, migrateCountry, migrateBranchId, setValueM])
+    if (nextBranchId !== migrateBranchId) {
+      const nextBranch = branches.find((branch) => String(branch.id) === nextBranchId)
+      setValueM('branch_id', nextBranchId, { shouldDirty: true })
+      if (!migrateCity && nextBranch?.city) setValueM('city', nextBranch.city, { shouldDirty: true })
+    }
+  }, [branches, migrateCountry, migrateBranchId, migrateCity, setValueM])
 
-  useEffect(() => {
-    const selected = branches.find((branch) => String(branch.id) === migrateBranchId)
-    if (!selected) return
-    const nextCountry = branchCountry(selected)
-    if (nextCountry && nextCountry !== migrateCountry) setValueM('country', nextCountry, { shouldDirty: true })
-    if (!migrateCity && selected.city) setValueM('city', selected.city, { shouldDirty: true })
-  }, [branches, migrateBranchId, migrateCountry, migrateCity, setValueM])
+  const clientCountryField = register('country')
+  const clientBranchField = register('branch_id')
+  const migrateCountryField = regM('country')
+  const migrateBranchField = regM('branch_id')
 
   // ── Main clients columns ──────────────────────────────────────────────────
   const columns = [
@@ -762,8 +787,24 @@ export default function ClientsPage() {
             </FormRow>
             <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
-              <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...register('country')} />
-              <Select label={t('clients.branch')} options={clientBranchOptions} {...register('branch_id')} />
+              <Select
+                label={isAr ? 'الدولة' : t('clients.country')}
+                options={countryOptions}
+                {...clientCountryField}
+                onChange={(event) => {
+                  clientCountryField.onChange(event)
+                  applyClientCountry(event.target.value)
+                }}
+              />
+              <Select
+                label={t('clients.branch')}
+                options={clientBranchOptions}
+                {...clientBranchField}
+                onChange={(event) => {
+                  clientBranchField.onChange(event)
+                  applyClientBranch(event.target.value)
+                }}
+              />
             </FormRow>
             <FormRow>
               <PhoneInput
@@ -842,8 +883,24 @@ export default function ClientsPage() {
                 </FormRow>
                 <input type="hidden" {...regM('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
                 <FormRow>
-                  <Select label={isAr ? 'الدولة' : t('clients.country')} options={countryOptions} {...regM('country')} />
-                  <Select label={t('clients.branch')} options={migrateBranchOptions} {...regM('branch_id')} />
+                  <Select
+                    label={isAr ? 'الدولة' : t('clients.country')}
+                    options={countryOptions}
+                    {...migrateCountryField}
+                    onChange={(event) => {
+                      migrateCountryField.onChange(event)
+                      applyMigrateCountry(event.target.value)
+                    }}
+                  />
+                  <Select
+                    label={t('clients.branch')}
+                    options={migrateBranchOptions}
+                    {...migrateBranchField}
+                    onChange={(event) => {
+                      migrateBranchField.onChange(event)
+                      applyMigrateBranch(event.target.value)
+                    }}
+                  />
                 </FormRow>
                 <FormRow>
                   <PhoneInput
