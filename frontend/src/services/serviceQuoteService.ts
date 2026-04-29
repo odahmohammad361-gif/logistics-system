@@ -1,5 +1,5 @@
 import api from './api'
-import type { ServiceQuote, ServiceQuoteListResponse, ServiceQuoteSuggestion } from '@/types'
+import type { Invoice, ServiceQuote, ServiceQuoteListResponse, ServiceQuoteSuggestion } from '@/types'
 
 export interface ServiceQuotePayload {
   client_id: number
@@ -48,3 +48,6 @@ export const createServiceQuote = (data: ServiceQuotePayload) =>
 
 export const updateServiceQuote = (id: number, data: Partial<ServiceQuote>) =>
   api.patch<ServiceQuote>(`/service-quotes/${id}`, data).then((r) => r.data)
+
+export const createShippingInvoiceFromQuote = (id: number) =>
+  api.post<Invoice>(`/service-quotes/${id}/invoice`).then((r) => r.data)

@@ -141,6 +141,7 @@ export interface Invoice {
   id: number
   invoice_number: string
   invoice_type: InvoiceType
+  invoice_kind: 'goods' | 'shipping' | 'combined' | 'ddp' | string
   status: InvoiceStatus
   client_id: number | null
   client: ClientShort | null

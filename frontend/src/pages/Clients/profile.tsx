@@ -16,7 +16,7 @@ import {
   uploadStamp, uploadBackground, createInvoicePayment, downloadPaymentReceiptHtml,
 } from '@/services/invoiceService'
 import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
-import { createServiceQuote, getServiceQuotes, suggestServiceQuoteRates } from '@/services/serviceQuoteService'
+import { createServiceQuote, createShippingInvoiceFromQuote, getServiceQuotes, suggestServiceQuoteRates, updateServiceQuote } from '@/services/serviceQuoteService'
 import api from '@/services/api'
 import type { BookingCargoDocument, Invoice, InvoiceStatus, ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteSuggestion } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
@@ -422,6 +422,20 @@ export default function ClientProfile() {
     },
   })
 
+  const serviceQuoteStatusMut = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: ServiceQuote['status'] }) => updateServiceQuote(id, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['service-quotes', { client_id: clientId }] }),
+  })
+
+  const shippingInvoiceMut = useMutation({
+    mutationFn: createShippingInvoiceFromQuote,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['service-quotes', { client_id: clientId }] })
+      qc.invalidateQueries({ queryKey: ['invoices', { client_id: clientId }] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+    },
+  })
+
   async function handleStatusChange(id: number, status: InvoiceStatus) {
     try {
       await statusMut.mutateAsync({ id, status })
@@ -737,6 +751,11 @@ export default function ClientProfile() {
                       <td className="table-cell text-xs">{fmt(inv.issue_date)}</td>
                       <td className="table-cell text-end font-medium text-brand-text text-xs">
                         {fmtMoney(inv.total, inv.currency)}
+                        {inv.invoice_kind === 'shipping' && (
+                          <span className="block text-[10px] text-sky-400">
+                            {isAr ? 'فاتورة شحن' : 'Shipping invoice'}
+                          </span>
+                        )}
                         {Number(inv.paid_amount ?? 0) > 0 && (
                           <span className="block text-[10px] text-emerald-400">
                             {isAr ? 'مدفوع' : 'Paid'} {fmtMoney(Number(inv.paid_amount), inv.currency)}
@@ -913,6 +932,35 @@ export default function ClientProfile() {
                 <p className="mt-3 text-[11px] text-brand-text-muted truncate">
                   {(quote.port_of_loading || '—')} → {(quote.port_of_discharge || '—')}
                 </p>
+                {isStaff && (
+                  <div className="mt-3 pt-3 border-t border-brand-border/50 flex flex-wrap gap-2">
+                    {quote.status === 'draft' && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        loading={serviceQuoteStatusMut.isPending}
+                        onClick={() => serviceQuoteStatusMut.mutate({ id: quote.id, status: 'accepted' })}
+                      >
+                        {isAr ? 'اعتماد العرض' : 'Accept'}
+                      </Button>
+                    )}
+                    {quote.invoice_id ? (
+                      <span className="inline-flex items-center rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-400">
+                        {isAr ? 'تم إنشاء فاتورة الشحن' : 'Shipping invoice created'}
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={shippingInvoiceMut.isPending}
+                        onClick={() => shippingInvoiceMut.mutate(quote.id)}
+                      >
+                        {isAr ? 'إنشاء فاتورة شحن' : 'Create Shipping Invoice'}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

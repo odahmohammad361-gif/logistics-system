@@ -30,6 +30,7 @@ class Invoice(Base):
     package_id = Column(Integer, ForeignKey("invoice_packages.id", ondelete="SET NULL"), nullable=True, index=True)
     invoice_number = Column(String(60), unique=True, nullable=False, index=True)
     invoice_type = Column(Enum(InvoiceType), nullable=False)
+    invoice_kind = Column(String(30), nullable=False, default="goods")  # goods | shipping | combined | ddp
     status = Column(Enum(InvoiceStatus), nullable=False, default=InvoiceStatus.DRAFT)
 
     # Client (buyer) — nullable for dummy/manual invoices

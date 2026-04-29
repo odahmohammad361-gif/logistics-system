@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,9 +8,12 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_role
 from app.database import get_db
 from app.models.client import Client
+from app.models.invoice import Invoice, InvoiceStatus, InvoiceType
+from app.models.invoice_item import InvoiceItem
 from app.models.service_quote import ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteStatus
 from app.models.shipping_agent import AgentCarrierRate, ShippingAgent
 from app.models.user import User, UserRole
+from app.schemas.invoice import InvoiceResponse
 from app.schemas.service_quote import (
     ServiceQuoteCreate,
     ServiceQuoteListResponse,
@@ -42,6 +45,14 @@ def _quote_number(db: Session) -> str:
     pattern = f"SQ-{year}-%"
     count = db.query(ServiceQuote).filter(ServiceQuote.quote_number.like(pattern)).count()
     return f"SQ-{year}-{str(count + 1).zfill(5)}"
+
+
+def _shipping_invoice_number(db: Session, client_code: str) -> str:
+    year = date.today().year
+    compact = (client_code or "MAN").replace("-", "")
+    pattern = f"SHIP-{compact}-{year}-%"
+    count = db.query(Invoice).filter(Invoice.invoice_number.like(pattern)).count()
+    return f"SHIP-{compact}-{year}-{str(count + 1).zfill(4)}"
 
 
 def _scope_has_origin(scope: str | ServiceQuoteScope) -> bool:
@@ -89,6 +100,20 @@ def _margin_pct(total_sell: Decimal, total_buy: Decimal) -> Decimal | None:
     if total_sell <= 0:
         return None
     return _q2((total_sell - total_buy) / total_sell * Decimal("100"))
+
+
+def _mode_label(mode: str) -> str:
+    if mode == ServiceQuoteMode.SEA_LCL.value:
+        return "Sea LCL"
+    if mode == ServiceQuoteMode.SEA_FCL.value:
+        return "Sea FCL"
+    if mode == ServiceQuoteMode.AIR.value:
+        return "Air cargo"
+    return mode
+
+
+def _scope_label(scope: str) -> str:
+    return scope.replace("_", " ").title()
 
 
 def _rate_snapshot(rate: AgentCarrierRate | None) -> dict:
@@ -340,3 +365,80 @@ def update_service_quote(
     db.commit()
     db.refresh(quote)
     return quote
+
+
+@router.post("/{quote_id}/invoice", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+def create_shipping_invoice_from_quote(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    quote = db.query(ServiceQuote).filter(ServiceQuote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(404, "Service quote not found")
+    if quote.invoice_id:
+        existing = db.query(Invoice).filter(Invoice.id == quote.invoice_id).first()
+        if existing:
+            return existing
+
+    client = db.query(Client).filter(Client.id == quote.client_id).first()
+    if not client:
+        raise HTTPException(404, "Client not found")
+    if _money(quote.total_sell) <= 0:
+        raise HTTPException(400, "Quote total must be greater than zero")
+
+    now = datetime.now(timezone.utc)
+    invoice = Invoice(
+        invoice_number=_shipping_invoice_number(db, client.client_code),
+        invoice_type=InvoiceType.PI,
+        invoice_kind="shipping",
+        status=InvoiceStatus.DRAFT,
+        client_id=client.id,
+        issue_date=now,
+        origin=quote.origin_country,
+        payment_terms="100% payment before shipping",
+        shipping_term=quote.service_scope,
+        port_of_loading=quote.port_of_loading,
+        port_of_discharge=quote.port_of_discharge,
+        shipping_marks=client.client_code,
+        subtotal=_q2(_money(quote.total_sell)),
+        discount=Decimal("0"),
+        total=_q2(_money(quote.total_sell)),
+        currency=quote.currency,
+        notes=f"Shipping invoice generated from service quote {quote.quote_number}.",
+        notes_ar=f"فاتورة شحن صادرة من عرض الشحن {quote.quote_number}.",
+        created_by_id=current_user.id,
+    )
+    db.add(invoice)
+    db.flush()
+
+    detail_lines = [
+        f"Quote: {quote.quote_number}",
+        f"Route: {quote.port_of_loading or '-'} -> {quote.port_of_discharge or '-'}",
+        f"Carrier: {quote.carrier_name or '-'}",
+        f"Chargeable: {quote.chargeable_quantity or 1} {quote.rate_basis or 'service'}",
+        f"Freight sell: {quote.freight_sell} {quote.currency}",
+        f"Origin fees sell: {quote.origin_fees_sell} {quote.currency}",
+        f"Destination fees sell: {quote.destination_fees_sell} {quote.currency}",
+        f"Other fees sell: {quote.other_fees_sell} {quote.currency}",
+    ]
+    db.add(InvoiceItem(
+        invoice_id=invoice.id,
+        description=f"Shipping service - {_mode_label(quote.mode)} - {_scope_label(quote.service_scope)}",
+        description_ar=f"خدمة شحن - {_mode_label(quote.mode)} - {_scope_label(quote.service_scope)}",
+        details="\n".join(detail_lines),
+        quantity=Decimal("1"),
+        unit="service",
+        unit_price=_q2(_money(quote.total_sell)),
+        total_price=_q2(_money(quote.total_sell)),
+        cartons=quote.cartons,
+        gross_weight=quote.gross_weight_kg,
+        cbm=quote.cbm,
+        sort_order=0,
+    ))
+
+    quote.invoice_id = invoice.id
+    quote.status = ServiceQuoteStatus.INVOICED.value
+    db.commit()
+    db.refresh(invoice)
+    return invoice

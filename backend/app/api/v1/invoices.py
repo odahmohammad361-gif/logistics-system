@@ -422,6 +422,7 @@ def create_invoice(
     inv = Invoice(
         invoice_number=inv_number,
         invoice_type=payload.invoice_type,
+        invoice_kind=payload.invoice_kind or "goods",
         status=initial_status,
         client_id=payload.client_id,
         buyer_name=payload.buyer_name,

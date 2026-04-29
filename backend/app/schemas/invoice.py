@@ -162,6 +162,7 @@ class InvoiceBankAccountResponse(BaseModel):
 
 class InvoiceCreate(BaseModel):
     invoice_type: InvoiceType
+    invoice_kind: str = "goods"
     client_id: Optional[int] = None     # None for dummy/manual invoices
     buyer_name: Optional[str] = None    # manual buyer name (dummy invoices)
     issue_date: date
@@ -199,6 +200,7 @@ class InvoiceCreate(BaseModel):
 
 class InvoiceUpdate(BaseModel):
     invoice_type: Optional[InvoiceType] = None
+    invoice_kind: Optional[str] = None
     status: Optional[InvoiceStatus] = None
     issue_date: Optional[date] = None
     due_date: Optional[date] = None
@@ -244,6 +246,7 @@ class InvoiceResponse(BaseModel):
     id: int
     invoice_number: str
     invoice_type: InvoiceType
+    invoice_kind: str = "goods"
     status: InvoiceStatus
     client: Optional[ClientShort] = None
     buyer_name: Optional[str] = None
