@@ -25,6 +25,13 @@ function normalizeCountry(value: string | null | undefined) {
   return v
 }
 
+function destinationCountry(value: string | null | undefined) {
+  const destination = normalizeCountry(value)
+  if (destination === 'jordan') return 'Jordan'
+  if (destination === 'iraq') return 'Iraq'
+  return ''
+}
+
 function normKey(value: string | null | undefined) {
   return (value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '')
 }
@@ -152,13 +159,18 @@ export default function CargoLineForm({
     enabled: open,
   })
 
+  const bookingDest = eligibleData?.booking_destination ?? null
+  const selectedClient = useMemo(
+    () => (eligibleData?.results ?? []).find(c => String(c.id) === selectedClientId),
+    [eligibleData, selectedClientId],
+  )
+  const hsCountry = destinationCountry(selectedClient?.destination ?? selectedClient?.country ?? bookingDest)
+
   const { data: taxonomyData } = useQuery({
-    queryKey: ['cargo-line-hs-taxonomy'],
-    queryFn: () => listProductTaxonomy(),
+    queryKey: ['cargo-line-hs-taxonomy', hsCountry],
+    queryFn: () => listProductTaxonomy(hsCountry ? { country: hsCountry } : undefined),
     enabled: open,
   })
-
-  const bookingDest = eligibleData?.booking_destination ?? null
 
   const clientOptions = useMemo(() => {
     const clients = eligibleData?.results ?? []
