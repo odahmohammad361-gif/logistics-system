@@ -4,6 +4,7 @@ import uuid
 import shutil
 import json as _json
 from copy import deepcopy
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
 from fastapi.responses import StreamingResponse
@@ -19,9 +20,11 @@ from app.models.product import (
     Product, ProductPhoto, ProductMainCategory, ProductSubcategory,
     ProductType, HSCodeReference,
 )
+from app.models.market_rate import MarketRate
 from app.models.invoice_item import InvoiceItem
 from app.models.customs_calculator import CustomsEstimateLine
 from app.models.booking import BookingCargoLine
+from app.utils.currency import FALLBACK_RATES
 from app.schemas.product import (
     ProductCreate,
     ProductUpdate,
@@ -135,6 +138,30 @@ def _per_piece_price(unit_price: float, unit: str | None, pcs_per_carton: float)
     elif unit_key in {"dozen", "dozens", "dz"}:
         divisor = 12.0
     return round((unit_price or 0) / divisor, 4)
+
+
+def _latest_usd_to_cny(db: Session) -> Decimal:
+    row = (
+        db.query(MarketRate)
+        .filter(MarketRate.target_currency == "CNY")
+        .order_by(MarketRate.fetched_at.desc())
+        .first()
+    )
+    return Decimal(str(row.rate if row else FALLBACK_RATES["CNY"]))
+
+
+def _derive_usd_from_cny(db: Session, price_cny) -> Decimal | None:
+    if price_cny in (None, ""):
+        return None
+    rate = _latest_usd_to_cny(db)
+    if not rate:
+        return None
+    return (Decimal(str(price_cny)) / rate).quantize(Decimal("0.0001"))
+
+
+def _apply_product_price_defaults(product: Product, db: Session) -> None:
+    if product.price_cny is not None and product.price_usd in (None, ""):
+        product.price_usd = _derive_usd_from_cny(db, product.price_cny)
 
 
 def _remove_file_if_local(path: str | None) -> None:
@@ -427,6 +454,7 @@ def create_product(
     if db.query(Product).filter(Product.code == payload.code).first():
         raise HTTPException(400, f"Product code '{payload.code}' already exists")
     product = Product(**payload.model_dump())
+    _apply_product_price_defaults(product, db)
     _apply_reference_defaults(product, db)
     db.add(product)
     db.commit()
@@ -470,6 +498,7 @@ def create_product_from_invoice_item(
         is_active=True,
         is_featured=False,
     )
+    _apply_product_price_defaults(product, db)
     _apply_reference_defaults(product, db)
     db.add(product)
     db.flush()
@@ -495,6 +524,7 @@ def update_product(
         raise HTTPException(404, "Product not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(product, k, v)
+    _apply_product_price_defaults(product, db)
     _apply_reference_defaults(product, db)
     db.commit()
     db.refresh(product)

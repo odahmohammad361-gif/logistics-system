@@ -1,6 +1,6 @@
 import axios from 'axios'
 import api from './api'
-import type { BoardResponse } from '@/types'
+import type { BoardResponse, RatesSnapshot } from '@/types'
 
 // No auth — used by TV portal and dashboard
 export const getBoard = () =>
@@ -8,5 +8,8 @@ export const getBoard = () =>
 
 export const refreshRates = () =>
   api.post('/market/rates/refresh').then((r) => r.data)
+
+export const getRates = () =>
+  api.get<RatesSnapshot>('/market/rates').then((r) => r.data)
 
 export const getTopClients = () => getBoard()

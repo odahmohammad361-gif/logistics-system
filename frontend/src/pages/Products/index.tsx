@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Pencil, Trash2, ImagePlus, X, Package, Database, Save } from 'lucide-react'
@@ -10,6 +10,7 @@ import {
   createProductTypeReference, updateProductTypeReference,
 } from '@/services/productService'
 import { getSuppliers } from '@/services/supplierService'
+import { getRates } from '@/services/marketService'
 import { useAuth } from '@/hooks/useAuth'
 import Table from '@/components/ui/Table'
 import Button from '@/components/ui/Button'
@@ -46,6 +47,8 @@ interface FormValues {
 
 type ReferenceTab = 'main' | 'sub' | 'type'
 type ReferenceItem = ProductMainCategory | ProductSubcategory | ProductTypeReference
+
+const FALLBACK_USD_TO_CNY = 7.23
 
 interface ReferenceForm {
   main_category_id: string
@@ -103,6 +106,12 @@ export default function ProductsPage() {
     queryFn: () => listProductTaxonomy(),
   })
 
+  const { data: ratesData } = useQuery({
+    queryKey: ['market-rates'],
+    queryFn: getRates,
+    staleTime: 30 * 60 * 1000,
+  })
+
   const { data: referenceTaxonomyData } = useQuery({
     queryKey: ['product-taxonomy', 'manager'],
     queryFn: () => listProductTaxonomy({ include_inactive: true }),
@@ -114,8 +123,19 @@ export default function ProductsPage() {
   const selectedSubcategoryId = watch('subcategory_id')
   const selectedProductTypeId = watch('product_type_id')
   const selectedHsCodeRefId = watch('hs_code_ref_id')
+  const watchedPriceCny = watch('price_cny')
   const isAr = i18n.language === 'ar'
   const managerTaxonomyData = referenceTaxonomyData ?? taxonomyData
+  const usdToCnyRate = ratesData?.rates.find((item) => item.currency === 'CNY')?.rate ?? FALLBACK_USD_TO_CNY
+
+  useEffect(() => {
+    const price = Number(watchedPriceCny)
+    if (!price || !Number.isFinite(price) || !usdToCnyRate) {
+      setValue('price_usd', '')
+      return
+    }
+    setValue('price_usd', (price / usdToCnyRate).toFixed(4), { shouldDirty: true })
+  }, [watchedPriceCny, usdToCnyRate, setValue])
 
   const subcategoryOptions = useMemo(
     () => (taxonomyData?.subcategories ?? []).filter((item) => !selectedMainCategoryId || String(item.main_category_id) === selectedMainCategoryId),
@@ -886,6 +906,7 @@ export default function ProductsPage() {
                 label={t('products.price_usd')}
                 type="number"
                 step="0.0001"
+                readOnly
                 {...register('price_usd')}
               />
               <Input

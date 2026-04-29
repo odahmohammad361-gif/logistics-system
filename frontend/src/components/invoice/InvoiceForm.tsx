@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -12,6 +12,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { Invoice, Product } from '@/types'
 import { createProductFromInvoiceItem, listProducts } from '@/services/productService'
+import { getRates } from '@/services/marketService'
 import {
   localizedPaymentTermOptions, localizedShippingTermOptions,
   calcVolumetricWeight, calcChargeableWeight,
@@ -26,6 +27,16 @@ import clsx from 'clsx'
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const CURRENCIES = ['USD', 'EUR', 'CNY', 'JOD', 'IQD', 'SAR', 'AED']
+const EXCHANGE_MARGIN = 1.05
+const FALLBACK_RATES: Record<string, number> = {
+  USD: 1,
+  CNY: 7.23,
+  JOD: 0.709,
+  IQD: 1308,
+  EUR: 0.92,
+  SAR: 3.75,
+  AED: 3.67,
+}
 
 const UNIT_VALUES = ['pcs','dozen','pairs','sets','kg','tons','cbm','rolls','bags','boxes','cartons'] as const
 
@@ -236,6 +247,12 @@ export default function InvoiceForm({
     queryFn: () => listProducts({ page: 1, page_size: 100 }),
   })
 
+  const { data: ratesData } = useQuery({
+    queryKey: ['market-rates'],
+    queryFn: getRates,
+    staleTime: 30 * 60 * 1000,
+  })
+
   const {
     register, control, handleSubmit, watch, setValue,
     formState: { errors },
@@ -310,6 +327,10 @@ export default function InvoiceForm({
 
   const isAir = watchType === 'AIR'
   const products = productsData?.results ?? []
+  const currencyRates = {
+    ...FALLBACK_RATES,
+    ...Object.fromEntries((ratesData?.rates ?? []).map((rate) => [rate.currency, rate.rate])),
+  }
   const originOptions = localizedCountryOptions(isRTL)
   if (watchOrigin && !originOptions.some((option) => option.value === watchOrigin)) {
     originOptions.push({ value: watchOrigin, label: watchOrigin })
@@ -342,13 +363,66 @@ export default function InvoiceForm({
     })
   }
 
+  function productBaseUsd(product: Product) {
+    const usd = num(product.price_usd)
+    if (usd > 0) return usd
+    const cnyRate = currencyRates.CNY || FALLBACK_RATES.CNY
+    return cnyRate ? num(product.price_cny) / cnyRate : num(product.price_cny)
+  }
+
+  function convertUsdToInvoiceCurrency(usdAmount: number) {
+    const currency = watchCurrency || 'USD'
+    if (currency === 'USD') return usdAmount
+    const rate = currencyRates[currency] || FALLBACK_RATES[currency] || 1
+    return usdAmount * rate * EXCHANGE_MARGIN
+  }
+
   function productUnitPrice(product: Product, unit: string) {
-    const perPiece = watchCurrency === 'CNY'
-      ? num(product.price_cny)
-      : num(product.price_usd ?? product.price_cny)
+    const perPiece = convertUsdToInvoiceCurrency(productBaseUsd(product))
     if (unit === 'cartons') return Number((perPiece * num(product.pcs_per_carton, 1)).toFixed(4))
     if (unit === 'dozen') return Number((perPiece * 12).toFixed(4))
-    return perPiece
+    return Number(perPiece.toFixed(4))
+  }
+
+  function cartonsFromQuantity(product: Product, unit: string, quantity: number) {
+    const qty = Math.max(num(quantity, 0), 0)
+    const pcsPerCarton = Math.max(num(product.pcs_per_carton, 1), 1)
+    if (unit === 'cartons') return Math.ceil(qty)
+    if (unit === 'dozen') return Math.ceil((qty * 12) / pcsPerCarton)
+    if (['pcs', 'pairs', 'sets'].includes(unit)) return Math.ceil(qty / pcsPerCarton)
+    return Math.ceil(qty || Math.max(num(product.min_order_cartons, 1), 1))
+  }
+
+  function applyProductPackingToItem(index: number, product: Product, unit: string, quantity: number, updateQuantity = false) {
+    const pcsPerCarton = Math.max(num(product.pcs_per_carton, 1), 1)
+    const cartons = Math.max(cartonsFromQuantity(product, unit, quantity), quantity ? 0 : 1)
+    const customsBasis = product.customs_unit_basis ?? product.product_type?.default_customs_unit_basis ?? ''
+    const totalPieces = unit === 'cartons' ? quantity * pcsPerCarton : unit === 'dozen' ? quantity * 12 : quantity
+    const customsUnit = unitFromBasis(customsBasis)
+    const customsQuantity = customsUnit === 'dozen'
+      ? Math.ceil(totalPieces / 12)
+      : customsUnit === 'cartons'
+        ? cartons
+        : ['pcs', 'pairs', 'sets'].includes(customsUnit)
+          ? totalPieces
+          : quantity
+
+    setValue(`items.${index}.pcs_per_carton`, pcsPerCarton)
+    setValue(`items.${index}.customs_unit_basis`, customsBasis)
+    setValue(`items.${index}.customs_unit_quantity`, customsQuantity || null)
+    setValue(`items.${index}.cartons`, cartons)
+    if (updateQuantity) setValue(`items.${index}.quantity`, quantity)
+    if (product.gross_weight_kg_per_carton) setValue(`items.${index}.gross_weight`, Number((cartons * num(product.gross_weight_kg_per_carton)).toFixed(3)))
+    if (product.net_weight_kg_per_carton) setValue(`items.${index}.net_weight`, Number((cartons * num(product.net_weight_kg_per_carton)).toFixed(3)))
+    if (product.cbm_per_carton) setValue(`items.${index}.cbm`, Number((cartons * num(product.cbm_per_carton)).toFixed(4)))
+  }
+
+  function applyProductQuantityToItem(index: number, quantity: number) {
+    const selected = products.find((p) => p.id === watchItems[index]?.product_id)
+    if (!selected) return
+    const unit = watchItems[index]?.unit || 'pcs'
+    setValue(`items.${index}.quantity`, quantity, { shouldDirty: true })
+    applyProductPackingToItem(index, selected, unit, quantity)
   }
 
   function applyProductUnitToItem(index: number, unit: string, product?: Product) {
@@ -357,21 +431,11 @@ export default function InvoiceForm({
     const cartons = Math.max(num(selected.min_order_cartons, 1), 1)
     const pcsPerCarton = Math.max(num(selected.pcs_per_carton, 1), 1)
     const totalPieces = cartons * pcsPerCarton
-    const customsBasis = selected.customs_unit_basis ?? selected.product_type?.default_customs_unit_basis ?? ''
+    const quantity = unit === 'cartons' ? cartons : unit === 'dozen' ? Math.ceil(totalPieces / 12) : totalPieces
 
     setValue(`items.${index}.unit`, unit)
     setValue(`items.${index}.unit_price`, productUnitPrice(selected, unit))
-    setValue(`items.${index}.cartons`, cartons)
-    setValue(`items.${index}.pcs_per_carton`, pcsPerCarton)
-    setValue(`items.${index}.customs_unit_basis`, customsBasis)
-    setValue(`items.${index}.customs_unit_quantity`, unit === 'dozen' ? Math.ceil(totalPieces / 12) : unit === 'cartons' ? cartons : totalPieces)
-    if (unit === 'cartons') setValue(`items.${index}.quantity`, cartons)
-    else if (unit === 'dozen') setValue(`items.${index}.quantity`, Math.ceil(totalPieces / 12))
-    else setValue(`items.${index}.quantity`, totalPieces)
-
-    if (selected.gross_weight_kg_per_carton) setValue(`items.${index}.gross_weight`, Number((cartons * num(selected.gross_weight_kg_per_carton)).toFixed(3)))
-    if (selected.net_weight_kg_per_carton) setValue(`items.${index}.net_weight`, Number((cartons * num(selected.net_weight_kg_per_carton)).toFixed(3)))
-    if (selected.cbm_per_carton) setValue(`items.${index}.cbm`, Number((cartons * num(selected.cbm_per_carton)).toFixed(4)))
+    applyProductPackingToItem(index, selected, unit, quantity, true)
   }
 
   function applyProductToItem(index: number, productId: string) {
@@ -511,6 +575,17 @@ export default function InvoiceForm({
     if (onlyBlank) replace(rows)
     else append(rows)
   }
+
+  useEffect(() => {
+    if (!products.length) return
+    watchItems.forEach((item, index) => {
+      const product = products.find((p) => p.id === item.product_id)
+      if (!product) return
+      const unit = item.unit || unitFromBasis(product.customs_unit_basis ?? product.product_type?.default_customs_unit_basis) || 'pcs'
+      setValue(`items.${index}.unit_price`, productUnitPrice(product, unit))
+      applyProductPackingToItem(index, product, unit, num(item.quantity, 0))
+    })
+  }, [watchCurrency, ratesData?.fetched_at, productsData?.results])
 
   return (
     <>
@@ -830,7 +905,12 @@ export default function InvoiceForm({
                           label={t('invoices.item_qty')}
                           min={0.01}
                           step="any"
-                          {...register(`items.${i}.quantity`, { required: true, min: 0.01, valueAsNumber: true })}
+                          {...register(`items.${i}.quantity`, {
+                            required: true,
+                            min: 0.01,
+                            valueAsNumber: true,
+                            onChange: (event) => applyProductQuantityToItem(i, Number(event.target.value)),
+                          })}
                           error={errors.items?.[i]?.quantity ? t('invoices.item_required') : undefined}
                         />
                         <div className="space-y-1.5">
@@ -882,18 +962,22 @@ export default function InvoiceForm({
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <Input
                             type="number" label={t('invoices.cartons_count')} min={0}
+                            readOnly={Boolean(selectedProduct)}
                             {...register(`items.${i}.cartons`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })}
                           />
                           <Input
                             type="number" label={t('invoices.gross_weight')} step="0.001"
+                            readOnly={Boolean(selectedProduct)}
                             {...register(`items.${i}.gross_weight`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })}
                           />
                           <Input
                             type="number" label={t('invoices.net_weight')} step="0.001"
+                            readOnly={Boolean(selectedProduct)}
                             {...register(`items.${i}.net_weight`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })}
                           />
                           <Input
                             type="number" label={t('invoices.cbm')} step="0.0001"
+                            readOnly={Boolean(selectedProduct)}
                             {...register(`items.${i}.cbm`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })}
                           />
                         </div>
