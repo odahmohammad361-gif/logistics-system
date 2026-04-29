@@ -143,3 +143,23 @@ export function validateEmailValue(value: string | null | undefined, optional = 
   if (!raw) return optional
   return EMAIL_PATTERN.test(raw)
 }
+
+export function containsArabicScript(value: string | null | undefined) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(value ?? '')
+}
+
+export function containsLatinScript(value: string | null | undefined) {
+  return /[A-Za-z]/.test(value ?? '')
+}
+
+export function validateEnglishNameValue(value: string | null | undefined, optional = false) {
+  const raw = (value ?? '').trim()
+  if (!raw) return optional
+  return !containsArabicScript(raw)
+}
+
+export function validateArabicNameValue(value: string | null | undefined, optional = true) {
+  const raw = (value ?? '').trim()
+  if (!raw) return optional
+  return !containsLatinScript(raw)
+}

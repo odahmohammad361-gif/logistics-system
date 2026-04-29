@@ -12,7 +12,7 @@ export const updateCustomer = (id: number, data: { notes?: string; is_active?: b
 export const migrateCustomer = (
   id: number,
   data: {
-    name?: string; phone?: string; email?: string
+    name?: string; name_ar?: string; phone?: string; email?: string
     city?: string; country?: string; address?: string
     branch_id?: number; notes?: string
   },

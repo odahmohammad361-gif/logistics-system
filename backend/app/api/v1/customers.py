@@ -14,7 +14,7 @@ from app.models.branch import Branch
 from app.models.client import Client
 from app.models.customer import Customer
 from app.models.user import User, UserRole
-from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
+from app.schemas.contact_validators import clean_arabic_name, clean_optional_email, clean_optional_phone, clean_english_name
 
 router = APIRouter()
 
@@ -28,6 +28,7 @@ class CustomerAdminUpdate(BaseModel):
 
 class MigrateToClientRequest(BaseModel):
     name:      Optional[str] = None
+    name_ar:   Optional[str] = None
     phone:     Optional[str] = None
     email:     Optional[str] = None
     city:      Optional[str] = None
@@ -35,6 +36,16 @@ class MigrateToClientRequest(BaseModel):
     address:   Optional[str] = None
     branch_id: Optional[int] = None
     notes:     Optional[str] = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def valid_english_name(cls, v):
+        return clean_english_name(v)
+
+    @field_validator("name_ar", mode="before")
+    @classmethod
+    def valid_arabic_name(cls, v):
+        return clean_arabic_name(v)
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -146,6 +157,7 @@ def migrate_to_client(
 
     client = Client(
         name=payload.name or c.full_name,
+        name_ar=payload.name_ar,
         phone=payload.phone or c.phone,
         email=payload.email or c.email,
         country=payload.country or c.country,

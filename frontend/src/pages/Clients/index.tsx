@@ -23,6 +23,8 @@ import {
   localizedRegionOptions,
   normalizeCountryValue,
   validateEmailValue,
+  validateArabicNameValue,
+  validateEnglishNameValue,
   validatePhoneValue,
 } from '@/constants/contact'
 import { useForm } from 'react-hook-form'
@@ -30,12 +32,12 @@ import type { Client, CustomerAdmin } from '@/types'
 import clsx from 'clsx'
 
 interface FormValues {
-  name: string; phone: string; email: string
+  name: string; name_ar: string; phone: string; email: string
   address: string; city: string; country: string; branch_id: string; notes: string
 }
 
 interface MigrateFormValues {
-  name: string; phone: string; email: string
+  name: string; name_ar: string; phone: string; email: string
   city: string; country: string; address: string; branch_id: string; notes: string
 }
 
@@ -235,6 +237,7 @@ export default function ClientsPage() {
     mutationFn: (v: FormValues) => {
       const p = {
         name:      v.name,
+        name_ar:   v.name_ar   || null,
         phone:     v.phone     || undefined,
         email:     v.email     || undefined,
         address:   v.address   || undefined,
@@ -270,6 +273,7 @@ export default function ClientsPage() {
     mutationFn: (v: MigrateFormValues) =>
       migrateCustomer(migrating!.id, {
         name:      v.name      || undefined,
+        name_ar:   v.name_ar   || undefined,
         phone:     v.phone     || undefined,
         email:     v.email     || undefined,
         city:      v.city      || undefined,
@@ -293,13 +297,13 @@ export default function ClientsPage() {
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', phone: '', email: '', address: '', city: '', country: 'Jordan', branch_id: String(branches[0]?.id ?? ''), notes: '' })
+    reset({ name: '', name_ar: '', phone: '', email: '', address: '', city: '', country: 'Jordan', branch_id: String(branches[0]?.id ?? ''), notes: '' })
     clearErrors(); setModal(true)
   }
   function openEdit(c: Client) {
     setEditing(c)
     reset({
-      name: c.name, phone: c.phone ?? '', email: c.email ?? '', address: c.address ?? '',
+      name: c.name, name_ar: c.name_ar ?? '', phone: c.phone ?? '', email: c.email ?? '', address: c.address ?? '',
       city: c.city ?? '', country: normalizeCountryValue(c.country) || 'Jordan', branch_id: c.branch ? String(c.branch.id) : '', notes: c.notes ?? '',
     })
     clearErrors(); setModal(true)
@@ -307,7 +311,7 @@ export default function ClientsPage() {
   function openMigrate(c: CustomerAdmin) {
     setMigrating(c)
     resetM({
-      name: c.full_name, phone: c.phone, email: c.email,
+      name: c.full_name, name_ar: '', phone: c.phone, email: c.email,
       city: '', country: normalizeCountryValue(c.country) || 'Jordan', address: '', branch_id: String(branches[0]?.id ?? ''), notes: c.notes ?? '',
     })
   }
@@ -318,6 +322,8 @@ export default function ClientsPage() {
   const dateLocale    = isAr ? 'ar-JO' : 'en-GB'
   const phoneError = isAr ? 'رقم الهاتف يجب أن يكون 8 إلى 12 رقماً' : 'Phone number must be 8 to 12 digits'
   const emailError = isAr ? 'صيغة البريد الإلكتروني غير صحيحة' : 'Enter a valid email address'
+  const englishNameError = isAr ? 'اكتب الاسم الإنجليزي بحروف إنجليزية فقط' : 'English name cannot contain Arabic letters'
+  const arabicNameError = isAr ? 'اكتب الاسم العربي بحروف عربية فقط' : 'Arabic name cannot contain English letters'
   const countryOptions = localizedCountryOptions(isAr)
   const clientRegionOptions = localizedRegionOptions(clientCountry, isAr)
   const migrateRegionOptions = localizedRegionOptions(migrateCountry, isAr)
@@ -677,8 +683,19 @@ export default function ClientsPage() {
         )}
         <form onSubmit={handleSubmit((v) => saveMut.mutate(v))} className="space-y-5">
           <FormSection title={t('clients.basic_info')}>
-            <Input label={t('clients.name')} {...register('name', { required: true })}
-              error={errors.name ? t('clients.required') : undefined} />
+            <FormRow>
+              <Input
+                label={isAr ? 'الاسم الإنجليزي' : 'English Name'}
+                {...register('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishNameError })}
+                error={errors.name ? (errors.name.message || t('clients.required')) : undefined}
+              />
+              <Input
+                label={isAr ? 'الاسم العربي' : 'Arabic Name'}
+                dir="rtl"
+                {...register('name_ar', { validate: (v) => validateArabicNameValue(v) || arabicNameError })}
+                error={errors.name_ar?.message}
+              />
+            </FormRow>
             <input type="hidden" {...register('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
             <FormRow>
               <PhoneInput
@@ -744,8 +761,19 @@ export default function ClientsPage() {
 
             <form className="space-y-4">
               <FormSection title={t('clients.basic_info')}>
-                <Input label={t('clients.name')} {...regM('name', { required: true })}
-                  error={errM.name ? t('clients.required') : undefined} />
+                <FormRow>
+                  <Input
+                    label={isAr ? 'الاسم الإنجليزي' : 'English Name'}
+                    {...regM('name', { required: true, validate: (v) => validateEnglishNameValue(v, false) || englishNameError })}
+                    error={errM.name ? (errM.name.message || t('clients.required')) : undefined}
+                  />
+                  <Input
+                    label={isAr ? 'الاسم العربي' : 'Arabic Name'}
+                    dir="rtl"
+                    {...regM('name_ar', { validate: (v) => validateArabicNameValue(v) || arabicNameError })}
+                    error={errM.name_ar?.message}
+                  />
+                </FormRow>
                 <input type="hidden" {...regM('phone', { validate: (v) => validatePhoneValue(v) || phoneError })} />
                 <FormRow>
                   <PhoneInput

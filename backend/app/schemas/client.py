@@ -1,7 +1,13 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
-from app.schemas.contact_validators import clean_optional_email, clean_optional_phone
+from app.schemas.contact_validators import (
+    clean_arabic_name,
+    clean_optional_email,
+    clean_optional_phone,
+    clean_required_english_name,
+    clean_english_name,
+)
 
 
 class BranchShort(BaseModel):
@@ -31,9 +37,12 @@ class ClientCreate(BaseModel):
     @field_validator("name")
     @classmethod
     def name_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Client name cannot be empty")
-        return v.strip()
+        return clean_required_english_name(v)
+
+    @field_validator("name_ar", mode="before")
+    @classmethod
+    def valid_arabic_name(cls, v):
+        return clean_arabic_name(v)
 
     @field_validator("phone", "whatsapp", mode="before")
     @classmethod
@@ -61,6 +70,16 @@ class ClientUpdate(BaseModel):
     branch_id: Optional[int] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def valid_english_name(cls, v):
+        return clean_english_name(v)
+
+    @field_validator("name_ar", mode="before")
+    @classmethod
+    def valid_arabic_name(cls, v):
+        return clean_arabic_name(v)
 
     @field_validator("phone", "whatsapp", mode="before")
     @classmethod
