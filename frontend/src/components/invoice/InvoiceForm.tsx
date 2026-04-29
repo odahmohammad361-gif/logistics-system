@@ -11,7 +11,7 @@ import { Input, Select, Textarea, FormRow } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import type { Invoice, Product } from '@/types'
-import { createProductFromInvoiceItem, listProducts } from '@/services/productService'
+import { createProductFromInvoiceItem, listProducts, listProductTaxonomy } from '@/services/productService'
 import { getRates } from '@/services/marketService'
 import {
   localizedPaymentTermOptions, localizedShippingTermOptions,
@@ -247,6 +247,11 @@ export default function InvoiceForm({
     queryFn: () => listProducts({ page: 1, page_size: 100 }),
   })
 
+  const { data: taxonomyData } = useQuery({
+    queryKey: ['invoice-product-taxonomy'],
+    queryFn: () => listProductTaxonomy(),
+  })
+
   const { data: ratesData } = useQuery({
     queryKey: ['market-rates'],
     queryFn: getRates,
@@ -327,6 +332,7 @@ export default function InvoiceForm({
 
   const isAir = watchType === 'AIR'
   const products = productsData?.results ?? []
+  const hsReferences = taxonomyData?.hs_codes ?? []
   const currencyRates = {
     ...FALLBACK_RATES,
     ...Object.fromEntries((ratesData?.rates ?? []).map((rate) => [rate.currency, rate.rate])),
@@ -342,6 +348,37 @@ export default function InvoiceForm({
     const name = isRTL ? product.name_ar || product.name : product.name
     const hsCode = product.hs_code_ref?.hs_code ?? product.hs_code
     return `${product.code} — ${name}${hsCode ? ` — HS ${hsCode}` : ''}`
+  }
+
+  function hsCodeLabel(ref: typeof hsReferences[number]) {
+    const description = isRTL && ref.description_ar ? ref.description_ar : ref.description
+    const unit = ref.customs_unit_basis ? ` — ${ref.customs_unit_basis}` : ''
+    return `${ref.country} — ${ref.hs_code} — ${description}${unit}`
+  }
+
+  function hsCodeSelectValue(item: Partial<ItemFormValues>) {
+    if (!item.hs_code) return ''
+    const ref = hsReferences.find((entry) => entry.hs_code === item.hs_code)
+    return ref ? `ref:${ref.id}` : `code:${item.hs_code}`
+  }
+
+  function applyHsCodeToItem(index: number, value: string) {
+    if (!value) {
+      setValue(`items.${index}.hs_code`, '')
+      setValue(`items.${index}.customs_unit_basis`, '')
+      setValue(`items.${index}.customs_unit_quantity`, null)
+      return
+    }
+    if (value.startsWith('code:')) {
+      setValue(`items.${index}.hs_code`, value.slice(5))
+      return
+    }
+    const refId = Number(value.replace('ref:', ''))
+    const ref = hsReferences.find((entry) => entry.id === refId)
+    if (!ref) return
+    setValue(`items.${index}.hs_code`, ref.hs_code)
+    setValue(`items.${index}.customs_unit_basis`, ref.customs_unit_basis ?? '')
+    setValue(`items.${index}.customs_unit_quantity`, ref.customs_unit_quantity ? Number(ref.customs_unit_quantity) : null)
   }
 
   function productUnitChoices(product: Product | undefined) {
@@ -944,7 +981,27 @@ export default function InvoiceForm({
 
                       {/* HS Code */}
                       <FormRow>
-                        <Input label={t('invoices.hs_code')} placeholder="6109.10" {...register(`items.${i}.hs_code`)} />
+                        <div className="space-y-1.5">
+                          <label className="label-base">{t('invoices.hs_code')}</label>
+                          <select
+                            className="input-base w-full"
+                            value={hsCodeSelectValue(item as ItemFormValues)}
+                            onChange={(event) => applyHsCodeToItem(i, event.target.value)}
+                          >
+                            <option value="">{isRTL ? 'اختر الرمز الجمركي' : 'Select HS code'}</option>
+                            {item.hs_code && !hsReferences.some((ref) => ref.hs_code === item.hs_code) && (
+                              <option value={`code:${item.hs_code}`} style={{ background: '#061220' }}>
+                                {item.hs_code}
+                              </option>
+                            )}
+                            {hsReferences.map((ref) => (
+                              <option key={ref.id} value={`ref:${ref.id}`} style={{ background: '#061220' }}>
+                                {hsCodeLabel(ref)}
+                              </option>
+                            ))}
+                          </select>
+                          <input type="hidden" {...register(`items.${i}.hs_code`)} />
+                        </div>
                         <Input type="number" label={isRTL ? 'القطع في الكرتون' : 'PCS / Carton'} min={0}
                           {...register(`items.${i}.pcs_per_carton`, { valueAsNumber: true, setValueAs: v => v === '' ? null : Number(v) })} />
                       </FormRow>
