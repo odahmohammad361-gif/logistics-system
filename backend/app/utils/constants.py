@@ -4,7 +4,22 @@ Used by both the reference API and validation logic.
 """
 
 SHIPPING_TERMS = ["FOB", "CFR", "CIF", "EXW", "DDP", "FCA", "DAP", "DDU"]
-PAYMENT_TERMS = ["T/T", "L/C", "Cash", "D/P", "D/A", "100% payment before shipping", "100% payment after shipping"]
+PAYMENT_TERMS = [
+    "T/T",
+    "L/C",
+    "Cash",
+    "D/P",
+    "D/A",
+    "100% payment before shipping",
+    "100% payment after shipping",
+    "30% before shipping / 70% after shipping",
+    "30% deposit / 70% before delivery",
+    "50% deposit / 50% before shipping",
+    "30% deposit / 40% before loading / 30% before release",
+    "Net 7",
+    "Net 15",
+    "Net 30",
+]
 STAMP_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"]
 
 PORTS = {

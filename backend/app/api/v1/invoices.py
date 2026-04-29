@@ -1,26 +1,32 @@
 import base64
+import html
 import io
 import os
+import re
 import shutil
 import uuid
 from decimal import Decimal
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body, status
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
+from app.models.invoice import Invoice, InvoiceType, InvoiceStatus, InvoicePaymentSchedule, InvoicePayment
 from app.models.invoice_item import InvoiceItem
 from app.models.client import Client
 from app.models.company_settings import CompanySettings
 from app.models.product import Product
+from app.models.accounting import AccountingDirection, AccountingStatus, AccountingEntry
 from app.schemas.invoice import (
-    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
+    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse, InvoicePaymentCreate, InvoicePaymentResponse,
 )
 from app.utils.pdf_generator import generate_pdf
+from app.utils.number_to_words import amount_to_words_en, amount_to_words_ar
 
 router = APIRouter()
 
@@ -37,6 +43,18 @@ TYPE_PREFIX = {
 
 # IATA air volumetric divisor
 _AIR_DIVISOR = Decimal("6000")
+
+SMART_PAYMENT_TERMS = [
+    "100% payment before shipping",
+    "100% payment after shipping",
+    "30% before shipping / 70% after shipping",
+    "30% deposit / 70% before delivery",
+    "50% deposit / 50% before shipping",
+    "30% deposit / 40% before loading / 30% before release",
+    "Net 7",
+    "Net 15",
+    "Net 30",
+]
 
 
 def _generate_invoice_number(db: Session, inv_type: InvoiceType, client_code: str, year: int) -> str:
@@ -57,6 +75,110 @@ def _calc_totals(items_data: list, discount: Decimal) -> tuple[Decimal, Decimal]
     )
     total = max(subtotal - discount, Decimal("0"))
     return subtotal, total
+
+
+def _money(value) -> Decimal:
+    try:
+        return Decimal(str(value or 0))
+    except Exception:
+        return Decimal("0")
+
+
+def _q2(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"))
+
+
+def _generate_receipt_number(db: Session, paid_at: datetime) -> str:
+    pattern = f"RCPT-{paid_at.year}-%"
+    count = db.query(InvoicePayment).filter(InvoicePayment.receipt_number.like(pattern)).count()
+    return f"RCPT-{paid_at.year}-{str(count + 1).zfill(5)}"
+
+
+def _generate_entry_number(db: Session, direction: AccountingDirection, entry_date) -> str:
+    prefix = "REC" if direction == AccountingDirection.MONEY_IN else "PAY"
+    pattern = f"{prefix}-{entry_date.year}-%"
+    count = db.query(AccountingEntry).filter(AccountingEntry.entry_number.like(pattern)).count()
+    return f"{prefix}-{entry_date.year}-{str(count + 1).zfill(5)}"
+
+
+def _payment_parts(term: str | None) -> list[tuple[Decimal, str]]:
+    text = (term or "").strip()
+    if not text:
+        return [(Decimal("100"), "Payment due")]
+    normalized = text.lower()
+    if normalized.startswith("net "):
+        return [(Decimal("100"), text)]
+    if normalized in {"cash", "t/t", "l/c", "d/p", "d/a"}:
+        return [(Decimal("100"), text)]
+
+    parts: list[tuple[Decimal, str]] = []
+    for segment in re.split(r"\s*(?:/|;|\+|,)\s*", text):
+        match = re.search(r"(\d+(?:\.\d+)?)\s*%", segment)
+        if not match:
+            continue
+        percent = Decimal(match.group(1))
+        label = re.sub(r"(\d+(?:\.\d+)?)\s*%", "", segment).strip(" -:") or f"{percent}% payment"
+        parts.append((percent, label))
+
+    if not parts:
+        if "before shipping" in normalized:
+            return [(Decimal("100"), "Before shipping")]
+        if "after shipping" in normalized:
+            return [(Decimal("100"), "After shipping")]
+        return [(Decimal("100"), text)]
+
+    total_pct = sum((pct for pct, _ in parts), Decimal("0"))
+    if total_pct < Decimal("100"):
+        parts.append((Decimal("100") - total_pct, "Balance"))
+    return parts
+
+
+def _sync_payment_schedule(db: Session, inv: Invoice) -> None:
+    db.query(InvoicePaymentSchedule).filter(InvoicePaymentSchedule.invoice_id == inv.id).delete()
+    parts = _payment_parts(inv.payment_terms)
+    assigned = Decimal("0.00")
+    for index, (percent, label) in enumerate(parts):
+        if index == len(parts) - 1:
+            amount = _money(inv.total) - assigned
+        else:
+            amount = _q2(_money(inv.total) * percent / Decimal("100"))
+            assigned += amount
+        db.add(InvoicePaymentSchedule(
+            invoice_id=inv.id,
+            label=f"{percent.normalize()}% - {label}",
+            trigger=label,
+            percent=percent,
+            amount=max(amount, Decimal("0")),
+            due_date=inv.due_date,
+            sort_order=index,
+        ))
+
+
+def _refresh_payment_schedule_status(db: Session, inv: Invoice) -> None:
+    paid_total = _money(db.query(func.coalesce(func.sum(InvoicePayment.amount), 0)).filter(
+        InvoicePayment.invoice_id == inv.id
+    ).scalar())
+    remaining = paid_total
+    rows = db.query(InvoicePaymentSchedule).filter(
+        InvoicePaymentSchedule.invoice_id == inv.id
+    ).order_by(InvoicePaymentSchedule.sort_order).all()
+    for row in rows:
+        amount = _money(row.amount)
+        if amount <= 0:
+            row.status = "paid"
+        elif remaining >= amount:
+            row.status = "paid"
+            remaining -= amount
+        elif remaining > 0:
+            row.status = "partial"
+            remaining = Decimal("0")
+        else:
+            row.status = "pending"
+
+
+def _refresh_invoice_payment_status(inv: Invoice) -> None:
+    if _money(inv.total) > 0 and _money(inv.paid_amount) >= _money(inv.total):
+        inv.status = InvoiceStatus.PAID
 
 
 def _compute_air_weights(item_data) -> tuple[Decimal | None, Decimal | None]:
@@ -241,6 +363,8 @@ def create_invoice(
     for idx, it in enumerate(payload.items):
         _add_invoice_item(db, inv.id, it, idx)
 
+    _sync_payment_schedule(db, inv)
+
     db.commit()
     db.refresh(inv)
     return inv
@@ -326,6 +450,13 @@ def update_invoice(
     elif payload.discount is not None:
         inv.subtotal, inv.total = _calc_totals(inv.items, inv.discount)
 
+    if items_data is not None or payload.discount is not None or payload.payment_terms is not None or payload.due_date is not None:
+        db.flush()
+        _sync_payment_schedule(db, inv)
+        db.flush()
+        _refresh_payment_schedule_status(db, inv)
+    _refresh_invoice_payment_status(inv)
+
     db.commit()
     db.refresh(inv)
     return inv
@@ -342,6 +473,192 @@ def delete_invoice(
         raise HTTPException(404, "Invoice not found")
     db.delete(inv)
     db.commit()
+
+
+@router.post("/{invoice_id}/payments", response_model=InvoicePaymentResponse, status_code=status.HTTP_201_CREATED)
+def create_invoice_payment(
+    invoice_id: int,
+    payload: InvoicePaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    paid_at = payload.paid_at or datetime.now(timezone.utc)
+    amount = _q2(payload.amount)
+    receipt_no = _generate_receipt_number(db, paid_at)
+
+    entry = AccountingEntry(
+        entry_number=_generate_entry_number(db, AccountingDirection.MONEY_IN, paid_at.date()),
+        direction=AccountingDirection.MONEY_IN.value,
+        status=AccountingStatus.POSTED.value,
+        entry_date=paid_at.date(),
+        amount=amount,
+        currency=payload.currency or inv.currency,
+        payment_method=payload.payment_method,
+        category="client_payment",
+        counterparty_type="client",
+        counterparty_name=inv.client.name if inv.client else inv.buyer_name,
+        reference_no=payload.reference_no or receipt_no,
+        description=f"Client payment for invoice {inv.invoice_number}",
+        notes=payload.notes,
+        client_id=inv.client_id,
+        invoice_id=inv.id,
+        branch_id=payload.branch_id or inv.branch_id,
+        created_by_id=current_user.id,
+    )
+    db.add(entry)
+    db.flush()
+
+    payment = InvoicePayment(
+        invoice_id=inv.id,
+        receipt_number=receipt_no,
+        amount=amount,
+        currency=payload.currency or inv.currency,
+        payment_method=payload.payment_method,
+        paid_at=paid_at,
+        reference_no=payload.reference_no,
+        notes=payload.notes,
+        branch_id=payload.branch_id or inv.branch_id,
+        accounting_entry_id=entry.id,
+        created_by_id=current_user.id,
+    )
+    db.add(payment)
+    db.flush()
+    paid_total = db.query(func.coalesce(func.sum(InvoicePayment.amount), 0)).filter(
+        InvoicePayment.invoice_id == inv.id
+    ).scalar()
+    if _money(inv.total) > 0 and _money(paid_total) >= _money(inv.total):
+        inv.status = InvoiceStatus.PAID
+    _refresh_payment_schedule_status(db, inv)
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+@router.get("/{invoice_id}/payments/{payment_id}/receipt")
+def print_payment_receipt(
+    invoice_id: int,
+    payment_id: int,
+    lang: str = Query("ar", pattern="^(en|ar)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    payment = db.query(InvoicePayment).filter(
+        InvoicePayment.id == payment_id,
+        InvoicePayment.invoice_id == invoice_id,
+    ).first()
+    if not inv or not payment:
+        raise HTTPException(404, "Receipt not found")
+
+    company = db.query(CompanySettings).filter(CompanySettings.is_active == True).first()
+    is_ar = lang == "ar"
+    amount = float(payment.amount or 0)
+    amount_words = amount_to_words_ar(amount) if is_ar else amount_to_words_en(amount)
+    client_name = inv.client.name_ar if is_ar and inv.client and inv.client.name_ar else (inv.client.name if inv.client else inv.buyer_name or "—")
+    company_name = (
+        (company.name_ar if is_ar and company and company.name_ar else company.name)
+        if company else "Husam Trading Co., Ltd"
+    )
+    branch_name = payment.branch.name_ar if is_ar and payment.branch and payment.branch.name_ar else (payment.branch.name if payment.branch else "")
+
+    labels = {
+        "title": "سند قبض" if is_ar else "Money Receipt",
+        "receipt": "رقم السند" if is_ar else "Receipt No.",
+        "date": "التاريخ" if is_ar else "Date",
+        "received_from": "استلمنا من السيد/السادة" if is_ar else "Received from",
+        "amount": "المبلغ" if is_ar else "Amount",
+        "amount_words": "المبلغ كتابة" if is_ar else "Amount in words",
+        "method": "طريقة الدفع" if is_ar else "Payment method",
+        "invoice": "عن فاتورة رقم" if is_ar else "For invoice",
+        "reference": "رقم المرجع" if is_ar else "Reference",
+        "notes": "ملاحظات" if is_ar else "Notes",
+        "accountant": "المحاسب" if is_ar else "Accountant",
+        "receiver": "المستلم" if is_ar else "Received by",
+        "manager": "المدير" if is_ar else "Manager",
+        "print": "طباعة" if is_ar else "Print",
+    }
+
+    def esc(value) -> str:
+        return html.escape(str(value or "—"))
+
+    body_dir = "rtl" if is_ar else "ltr"
+    body = f"""
+<!doctype html>
+<html lang="{lang}" dir="{body_dir}">
+<head>
+  <meta charset="utf-8" />
+  <title>{esc(payment.receipt_number)}</title>
+  <style>
+    @page {{ size: A5 landscape; margin: 10mm; }}
+    body {{ margin: 0; background: #e8edf2; font-family: Arial, Tahoma, sans-serif; color: #172033; }}
+    .toolbar {{ padding: 12px; text-align: center; }}
+    .toolbar button {{ border: 0; background: #193a6b; color: white; padding: 9px 20px; border-radius: 8px; font-size: 14px; }}
+    .receipt {{ width: 190mm; min-height: 120mm; margin: 0 auto 16px; background: white; border: 1px solid #cfd7e3; position: relative; overflow: hidden; }}
+    .edge {{ position: absolute; inset-block: 0; inset-inline-start: 0; width: 18mm; background: #193a6b; }}
+    .edge:after {{ content: ""; position: absolute; inset-block: 0; inset-inline-end: 0; width: 4mm; background: #2bb673; }}
+    .content {{ padding: 11mm 13mm 10mm 25mm; }}
+    [dir="rtl"] .content {{ padding: 11mm 25mm 10mm 13mm; }}
+    .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #193a6b; padding-bottom: 8px; }}
+    .brand {{ font-size: 18px; font-weight: 800; color: #193a6b; }}
+    .branch {{ color: #2bb673; font-size: 12px; margin-top: 3px; }}
+    .title {{ background: #193a6b; color: white; padding: 7px 22px; font-size: 20px; font-weight: 800; border-radius: 2px; }}
+    .meta {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; margin-top: 14px; font-size: 13px; }}
+    .line {{ border-bottom: 1px dotted #8090a6; padding: 7px 0 5px; min-height: 21px; }}
+    .label {{ color: #5d6c82; font-size: 11px; margin-inline-end: 8px; }}
+    .amount {{ font-size: 22px; color: #193a6b; font-weight: 900; }}
+    .words {{ margin-top: 16px; padding: 11px 13px; background: #eef8f1; border: 1px solid #bfe5cb; color: #174b2a; font-weight: 700; line-height: 1.7; }}
+    .reason {{ margin-top: 12px; line-height: 1.8; font-size: 14px; }}
+    .signatures {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }}
+    .sig {{ text-align: center; padding-top: 30px; border-top: 1px solid #9aa8bb; color: #536276; font-size: 12px; }}
+    .stamp {{ position: absolute; inset-inline-start: 82mm; top: 53mm; width: 34mm; height: 34mm; border: 2px solid rgba(25,58,107,.28); border-radius: 50%; color: rgba(25,58,107,.45); display: flex; align-items: center; justify-content: center; transform: rotate(-18deg); font-weight: 800; }}
+    .footer {{ position: absolute; inset-inline: 25mm 12mm; bottom: 7mm; font-size: 10px; color: #607086; display: flex; justify-content: space-between; }}
+    @media print {{ body {{ background: white; }} .toolbar {{ display: none; }} .receipt {{ margin: 0; border: 0; }} }}
+  </style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">{esc(labels["print"])}</button></div>
+  <main class="receipt">
+    <div class="edge"></div>
+    <section class="content">
+      <div class="header">
+        <div>
+          <div class="brand">{esc(company_name)}</div>
+          <div class="branch">{esc(branch_name)}</div>
+        </div>
+        <div class="title">{esc(labels["title"])}</div>
+      </div>
+      <div class="meta">
+        <div class="line"><span class="label">{esc(labels["receipt"])}:</span>{esc(payment.receipt_number)}</div>
+        <div class="line"><span class="label">{esc(labels["date"])}:</span>{esc(payment.paid_at.strftime("%Y-%m-%d"))}</div>
+        <div class="line"><span class="label">{esc(labels["received_from"])}:</span>{esc(client_name)}</div>
+        <div class="line amount">{esc(payment.amount)} {esc(payment.currency)}</div>
+        <div class="line"><span class="label">{esc(labels["method"])}:</span>{esc(payment.payment_method)}</div>
+        <div class="line"><span class="label">{esc(labels["reference"])}:</span>{esc(payment.reference_no)}</div>
+      </div>
+      <div class="words"><span class="label">{esc(labels["amount_words"])}:</span>{esc(amount_words)}</div>
+      <div class="reason">
+        <div><span class="label">{esc(labels["invoice"])}:</span>{esc(inv.invoice_number)}</div>
+        <div><span class="label">{esc(labels["notes"])}:</span>{esc(payment.notes)}</div>
+      </div>
+      <div class="stamp">{esc(company_name[:18])}</div>
+      <div class="signatures">
+        <div class="sig">{esc(labels["accountant"])}</div>
+        <div class="sig">{esc(labels["receiver"])}</div>
+        <div class="sig">{esc(labels["manager"])}</div>
+      </div>
+    </section>
+    <div class="footer">
+      <span>{esc(payment.receipt_number)}</span>
+      <span>{esc(inv.invoice_number)}</span>
+    </div>
+  </main>
+</body>
+</html>
+"""
+    return Response(content=body, media_type="text/html")
 
 
 @router.post("/{invoice_id}/stamp", response_model=InvoiceResponse)

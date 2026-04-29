@@ -89,6 +89,61 @@ class InvoiceItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvoicePaymentScheduleResponse(BaseModel):
+    id: int
+    label: str
+    trigger: Optional[str]
+    percent: Decimal
+    amount: Decimal
+    due_date: Optional[datetime]
+    status: str
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class InvoicePaymentCreate(BaseModel):
+    amount: Decimal
+    currency: str = "USD"
+    payment_method: str
+    paid_at: Optional[datetime] = None
+    reference_no: Optional[str] = None
+    notes: Optional[str] = None
+    branch_id: Optional[int] = None
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Amount must be greater than zero")
+        return v
+
+    @field_validator("currency", "payment_method")
+    @classmethod
+    def required_text(cls, v: str) -> str:
+        text = (v or "").strip()
+        if not text:
+            raise ValueError("This field is required")
+        return text
+
+
+class InvoicePaymentResponse(BaseModel):
+    id: int
+    invoice_id: int
+    receipt_number: str
+    amount: Decimal
+    currency: str
+    payment_method: str
+    paid_at: datetime
+    reference_no: Optional[str]
+    notes: Optional[str]
+    branch_id: Optional[int]
+    accounting_entry_id: Optional[int]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Invoice ─────────────────────────────────────────────────────────────────
 
 class InvoiceCreate(BaseModel):
@@ -206,6 +261,10 @@ class InvoiceResponse(BaseModel):
     notes: Optional[str]
     notes_ar: Optional[str]
     items: list[InvoiceItemResponse]
+    payment_schedule: list[InvoicePaymentScheduleResponse] = []
+    payments: list[InvoicePaymentResponse] = []
+    paid_amount: Decimal = Decimal("0")
+    balance_due: Decimal = Decimal("0")
     created_at: datetime
     updated_at: datetime
 

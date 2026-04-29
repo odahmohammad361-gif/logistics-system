@@ -99,6 +99,32 @@ export interface ClientShort {
   email: string | null
 }
 
+export interface InvoicePaymentSchedule {
+  id: number
+  label: string
+  trigger: string | null
+  percent: number
+  amount: number
+  due_date: string | null
+  status: string
+  sort_order: number
+}
+
+export interface InvoicePayment {
+  id: number
+  invoice_id: number
+  receipt_number: string
+  amount: number
+  currency: string
+  payment_method: string
+  paid_at: string
+  reference_no: string | null
+  notes: string | null
+  branch_id: number | null
+  accounting_entry_id: number | null
+  created_at: string
+}
+
 export interface Invoice {
   id: number
   invoice_number: string
@@ -140,6 +166,10 @@ export interface Invoice {
   notes: string | null
   notes_ar: string | null
   items: InvoiceItem[]
+  payment_schedule: InvoicePaymentSchedule[]
+  payments: InvoicePayment[]
+  paid_amount: number
+  balance_due: number
   created_at: string
   updated_at: string
 }

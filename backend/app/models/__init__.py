@@ -5,7 +5,7 @@ from app.models.client import Client
 from app.models.shipping_agent import ShippingAgent
 from app.models.shipping_quote import ShippingQuote
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate, ClearanceAgentEditLog
-from app.models.invoice import Invoice, InvoiceType, InvoiceStatus
+from app.models.invoice import Invoice, InvoiceType, InvoiceStatus, InvoicePaymentSchedule, InvoicePayment
 from app.models.invoice_item import InvoiceItem
 from app.models.invoice_package import (
     InvoicePackage, InvoicePackageItem, InvoiceDocument,
@@ -31,7 +31,7 @@ from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 __all__ = [
     "Base", "Branch", "User", "Client",
     "ShippingAgent", "ShippingQuote", "ClearanceAgent", "ClearanceAgentRate", "ClearanceAgentEditLog",
-    "Invoice", "InvoiceType", "InvoiceStatus",
+    "Invoice", "InvoiceType", "InvoiceStatus", "InvoicePaymentSchedule", "InvoicePayment",
     "InvoiceItem", "MarketRate",
     "InvoicePackage", "InvoicePackageItem", "InvoiceDocument",
     "InvoiceFile", "InvoiceActivityLog",

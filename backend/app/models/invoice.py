@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Fore
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
+from decimal import Decimal
 from app.database import Base
 
 
@@ -86,4 +87,64 @@ class Invoice(Base):
     # Relationships
     client = relationship("Client", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceItem.id")
+    payment_schedule = relationship(
+        "InvoicePaymentSchedule",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="InvoicePaymentSchedule.sort_order",
+    )
+    payments = relationship(
+        "InvoicePayment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="InvoicePayment.paid_at.desc()",
+    )
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def paid_amount(self):
+        return sum(((payment.amount or Decimal("0")) for payment in (self.payments or [])), Decimal("0"))
+
+    @property
+    def balance_due(self):
+        return max((self.total or Decimal("0")) - self.paid_amount, Decimal("0"))
+
+
+class InvoicePaymentSchedule(Base):
+    __tablename__ = "invoice_payment_schedule"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True)
+    label = Column(String(200), nullable=False)
+    trigger = Column(String(120), nullable=True)
+    percent = Column(Numeric(7, 3), nullable=False, default=100)
+    amount = Column(Numeric(14, 2), nullable=False, default=0)
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(30), nullable=False, default="pending")
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    invoice = relationship("Invoice", back_populates="payment_schedule")
+
+
+class InvoicePayment(Base):
+    __tablename__ = "invoice_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True)
+    receipt_number = Column(String(80), unique=True, nullable=False, index=True)
+    amount = Column(Numeric(14, 2), nullable=False)
+    currency = Column(String(10), nullable=False, default="USD")
+    payment_method = Column(String(40), nullable=False)
+    paid_at = Column(DateTime(timezone=True), nullable=False)
+    reference_no = Column(String(120), nullable=True)
+    notes = Column(Text, nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
+    accounting_entry_id = Column(Integer, ForeignKey("accounting_entries.id"), nullable=True, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    invoice = relationship("Invoice", back_populates="payments")
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    accounting_entry = relationship("AccountingEntry", foreign_keys=[accounting_entry_id])
     created_by = relationship("User", foreign_keys=[created_by_id])

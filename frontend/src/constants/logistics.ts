@@ -23,6 +23,13 @@ export const PAYMENT_TERMS = [
   'D/A',
   '100% payment before shipping',
   '100% payment after shipping',
+  '30% before shipping / 70% after shipping',
+  '30% deposit / 70% before delivery',
+  '50% deposit / 50% before shipping',
+  '30% deposit / 40% before loading / 30% before release',
+  'Net 7',
+  'Net 15',
+  'Net 30',
 ]
 
 export const PAYMENT_TERM_LABELS: Record<string, { en: string; ar: string }> = {
@@ -33,6 +40,13 @@ export const PAYMENT_TERM_LABELS: Record<string, { en: string; ar: string }> = {
   'D/A': { en: 'Documents Against Acceptance', ar: 'مستندات مقابل قبول' },
   '100% payment before shipping': { en: '100% payment before shipping', ar: 'دفع 100% قبل الشحن' },
   '100% payment after shipping': { en: '100% payment after shipping', ar: 'دفع 100% بعد الشحن' },
+  '30% before shipping / 70% after shipping': { en: '30% before shipping / 70% after shipping', ar: '30% قبل الشحن / 70% بعد الشحن' },
+  '30% deposit / 70% before delivery': { en: '30% deposit / 70% before delivery', ar: '30% دفعة مقدمة / 70% قبل التسليم' },
+  '50% deposit / 50% before shipping': { en: '50% deposit / 50% before shipping', ar: '50% دفعة مقدمة / 50% قبل الشحن' },
+  '30% deposit / 40% before loading / 30% before release': { en: '30% deposit / 40% before loading / 30% before release', ar: '30% مقدماً / 40% قبل التحميل / 30% قبل الإفراج' },
+  'Net 7': { en: 'Net 7 days', ar: 'دفع خلال 7 أيام' },
+  'Net 15': { en: 'Net 15 days', ar: 'دفع خلال 15 يوم' },
+  'Net 30': { en: 'Net 30 days', ar: 'دفع خلال 30 يوم' },
 }
 
 export function localizedShippingTermOptions(isAr: boolean, includeBlank = true) {

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Printer, Download } from 'lucide-react'
+import { Printer, Download, ReceiptText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Invoice } from '@/types'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { downloadPdf, getInvoiceBarcode } from '@/services/invoiceService'
+import { downloadPaymentReceiptHtml, downloadPdf, getInvoiceBarcode } from '@/services/invoiceService'
 
 interface Props {
   invoice: Invoice
@@ -52,9 +52,21 @@ async function handleDownload(invoice: Invoice, lang: 'en' | 'ar' = 'ar') {
   URL.revokeObjectURL(url)
 }
 
+async function openReceipt(invoiceId: number, paymentId: number, lang: 'en' | 'ar' = 'ar') {
+  const blob = await downloadPaymentReceiptHtml(invoiceId, paymentId, lang)
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener,noreferrer')
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
 export default function InvoicePreview({ invoice }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [barcodeUrl, setBarcodeUrl] = useState<string | null>(null)
+  const isAr = i18n.language === 'ar'
+  const paymentSchedule = invoice.payment_schedule ?? []
+  const payments = invoice.payments ?? []
+  const paidAmount = Number(invoice.paid_amount ?? 0)
+  const balanceDue = Number(invoice.balance_due ?? Math.max(Number(invoice.total ?? 0) - paidAmount, 0))
 
   useEffect(() => {
     let url: string | null = null
@@ -229,6 +241,80 @@ export default function InvoicePreview({ invoice }: Props) {
           <span className="text-emerald-400 font-mono">{Number(invoice.total).toFixed(2)} {invoice.currency}</span>
         </div>
       </div>
+
+      {(paymentSchedule.length > 0 || payments.length > 0 || paidAmount > 0 || balanceDue > 0) && (
+        <div className="rounded-xl bg-brand-surface border border-brand-border p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-brand-primary">
+              {isAr ? 'الدفع والسندات' : 'Payments & Receipts'}
+            </p>
+            <div className="text-end">
+              <p className="text-[11px] text-brand-text-muted">{isAr ? 'الرصيد المتبقي' : 'Balance due'}</p>
+              <p className="font-mono font-semibold text-amber-400">{balanceDue.toFixed(2)} {invoice.currency}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-brand-border/50 bg-brand-card/60 px-3 py-2">
+              <p className="text-[11px] text-brand-text-muted">{isAr ? 'المدفوع' : 'Paid'}</p>
+              <p className="font-mono text-emerald-400 font-semibold">{paidAmount.toFixed(2)} {invoice.currency}</p>
+            </div>
+            <div className="rounded-lg border border-brand-border/50 bg-brand-card/60 px-3 py-2">
+              <p className="text-[11px] text-brand-text-muted">{isAr ? 'إجمالي الفاتورة' : 'Invoice total'}</p>
+              <p className="font-mono text-brand-text font-semibold">{Number(invoice.total).toFixed(2)} {invoice.currency}</p>
+            </div>
+          </div>
+
+          {paymentSchedule.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-brand-text-muted">
+                {isAr ? 'جدول الدفع' : 'Payment schedule'}
+              </p>
+              <div className="space-y-1.5">
+                {paymentSchedule.map((part) => (
+                  <div key={part.id} className="flex items-center justify-between gap-3 rounded-lg border border-brand-border/40 px-3 py-2 text-xs">
+                    <span className="text-brand-text-dim">{part.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="rounded-full border border-brand-border bg-brand-card px-2 py-0.5 text-[10px] text-brand-text-muted">
+                        {part.status === 'paid' ? (isAr ? 'مدفوع' : 'Paid') : part.status === 'partial' ? (isAr ? 'جزئي' : 'Partial') : (isAr ? 'معلق' : 'Pending')}
+                      </span>
+                      <span className="font-mono text-brand-text">{Number(part.amount).toFixed(2)} {invoice.currency}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {payments.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-brand-text-muted">
+                {isAr ? 'سندات القبض' : 'Receipts'}
+              </p>
+              <div className="space-y-2">
+                {payments.map((payment) => (
+                  <div key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                    <div>
+                      <p className="font-mono text-xs font-semibold text-emerald-400">{payment.receipt_number}</p>
+                      <p className="text-[11px] text-brand-text-muted">
+                        {payment.paid_at?.slice(0, 10)} · {payment.payment_method}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-brand-text">
+                        {Number(payment.amount).toFixed(2)} {payment.currency}
+                      </span>
+                      <Button size="sm" variant="secondary" onClick={() => void openReceipt(invoice.id, payment.id, isAr ? 'ar' : 'en')}>
+                        <ReceiptText size={13} /> {isAr ? 'السند' : 'Receipt'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Notes */}
       {(invoice.notes_ar || invoice.notes) && (

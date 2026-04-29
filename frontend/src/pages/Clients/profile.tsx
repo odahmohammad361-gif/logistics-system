@@ -8,9 +8,13 @@ import {
   Hash, Calendar, FileText, TrendingUp, Package,
   Barcode, CheckCircle2, XCircle, Plus, Eye, Pencil,
   Trash2, Download, ChevronDown, Loader2, KeyRound, Copy, RefreshCw,
+  CreditCard, ReceiptText,
 } from 'lucide-react'
 import { getClient } from '@/services/clientService'
-import { getInvoices, createInvoice, updateInvoice, deleteInvoice, downloadPdf, uploadStamp, uploadBackground } from '@/services/invoiceService'
+import {
+  getInvoices, createInvoice, updateInvoice, deleteInvoice, downloadPdf,
+  uploadStamp, uploadBackground, createInvoicePayment, downloadPaymentReceiptHtml,
+} from '@/services/invoiceService'
 import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
 import api from '@/services/api'
 import type { BookingCargoDocument, Invoice, InvoiceStatus } from '@/types'
@@ -45,6 +49,11 @@ const ALL_STATUS_KEYS: InvoiceStatus[] = ['draft', 'sent', 'approved', 'paid', '
 
 function fmtMoney(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount) + ' ' + currency
+}
+
+function toLocalDateTimeInput(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
 }
 
 interface ClientPackingListFile {
@@ -196,6 +205,14 @@ export default function ClientProfile() {
   const [viewing, setViewing]         = useState<Invoice | null>(null)
   const [editing, setEditing]         = useState<Invoice | null>(null)
   const [deleting, setDeleting]       = useState<Invoice | null>(null)
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    payment_method: 'cash',
+    paid_at: toLocalDateTimeInput(),
+    reference_no: '',
+    notes: '',
+  })
   const [pwdModal, setPwdModal]       = useState(false)
   const [pwdResult, setPwdResult]     = useState<{ password: string; client_code: string } | null>(null)
   const [pwdLoading, setPwdLoading]   = useState(false)
@@ -278,6 +295,15 @@ export default function ClientProfile() {
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['invoices', { client_id: clientId }] }); qc.invalidateQueries({ queryKey: ['invoices'] }); setDeleting(null) },
   })
 
+  const paymentMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => createInvoicePayment(id, data),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['invoices', { client_id: clientId }] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      setPaymentInvoice(null)
+    },
+  })
+
   async function handleStatusChange(id: number, status: InvoiceStatus) {
     await statusMut.mutateAsync({ id, status })
   }
@@ -290,14 +316,58 @@ export default function ClientProfile() {
     URL.revokeObjectURL(url)
   }
 
+  async function openReceipt(inv: Invoice, lang: 'ar' | 'en' = isAr ? 'ar' : 'en') {
+    const payment = inv.payments?.[0]
+    if (!payment) return
+    const blob = await downloadPaymentReceiptHtml(inv.id, payment.id, lang)
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  function openPayment(inv: Invoice) {
+    const due = Number(inv.balance_due ?? inv.total)
+    setPaymentInvoice(inv)
+    setPaymentForm({
+      amount: due > 0 ? due.toFixed(2) : Number(inv.total ?? 0).toFixed(2),
+      payment_method: 'cash',
+      paid_at: toLocalDateTimeInput(),
+      reference_no: '',
+      notes: '',
+    })
+  }
+
+  async function submitPayment(e: React.FormEvent) {
+    e.preventDefault()
+    if (!paymentInvoice) return
+    await paymentMut.mutateAsync({
+      id: paymentInvoice.id,
+      data: {
+        amount: Number(paymentForm.amount),
+        currency: paymentInvoice.currency,
+        payment_method: paymentForm.payment_method,
+        paid_at: paymentForm.paid_at ? new Date(paymentForm.paid_at).toISOString() : undefined,
+        reference_no: paymentForm.reference_no || null,
+        notes: paymentForm.notes || null,
+      },
+    })
+  }
+
   function fmt(date: string) {
     return new Date(date).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   const totalInvoices = invoicesData?.total ?? 0
-  const paidTotal     = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
-  const pendingTotal  = invoices.filter(i => ['sent', 'approved'].includes(i.status)).reduce((s, i) => s + i.total, 0)
+  const paidTotal     = invoices.reduce((s, i) => s + Number(i.paid_amount ?? (i.status === 'paid' ? i.total : 0)), 0)
+  const pendingTotal  = invoices.reduce((s, i) => s + Number(i.balance_due ?? (['sent', 'approved'].includes(i.status) ? i.total : 0)), 0)
   const currency      = invoices[0]?.currency ?? 'USD'
+  const paymentMethods = [
+    { value: 'cash', label: isAr ? 'نقداً' : 'Cash' },
+    { value: 'bank_transfer', label: isAr ? 'حوالة بنكية' : 'Bank transfer' },
+    { value: 'cliq', label: 'CliQ' },
+    { value: 'card', label: isAr ? 'بطاقة' : 'Card' },
+    { value: 'other', label: isAr ? 'أخرى' : 'Other' },
+  ]
 
   if (clientLoading) {
     return (
@@ -460,7 +530,7 @@ export default function ClientProfile() {
                     <th className="table-head text-start pb-2">{t('clients.inv_col_status')}</th>
                     <th className="table-head text-start pb-2">{t('clients.inv_col_date')}</th>
                     <th className="table-head text-end pb-2">{t('clients.inv_col_amount')}</th>
-                    <th className="table-head pb-2 w-28" />
+                    <th className="table-head pb-2 w-40" />
                   </tr>
                 </thead>
                 <tbody>
@@ -473,6 +543,16 @@ export default function ClientProfile() {
                       <td className="table-cell text-xs">{fmt(inv.issue_date)}</td>
                       <td className="table-cell text-end font-medium text-brand-text text-xs">
                         {fmtMoney(inv.total, inv.currency)}
+                        {Number(inv.paid_amount ?? 0) > 0 && (
+                          <span className="block text-[10px] text-emerald-400">
+                            {isAr ? 'مدفوع' : 'Paid'} {fmtMoney(Number(inv.paid_amount), inv.currency)}
+                          </span>
+                        )}
+                        {Number(inv.balance_due ?? 0) > 0 && (
+                          <span className="block text-[10px] text-amber-400">
+                            {isAr ? 'متبقي' : 'Due'} {fmtMoney(Number(inv.balance_due), inv.currency)}
+                          </span>
+                        )}
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center justify-end gap-1">
@@ -482,6 +562,16 @@ export default function ClientProfile() {
                           <button onClick={() => handleDownload(inv)} className="btn-icon p-1.5" title={t('clients.inv_download')}>
                             <Download size={13} />
                           </button>
+                          {inv.payments?.length > 0 && (
+                            <button onClick={() => void openReceipt(inv)} className="btn-icon p-1.5 text-emerald-400" title={isAr ? 'سند قبض' : 'Receipt'}>
+                              <ReceiptText size={13} />
+                            </button>
+                          )}
+                          {isStaff && Number(inv.balance_due ?? inv.total) > 0 && (
+                            <button onClick={() => openPayment(inv)} className="btn-icon p-1.5 text-amber-400" title={isAr ? 'تسجيل دفعة' : 'Record payment'}>
+                              <CreditCard size={13} />
+                            </button>
+                          )}
                           {isStaff && (
                             <button onClick={() => setEditing(inv)} className="btn-icon p-1.5" title={t('clients.inv_edit')}>
                               <Pencil size={13} />
@@ -612,6 +702,94 @@ export default function ClientProfile() {
               </Button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Record Payment Modal */}
+      <Modal
+        open={!!paymentInvoice}
+        onClose={() => setPaymentInvoice(null)}
+        title={paymentInvoice ? (isAr ? `تسجيل دفعة - ${paymentInvoice.invoice_number}` : `Record Payment - ${paymentInvoice.invoice_number}`) : ''}
+        size="sm"
+      >
+        {paymentInvoice && (
+          <form onSubmit={submitPayment} className="space-y-4">
+            <div className="rounded-xl border border-brand-border bg-brand-surface p-3 grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="text-brand-text-muted">{isAr ? 'إجمالي الفاتورة' : 'Invoice total'}</p>
+                <p className="font-mono font-semibold text-brand-text">{fmtMoney(paymentInvoice.total, paymentInvoice.currency)}</p>
+              </div>
+              <div>
+                <p className="text-brand-text-muted">{isAr ? 'الرصيد المتبقي' : 'Balance due'}</p>
+                <p className="font-mono font-semibold text-amber-400">{fmtMoney(Number(paymentInvoice.balance_due ?? paymentInvoice.total), paymentInvoice.currency)}</p>
+              </div>
+            </div>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'المبلغ' : 'Amount'}</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={paymentForm.amount}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
+                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'طريقة الدفع' : 'Payment method'}</span>
+              <select
+                value={paymentForm.payment_method}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, payment_method: e.target.value }))}
+                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+              >
+                {paymentMethods.map((method) => (
+                  <option key={method.value} value={method.value}>{method.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'تاريخ الدفع' : 'Payment date'}</span>
+              <input
+                type="datetime-local"
+                value={paymentForm.paid_at}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, paid_at: e.target.value }))}
+                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'رقم المرجع' : 'Reference no.'}</span>
+              <input
+                value={paymentForm.reference_no}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, reference_no: e.target.value }))}
+                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                placeholder={isAr ? 'اختياري' : 'Optional'}
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'ملاحظات' : 'Notes'}</span>
+              <textarea
+                value={paymentForm.notes}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, notes: e.target.value }))}
+                className="min-h-20 w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                placeholder={isAr ? 'اختياري' : 'Optional'}
+              />
+            </label>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-brand-border">
+              <Button type="button" variant="secondary" onClick={() => setPaymentInvoice(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" loading={paymentMut.isPending}>
+                <CreditCard size={14} /> {isAr ? 'حفظ الدفعة' : 'Save payment'}
+              </Button>
+            </div>
+          </form>
         )}
       </Modal>
 

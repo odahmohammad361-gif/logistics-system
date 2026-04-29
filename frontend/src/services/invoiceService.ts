@@ -1,5 +1,5 @@
 import api from './api'
-import type { Invoice, InvoiceListResponse } from '@/types'
+import type { Invoice, InvoiceListResponse, InvoicePayment } from '@/types'
 import type { ParsedItem } from '@/components/invoice/ExcelImportPanel'
 
 export const getInvoices = (params?: Record<string, unknown>) =>
@@ -16,6 +16,20 @@ export const updateInvoice = (id: number, data: unknown) =>
 
 export const deleteInvoice = (id: number) =>
   api.delete(`/invoices/${id}`)
+
+export const createInvoicePayment = (invoiceId: number, data: unknown) =>
+  api.post<InvoicePayment>(`/invoices/${invoiceId}/payments`, data).then((r) => r.data)
+
+export const downloadPaymentReceiptHtml = (invoiceId: number, paymentId: number, lang: 'ar' | 'en' = 'ar') =>
+  api.get<Blob>(`/invoices/${invoiceId}/payments/${paymentId}/receipt`, {
+    params: { lang },
+    responseType: 'blob',
+  }).then((r) => r.data)
+
+export const getPaymentReceiptUrl = (invoiceId: number, paymentId: number, lang: 'ar' | 'en' = 'ar') => {
+  const base = api.defaults.baseURL ?? ''
+  return `${base}/invoices/${invoiceId}/payments/${paymentId}/receipt?lang=${lang}`
+}
 
 /** Download PDF as blob */
 export const downloadPdf = (id: number, lang: 'ar' | 'en' = 'ar') =>
