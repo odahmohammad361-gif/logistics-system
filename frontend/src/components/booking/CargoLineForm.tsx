@@ -804,8 +804,8 @@ export default function CargoLineForm({
           </p>
           <p className="mt-1 text-[11px] text-brand-text-muted">
             {isAr
-              ? 'يحسب تلقائياً من سعر البيع. في LCL يتم الحساب حسب CBM مع سقف سعر FCL عند توفره.'
-              : 'Auto-calculated from your selling freight. LCL uses CBM and caps at the FCL sell price when available.'}
+              ? 'يحسب تلقائياً من سعر البيع. العميل الكامل يأخذ سعر الحاوية، والتجميع يحسب حسب CBM من سعة الحاوية.'
+              : 'Auto-calculated from your selling freight. A full-container client gets the container price; consolidation uses CBM against container capacity.'}
           </p>
         </div>
 

@@ -352,19 +352,29 @@ def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
 
     if not lines:
         return
-    if len(lines) == 1 or any(line.is_full_container_client for line in lines):
+    if any(line.is_full_container_client for line in lines):
         for line in lines:
-            line.freight_share = sell_freight if line.is_full_container_client or len(lines) == 1 else Decimal("0.00")
+            line.freight_share = sell_freight if line.is_full_container_client else Decimal("0.00")
         return
 
     total_cbm = sum((_money(line.cbm) or Decimal("0")) for line in lines)
-    if total_cbm > 0:
+    capacity = _booking_capacity(booking)
+    if total_cbm > 0 and capacity is not None and capacity > 0:
+        denominator = max(capacity, total_cbm)
+        for line in lines:
+            cbm = _money(line.cbm) or Decimal("0")
+            line.freight_share = (sell_freight * cbm / denominator).quantize(Decimal("0.01"))
+    elif total_cbm > 0:
         assigned = Decimal("0.00")
-        for index, line in enumerate(lines):
-            if index == len(lines) - 1:
+        chargeable_lines = [line for line in lines if (_money(line.cbm) or Decimal("0")) > 0]
+        last_chargeable = chargeable_lines[-1]
+        for line in lines:
+            cbm = _money(line.cbm) or Decimal("0")
+            if cbm <= 0:
+                line.freight_share = Decimal("0.00")
+            elif line.id == last_chargeable.id:
                 line.freight_share = sell_freight - assigned
             else:
-                cbm = _money(line.cbm) or Decimal("0")
                 share = (sell_freight * cbm / total_cbm).quantize(Decimal("0.01"))
                 line.freight_share = share
                 assigned += share
