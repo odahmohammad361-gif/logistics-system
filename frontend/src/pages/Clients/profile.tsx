@@ -11,8 +11,9 @@ import {
 } from 'lucide-react'
 import { getClient } from '@/services/clientService'
 import { getInvoices, createInvoice, updateInvoice, deleteInvoice, downloadPdf, uploadStamp, uploadBackground } from '@/services/invoiceService'
+import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
 import api from '@/services/api'
-import type { Invoice, InvoiceStatus } from '@/types'
+import type { BookingCargoDocument, Invoice, InvoiceStatus } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -44,6 +45,15 @@ const ALL_STATUS_KEYS: InvoiceStatus[] = ['draft', 'sent', 'approved', 'paid', '
 
 function fmtMoney(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount) + ' ' + currency
+}
+
+interface ClientPackingListFile {
+  bookingId: number
+  bookingNumber: string
+  containerNo: string | null
+  blNumber: string | null
+  lineId: number
+  doc: BookingCargoDocument
 }
 
 // ── Info Row ──────────────────────────────────────────────────────────────────
@@ -221,6 +231,32 @@ export default function ClientProfile() {
   })
 
   const invoices = invoicesData?.results ?? []
+
+  const { data: packingListFiles = [], isLoading: plLoading } = useQuery({
+    queryKey: ['client-packing-lists', clientId],
+    enabled: !!clientId,
+    queryFn: async () => {
+      const summary = await getBookings({ client_id: clientId, page_size: 50 })
+      const bookingIds = Array.from(new Set(summary.results.map((item) => item.id)))
+      const bookings = await Promise.all(bookingIds.map((bookingId) => getBooking(bookingId)))
+      return bookings.flatMap((booking): ClientPackingListFile[] =>
+        booking.cargo_lines
+          .filter((line) => line.client.id === clientId)
+          .flatMap((line) =>
+            line.documents
+              .filter((doc) => doc.document_type === 'pl')
+              .map((doc) => ({
+                bookingId: booking.id,
+                bookingNumber: booking.booking_number,
+                containerNo: booking.container_no,
+                blNumber: booking.bl_number,
+                lineId: line.id,
+                doc,
+              })),
+          ),
+      )
+    },
+  })
 
   const createMut = useMutation({
     mutationFn: createInvoice,
@@ -421,7 +457,6 @@ export default function ClientProfile() {
                 <thead>
                   <tr className="border-b border-brand-border/60">
                     <th className="table-head text-start pb-2">{t('clients.inv_col_number')}</th>
-                    <th className="table-head text-start pb-2">{t('clients.inv_col_type')}</th>
                     <th className="table-head text-start pb-2">{t('clients.inv_col_status')}</th>
                     <th className="table-head text-start pb-2">{t('clients.inv_col_date')}</th>
                     <th className="table-head text-end pb-2">{t('clients.inv_col_amount')}</th>
@@ -432,11 +467,6 @@ export default function ClientProfile() {
                   {invoices.map((inv: Invoice) => (
                     <tr key={inv.id} className="table-row">
                       <td className="table-cell font-mono text-brand-text text-xs">{inv.invoice_number}</td>
-                      <td className="table-cell">
-                        <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[10px]">
-                          {t(`invoices.types.${inv.invoice_type}`, inv.invoice_type)}
-                        </span>
-                      </td>
                       <td className="table-cell">
                         <StatusChanger invoice={inv} onUpdate={handleStatusChange} canEdit={isStaff} />
                       </td>
@@ -483,6 +513,53 @@ export default function ClientProfile() {
               </div>
             </div>
           )}
+
+          <div className="mt-5 pt-4 border-t border-brand-border/40">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-brand-text-dim">
+                  {t('clients.container_pl_title')}
+                </h4>
+                <p className="text-xs text-brand-text-muted mt-1">{t('clients.container_pl_desc')}</p>
+              </div>
+              {packingListFiles.length > 0 && (
+                <span className="badge bg-brand-surface text-brand-text-muted border border-brand-border text-[10px]">
+                  {packingListFiles.length}
+                </span>
+              )}
+            </div>
+            {plLoading ? (
+              <div className="space-y-2">
+                {[...Array(2)].map((_, i) => <div key={i} className="skeleton h-10 rounded-lg" />)}
+              </div>
+            ) : packingListFiles.length === 0 ? (
+              <p className="text-xs text-brand-text-muted">{t('clients.container_pl_empty')}</p>
+            ) : (
+              <div className="space-y-2">
+                {packingListFiles.map((file) => (
+                  <a
+                    key={`${file.bookingId}-${file.lineId}-${file.doc.id}`}
+                    href={getCargoDocumentUrl(file.bookingId, file.lineId, file.doc.id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-brand-surface px-3 py-2.5 hover:border-brand-primary/40 transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-brand-text truncate">
+                        {file.doc.original_filename || 'Packing List'}
+                      </span>
+                      <span className="block text-[10px] text-brand-text-muted mt-0.5">
+                        {file.bookingNumber}
+                        {file.containerNo ? ` · ${file.containerNo}` : ''}
+                        {file.blNumber ? ` · B/L ${file.blNumber}` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] text-brand-primary">{t('clients.container_pl_open')}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
       </div>

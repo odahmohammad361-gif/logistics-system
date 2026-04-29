@@ -159,14 +159,6 @@ export default function InvoiceForm({
     { id: 'notes',    label: t('invoices.tab_notes'),    icon: TAB_ICONS.notes    },
   ]
 
-  const INVOICE_TYPES = [
-    { value: 'PI',          abbr: 'PI', label: t('invoices.types.PI') },
-    { value: 'CI',          abbr: 'CI', label: t('invoices.types.CI') },
-    { value: 'PL',          abbr: 'PL', label: t('invoices.types.PL') },
-    { value: 'SC',          abbr: 'SC', label: t('invoices.types.SC') },
-    { value: 'price_offer', abbr: '',   label: t('invoices.types.price_offer') },
-  ]
-
   const STATUSES = [
     { value: 'draft',     label: t('invoices.status.draft'),     color: 'text-gray-400' },
     { value: 'sent',      label: t('invoices.status.sent'),      color: 'text-blue-400' },
@@ -200,7 +192,7 @@ export default function InvoiceForm({
     defaultValues: {
       client_id:        initial?.client_id ?? null,
       buyer_name:       (initial as any)?.buyer_name ?? '',
-      invoice_type:     initial?.invoice_type ?? 'PI',
+      invoice_type:     'PI',
       issue_date:       initial?.issue_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
       due_date:         initial?.due_date?.slice(0, 10) ?? '',
       status:           initial?.status ?? 'draft',
@@ -324,6 +316,7 @@ export default function InvoiceForm({
   function sanitize(data: FormValues) {
     return {
       ...data,
+      invoice_type: 'PI',
       // lockedClient takes priority (from client profile), else use dropdown selection
       client_id:  lockedClient ? lockedClient.id : (data.client_id || null),
       buyer_name: data.buyer_name || undefined,
@@ -398,34 +391,7 @@ export default function InvoiceForm({
         {activeTab === 'info' && (
           <div className="space-y-6">
 
-            {/* Invoice Type selector */}
-            <Section title={t('invoices.section_type')} accent="indigo">
-              <div className="flex flex-wrap gap-2">
-                {INVOICE_TYPES.map((typ) => (
-                  <button
-                    key={typ.value}
-                    type="button"
-                    onClick={() => setValue('invoice_type', typ.value)}
-                    className={clsx(
-                      'flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border text-xs font-semibold transition-all',
-                      watchType === typ.value
-                        ? 'bg-brand-primary/15 text-brand-primary border-brand-primary/40 shadow-sm'
-                        : 'bg-brand-surface text-brand-text-dim border-brand-border hover:border-brand-border-light hover:text-brand-text',
-                    )}
-                  >
-                    <span className="text-sm font-bold">
-                      {isRTL ? typ.label : (typ.abbr || typ.label)}
-                    </span>
-                    {typ.abbr && (
-                      <span className="text-[10px] opacity-60">
-                        {isRTL ? typ.abbr : typ.label}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <input type="hidden" {...register('invoice_type', { required: true })} />
-            </Section>
+            <input type="hidden" defaultValue="PI" {...register('invoice_type', { required: true })} />
 
             {/* Client + Status + Currency */}
             <Section title={t('invoices.section_invoice_data')} accent="indigo">
