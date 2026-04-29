@@ -734,7 +734,7 @@ export default function ClientProfile() {
                 required
                 value={paymentForm.amount}
                 onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
-                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                className="input-base font-mono [color-scheme:dark]"
               />
             </label>
 
@@ -743,10 +743,10 @@ export default function ClientProfile() {
               <select
                 value={paymentForm.payment_method}
                 onChange={(e) => setPaymentForm((p) => ({ ...p, payment_method: e.target.value }))}
-                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                className="input-base [color-scheme:dark]"
               >
                 {paymentMethods.map((method) => (
-                  <option key={method.value} value={method.value}>{method.label}</option>
+                  <option key={method.value} value={method.value} style={{ background: '#061220', color: '#f8fafc' }}>{method.label}</option>
                 ))}
               </select>
             </label>
@@ -757,7 +757,7 @@ export default function ClientProfile() {
                 type="datetime-local"
                 value={paymentForm.paid_at}
                 onChange={(e) => setPaymentForm((p) => ({ ...p, paid_at: e.target.value }))}
-                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                className="input-base [color-scheme:dark]"
               />
             </label>
 
@@ -766,7 +766,7 @@ export default function ClientProfile() {
               <input
                 value={paymentForm.reference_no}
                 onChange={(e) => setPaymentForm((p) => ({ ...p, reference_no: e.target.value }))}
-                className="w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                className="input-base"
                 placeholder={isAr ? 'اختياري' : 'Optional'}
               />
             </label>
@@ -776,7 +776,7 @@ export default function ClientProfile() {
               <textarea
                 value={paymentForm.notes}
                 onChange={(e) => setPaymentForm((p) => ({ ...p, notes: e.target.value }))}
-                className="min-h-20 w-full rounded-lg border border-brand-border bg-brand-dark px-3 py-2 text-brand-text focus:border-brand-primary focus:outline-none"
+                className="input-base min-h-20 resize-none"
                 placeholder={isAr ? 'اختياري' : 'Optional'}
               />
             </label>

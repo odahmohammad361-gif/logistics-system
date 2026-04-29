@@ -560,6 +560,10 @@ def update_invoice(
 
     update_data = payload.model_dump(exclude_unset=True)
     items_data = update_data.pop("items", None)
+    bank_fields = {
+        "bank_account_name", "bank_account_no", "bank_swift", "bank_name", "bank_address", "currency",
+    }
+    should_save_bank_account = bool(bank_fields & set(update_data.keys()))
 
     for field, value in update_data.items():
         setattr(inv, field, value)
@@ -586,7 +590,8 @@ def update_invoice(
         db.flush()
         _refresh_payment_schedule_status(db, inv)
     _refresh_invoice_payment_status(inv)
-    _upsert_invoice_bank_account(db, inv)
+    if should_save_bank_account:
+        _upsert_invoice_bank_account(db, inv)
 
     db.commit()
     db.refresh(inv)
