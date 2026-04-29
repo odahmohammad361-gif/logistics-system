@@ -502,6 +502,15 @@ def _validate_invoice_selection(db: Session, invoice_id: int | None, client_id: 
     return invoice
 
 
+def _validate_invoice_selections(db: Session, invoice_ids: list[int] | None, client_id: int | None) -> list[Invoice]:
+    normalized: list[int] = []
+    for invoice_id in invoice_ids or []:
+        if invoice_id and invoice_id not in normalized:
+            normalized.append(invoice_id)
+    invoices = [_validate_invoice_selection(db, invoice_id, client_id) for invoice_id in normalized]
+    return [invoice for invoice in invoices if invoice]
+
+
 def _sync_invoice_from_booking(invoice: Invoice | None, booking: Booking | None) -> None:
     if not invoice or not booking:
         return
@@ -515,12 +524,24 @@ def _sync_invoice_from_booking(invoice: Invoice | None, booking: Booking | None)
     invoice.voyage_number = booking.voyage_number
 
 
-def _sync_linked_invoices_from_booking(booking: Booking) -> None:
+def _sync_linked_invoices_from_booking(db: Session, booking: Booking) -> None:
     seen: set[int] = set()
     for line in booking.cargo_lines:
-        if line.invoice and line.invoice_id and line.invoice_id not in seen:
-            _sync_invoice_from_booking(line.invoice, booking)
-            seen.add(line.invoice_id)
+        extracted = line.extracted_goods if isinstance(line.extracted_goods, dict) else {}
+        linked_ids = list(extracted.get("invoice_ids") if isinstance(extracted.get("invoice_ids"), list) else [])
+        linked_ids.extend([
+            item.get("id")
+            for item in (extracted.get("linked_invoices") or [])
+            if isinstance(item, dict) and item.get("id")
+        ])
+        if line.invoice_id:
+            linked_ids.insert(0, line.invoice_id)
+        for invoice_id in linked_ids:
+            if invoice_id and invoice_id not in seen:
+                invoice = line.invoice if line.invoice and line.invoice.id == invoice_id else db.query(Invoice).filter(Invoice.id == invoice_id).first()
+                if invoice:
+                    _sync_invoice_from_booking(invoice, booking)
+                    seen.add(invoice_id)
 
 
 def _validate_goods_source(source: str | None) -> str | None:
@@ -651,7 +672,8 @@ def _cargo_goods_payload(line: BookingCargoLine) -> dict:
         },
         "linked_invoice": {
             "invoice_id": line.invoice_id or extracted.get("invoice_id"),
-            "invoice_number": line.invoice.invoice_number if line.invoice else extracted.get("invoice_number") or extracted.get("invoice_no"),
+            "invoice_number": _line_invoice_label(line),
+            "linked_invoices": extracted.get("linked_invoices", []),
         },
         "summary": {
             "description": line.description,
@@ -814,6 +836,27 @@ def _fill_stats(booking: Booking) -> tuple[Decimal, float | None, float | None]:
     return used, capacity, pct
 
 
+def _line_invoice_label(line: BookingCargoLine) -> str | None:
+    extracted = line.extracted_goods if isinstance(line.extracted_goods, dict) else {}
+    numbers: list[str] = []
+    linked = extracted.get("linked_invoices") if isinstance(extracted.get("linked_invoices"), list) else []
+    for item in linked:
+        if isinstance(item, dict) and item.get("invoice_number"):
+            numbers.append(str(item["invoice_number"]))
+    invoice_numbers = extracted.get("invoice_numbers") if isinstance(extracted.get("invoice_numbers"), list) else []
+    numbers.extend(str(value) for value in invoice_numbers if value)
+    if line.invoice:
+        numbers.insert(0, line.invoice.invoice_number)
+    elif extracted.get("invoice_number") or extracted.get("invoice_no"):
+        numbers.append(str(extracted.get("invoice_number") or extracted.get("invoice_no")))
+    unique = list(dict.fromkeys(numbers))
+    if not unique:
+        return None
+    if len(unique) <= 2:
+        return " + ".join(unique)
+    return f"{unique[0]} + {len(unique) - 1} more"
+
+
 def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
     return BookingCargoLineResponse(
         id=line.id,
@@ -825,7 +868,7 @@ def _serialize_line(line: BookingCargoLine) -> BookingCargoLineResponse:
             client_code=line.client.client_code,
         ),
         invoice_id=line.invoice_id,
-        invoice_number=line.invoice.invoice_number if line.invoice else None,
+        invoice_number=_line_invoice_label(line),
         sort_order=line.sort_order,
         goods_source=line.goods_source,
         is_full_container_client=bool(line.is_full_container_client),
@@ -1301,7 +1344,7 @@ def download_booking_archive_zip(
                     "goods_rows_count": len(line.extracted_goods.get("goods", [])) if isinstance(line.extracted_goods, dict) and isinstance(line.extracted_goods.get("goods"), list) else 0,
                     "linked_invoice": {
                         "invoice_id": line.invoice_id,
-                        "invoice_number": line.invoice.invoice_number if line.invoice else None,
+                        "invoice_number": _line_invoice_label(line),
                     },
                     "clearance_through_us": line.clearance_through_us,
                     "clearance_agent_id": line.clearance_agent_id,
@@ -1394,7 +1437,7 @@ def update_booking(
         "seal_no", "bl_number", "awb_number", "vessel_name",
         "flight_number", "voyage_number",
     } & set(data.keys()):
-        _sync_linked_invoices_from_booking(b)
+        _sync_linked_invoices_from_booking(db, b)
 
     db.commit()
     db.refresh(b)
@@ -1498,14 +1541,16 @@ def add_cargo_line(
             )
     _assert_full_container_rules(b, payload.is_full_container_client)
     _assert_cargo_capacity(b, payload.cbm)
-    invoice = _validate_invoice_selection(db, payload.invoice_id, payload.client_id)
+    invoice_ids = payload.invoice_ids or ([payload.invoice_id] if payload.invoice_id else [])
+    invoices = _validate_invoice_selections(db, invoice_ids, payload.client_id)
+    invoice = invoices[0] if invoices else None
     package = db.query(InvoicePackage).filter(InvoicePackage.id == invoice.package_id).first() if invoice and invoice.package_id else None
     _validate_clearance_selection(db, payload, b)
 
     line = BookingCargoLine(
         booking_id=booking_id,
         client_id=payload.client_id,
-        invoice_id=payload.invoice_id,
+        invoice_id=invoice.id if invoice else None,
         invoice_package_id=package.id if package else None,
         sort_order=payload.sort_order,
         goods_source=_validate_goods_source(payload.goods_source),
@@ -1542,7 +1587,8 @@ def add_cargo_line(
         package.booking_cargo_line_id = line.id
         if not package.client_id:
             package.client_id = line.client_id
-    _sync_invoice_from_booking(invoice, b)
+    for linked_invoice in invoices:
+        _sync_invoice_from_booking(linked_invoice, b)
     _recalculate_freight_shares(db, b)
     db.commit()
     db.refresh(line)
@@ -1570,11 +1616,19 @@ def update_cargo_line(
 
     data = payload.model_dump(exclude_unset=True)
     data.pop("freight_share", None)
+    invoice_ids = data.pop("invoice_ids", None)
     if "goods_source" in data:
         data["goods_source"] = _validate_goods_source(data["goods_source"])
-    effective_invoice_id = data.get("invoice_id", line.invoice_id)
-    invoice = _validate_invoice_selection(db, effective_invoice_id, line.client_id)
-    if "invoice_id" in data:
+    if invoice_ids is not None:
+        invoices = _validate_invoice_selections(db, invoice_ids, line.client_id)
+        invoice = invoices[0] if invoices else None
+        data["invoice_id"] = invoice.id if invoice else None
+        data["invoice_package_id"] = invoice.package_id if invoice and invoice.package_id else None
+    else:
+        effective_invoice_id = data.get("invoice_id", line.invoice_id)
+        invoice = _validate_invoice_selection(db, effective_invoice_id, line.client_id)
+        invoices = [invoice] if invoice else []
+    if "invoice_id" in data and invoice_ids is None:
         data["invoice_package_id"] = invoice.package_id if invoice and invoice.package_id else None
     merged = {
         "clearance_through_us": line.clearance_through_us,
@@ -1605,7 +1659,8 @@ def update_cargo_line(
         if effective_full_client:
             _refresh_booking_rate_snapshot(db, b)
         db.flush()
-        _sync_invoice_from_booking(invoice, b)
+        for linked_invoice in invoices:
+            _sync_invoice_from_booking(linked_invoice, b)
         _recalculate_freight_shares(db, b)
 
     db.commit()

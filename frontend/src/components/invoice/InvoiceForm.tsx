@@ -11,9 +11,10 @@ import { Input, Select, Textarea, FormRow } from '@/components/ui/Form'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import HSCodePicker from '@/components/ui/HSCodePicker'
-import type { Invoice, Product } from '@/types'
+import type { Invoice, InvoiceBankAccount, Product } from '@/types'
 import { createProductFromInvoiceItem, listProducts, listProductTaxonomy } from '@/services/productService'
 import { getRates } from '@/services/marketService'
+import { getInvoiceBankAccounts } from '@/services/invoiceService'
 import {
   localizedPaymentTermOptions, localizedShippingTermOptions,
   calcVolumetricWeight, calcChargeableWeight,
@@ -245,6 +246,7 @@ export default function InvoiceForm({
   const [tabErrors, setTabErrors]         = useState<Partial<Record<TabId, boolean>>>({})
   // No toggle needed — both client dropdown and buyer_name field are always shown (both optional)
   const [clientError, setClientError] = useState<string | null>(null)
+  const [selectedBankAccount, setSelectedBankAccount] = useState('')
   const bulkPhotoInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const initialSubtotal = itemsSubtotal(initial?.items)
@@ -267,6 +269,11 @@ export default function InvoiceForm({
     queryKey: ['market-rates'],
     queryFn: getRates,
     staleTime: 30 * 60 * 1000,
+  })
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ['invoice-bank-accounts'],
+    queryFn: getInvoiceBankAccounts,
   })
 
   const {
@@ -417,6 +424,27 @@ export default function InvoiceForm({
     if (unit === 'cartons') return Number((perPiece * num(product.pcs_per_carton, 1)).toFixed(4))
     if (unit === 'dozen') return Number((perPiece * 12).toFixed(4))
     return Number(perPiece.toFixed(4))
+  }
+
+  function bankAccountLabel(account: InvoiceBankAccount) {
+    return [
+      account.account_label,
+      account.bank_name,
+      account.bank_account_name,
+      account.bank_account_no,
+      account.currency,
+    ].filter(Boolean).join(' — ')
+  }
+
+  function applyBankAccount(accountKey: string) {
+    setSelectedBankAccount(accountKey)
+    const account = bankAccounts.find((item, index) => `${item.source}:${item.id ?? index}` === accountKey)
+    if (!account) return
+    setValue('bank_account_name', account.bank_account_name ?? '')
+    setValue('bank_account_no', account.bank_account_no ?? '')
+    setValue('bank_swift', account.bank_swift ?? '')
+    setValue('bank_name', account.bank_name ?? '')
+    setValue('bank_address', account.bank_address ?? '')
   }
 
   function cartonsFromQuantity(product: Product, unit: string, quantity: number) {
@@ -647,7 +675,9 @@ export default function InvoiceForm({
           const withProducts = await saveManualProducts(data)
           const s = sanitize(withProducts)
           setClientError(null)
-          return onSubmit(s as FormValues)
+          const result = await onSubmit(s as FormValues)
+          queryClient.invalidateQueries({ queryKey: ['invoice-bank-accounts'] })
+          return result
         }, onInvalid)}
         className="flex flex-col gap-0"
       >
@@ -1126,6 +1156,31 @@ export default function InvoiceForm({
         {activeTab === 'bank' && (
           <div className="space-y-6">
             <Section title={t('invoices.section_bank')} accent="emerald">
+              {bankAccounts.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="label-base">{isRTL ? 'اختيار حساب بنكي محفوظ' : 'Saved Bank Account'}</label>
+                  <select
+                    className="input-base w-full"
+                    value={selectedBankAccount}
+                    onChange={(event) => applyBankAccount(event.target.value)}
+                  >
+                    <option value="">{isRTL ? 'إدخال يدوي / حساب جديد' : 'Manual entry / new account'}</option>
+                    {bankAccounts.map((account, index) => {
+                      const value = `${account.source}:${account.id ?? index}`
+                      return (
+                        <option key={value} value={value} style={{ background: '#061220' }}>
+                          {bankAccountLabel(account)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <p className="text-[11px] text-brand-text-muted">
+                    {isRTL
+                      ? 'أي حساب جديد تكتبه هنا سيتم حفظه تلقائياً بعد حفظ الفاتورة.'
+                      : 'Any new bank account entered here is saved automatically after saving the invoice.'}
+                  </p>
+                </div>
+              )}
               <FormRow>
                 <Input label={t('invoices.bank_account_name')} {...register('bank_account_name')} />
                 <Input label={t('invoices.bank_account_no')}   {...register('bank_account_no')} />

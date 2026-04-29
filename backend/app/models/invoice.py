@@ -148,3 +148,19 @@ class InvoicePayment(Base):
     branch = relationship("Branch", foreign_keys=[branch_id])
     accounting_entry = relationship("AccountingEntry", foreign_keys=[accounting_entry_id])
     created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class InvoiceBankAccount(Base):
+    __tablename__ = "invoice_bank_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_label = Column(String(200), nullable=True)
+    bank_account_name = Column(String(200), nullable=True)
+    bank_account_no = Column(String(100), nullable=True, index=True)
+    bank_swift = Column(String(20), nullable=True)
+    bank_name = Column(String(200), nullable=True)
+    bank_address = Column(Text, nullable=True)
+    currency = Column(String(10), nullable=False, default="USD")
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

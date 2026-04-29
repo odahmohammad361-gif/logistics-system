@@ -16,14 +16,17 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.invoice import Invoice, InvoiceType, InvoiceStatus, InvoicePaymentSchedule, InvoicePayment
+from app.models.invoice import Invoice, InvoiceType, InvoiceStatus, InvoicePaymentSchedule, InvoicePayment, InvoiceBankAccount
 from app.models.invoice_item import InvoiceItem
 from app.models.client import Client
+from app.models.booking import BookingCargoLine
 from app.models.company_settings import CompanySettings
 from app.models.product import Product
 from app.models.accounting import AccountingDirection, AccountingStatus, AccountingEntry
+from app.models.customs_calculator import CustomsEstimate
 from app.schemas.invoice import (
-    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse, InvoicePaymentCreate, InvoicePaymentResponse,
+    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse, InvoicePaymentCreate,
+    InvoicePaymentResponse, InvoiceBankAccountResponse,
 )
 from app.utils.pdf_generator import generate_pdf
 from app.utils.number_to_words import amount_to_words_en, amount_to_words_ar
@@ -179,6 +182,100 @@ def _refresh_payment_schedule_status(db: Session, inv: Invoice) -> None:
 def _refresh_invoice_payment_status(inv: Invoice) -> None:
     if _money(inv.total) > 0 and _money(inv.paid_amount) >= _money(inv.total):
         inv.status = InvoiceStatus.PAID
+
+
+def _bank_signature(values: dict) -> tuple[str, str, str]:
+    return (
+        (values.get("bank_account_no") or "").strip().lower(),
+        (values.get("bank_swift") or "").strip().lower(),
+        (values.get("bank_name") or "").strip().lower(),
+    )
+
+
+def _invoice_bank_values(inv: Invoice) -> dict:
+    return {
+        "bank_account_name": inv.bank_account_name,
+        "bank_account_no": inv.bank_account_no,
+        "bank_swift": inv.bank_swift,
+        "bank_name": inv.bank_name,
+        "bank_address": inv.bank_address,
+        "currency": inv.currency or "USD",
+    }
+
+
+def _upsert_invoice_bank_account(db: Session, inv: Invoice) -> None:
+    values = _invoice_bank_values(inv)
+    if not any(values.get(key) for key in ("bank_account_name", "bank_account_no", "bank_swift", "bank_name")):
+        return
+    account_no, swift, bank_name = _bank_signature(values)
+    query = db.query(InvoiceBankAccount).filter(InvoiceBankAccount.is_active == True)  # noqa: E712
+    account = None
+    if account_no:
+        account = query.filter(func.lower(InvoiceBankAccount.bank_account_no) == account_no).first()
+    if not account and swift and bank_name:
+        account = query.filter(
+            func.lower(InvoiceBankAccount.bank_swift) == swift,
+            func.lower(InvoiceBankAccount.bank_name) == bank_name,
+        ).first()
+    label = values.get("bank_name") or values.get("bank_account_name") or values.get("bank_account_no") or "Bank Account"
+    if not account:
+        account = InvoiceBankAccount(account_label=label)
+        db.add(account)
+    account.account_label = account.account_label or label
+    account.bank_account_name = values.get("bank_account_name")
+    account.bank_account_no = values.get("bank_account_no")
+    account.bank_swift = values.get("bank_swift")
+    account.bank_name = values.get("bank_name")
+    account.bank_address = values.get("bank_address")
+    account.currency = values.get("currency") or "USD"
+    account.is_active = True
+
+
+def _remove_invoice_from_extracted_goods(payload: dict | None, invoice_id: int) -> tuple[dict | None, int | None]:
+    if not isinstance(payload, dict):
+        return payload, None
+    data = dict(payload)
+    invoice_key = str(invoice_id)
+    if str(data.get("invoice_id")) == invoice_key:
+        data["invoice_id"] = None
+        data["invoice_number"] = None
+        data["invoice_no"] = None
+    linked = data.get("linked_invoices") if isinstance(data.get("linked_invoices"), list) else []
+    linked = [item for item in linked if isinstance(item, dict) and str(item.get("id")) != invoice_key]
+    if linked:
+        data["linked_invoices"] = linked
+        data["invoice_ids"] = [item.get("id") for item in linked if item.get("id")]
+        data["invoice_numbers"] = [item.get("invoice_number") for item in linked if item.get("invoice_number")]
+        next_invoice_id = data["invoice_ids"][0] if data["invoice_ids"] else None
+        if not data.get("invoice_id") and next_invoice_id:
+            data["invoice_id"] = next_invoice_id
+            data["invoice_number"] = data["invoice_numbers"][0] if data["invoice_numbers"] else None
+        return data, next_invoice_id
+
+    for key in ("linked_invoices", "invoice_ids", "invoice_numbers"):
+        data.pop(key, None)
+    if isinstance(data.get("goods"), list):
+        data["goods"] = [
+            item for item in data["goods"]
+            if not (isinstance(item, dict) and str(item.get("invoice_id")) == invoice_key)
+        ]
+    return data, None
+
+
+def _unlink_invoice_from_container_cargo(db: Session, invoice_id: int) -> None:
+    lines = db.query(BookingCargoLine).all()
+    for line in lines:
+        changed = False
+        next_invoice_id = None
+        if line.extracted_goods:
+            line.extracted_goods, next_invoice_id = _remove_invoice_from_extracted_goods(line.extracted_goods, invoice_id)
+            changed = True
+        if line.invoice_id == invoice_id:
+            line.invoice_id = next_invoice_id
+            line.invoice_package_id = None
+            changed = True
+        if changed:
+            db.add(line)
 
 
 def _compute_air_weights(item_data) -> tuple[Decimal | None, Decimal | None]:
@@ -364,6 +461,7 @@ def create_invoice(
         _add_invoice_item(db, inv.id, it, idx)
 
     _sync_payment_schedule(db, inv)
+    _upsert_invoice_bank_account(db, inv)
 
     db.commit()
     db.refresh(inv)
@@ -403,6 +501,38 @@ def list_invoices(
     total = q.count()
     results = q.order_by(Invoice.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return InvoiceListResponse(total=total, page=page, page_size=page_size, results=results)
+
+
+@router.get("/bank-accounts", response_model=list[InvoiceBankAccountResponse])
+def list_invoice_bank_accounts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows: list[InvoiceBankAccountResponse] = []
+    company = db.query(CompanySettings).filter(CompanySettings.is_active == True).first()  # noqa: E712
+    if company and any([company.bank_account_name, company.bank_account_no, company.bank_swift, company.bank_name]):
+        rows.append(InvoiceBankAccountResponse(
+            id=None,
+            account_label=company.bank_name or company.bank_account_name or "Company Bank Account",
+            bank_account_name=company.bank_account_name,
+            bank_account_no=company.bank_account_no,
+            bank_swift=company.bank_swift,
+            bank_name=company.bank_name,
+            bank_address=company.bank_address,
+            currency="USD",
+            source="company_settings",
+        ))
+    accounts = db.query(InvoiceBankAccount).filter(
+        InvoiceBankAccount.is_active == True  # noqa: E712
+    ).order_by(InvoiceBankAccount.updated_at.desc(), InvoiceBankAccount.id.desc()).all()
+    seen = {_bank_signature(row.model_dump()) for row in rows}
+    for account in accounts:
+        response = InvoiceBankAccountResponse.model_validate(account)
+        if _bank_signature(response.model_dump()) in seen:
+            continue
+        rows.append(response)
+        seen.add(_bank_signature(response.model_dump()))
+    return rows
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
@@ -456,6 +586,7 @@ def update_invoice(
         db.flush()
         _refresh_payment_schedule_status(db, inv)
     _refresh_invoice_payment_status(inv)
+    _upsert_invoice_bank_account(db, inv)
 
     db.commit()
     db.refresh(inv)
@@ -471,6 +602,15 @@ def delete_invoice(
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
+    _unlink_invoice_from_container_cargo(db, inv.id)
+    db.query(AccountingEntry).filter(AccountingEntry.invoice_id == inv.id).update(
+        {AccountingEntry.invoice_id: None},
+        synchronize_session=False,
+    )
+    db.query(CustomsEstimate).filter(CustomsEstimate.invoice_id == inv.id).update(
+        {CustomsEstimate.invoice_id: None},
+        synchronize_session=False,
+    )
     db.delete(inv)
     db.commit()
 

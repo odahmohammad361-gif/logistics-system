@@ -1,9 +1,12 @@
 import api from './api'
-import type { Invoice, InvoiceListResponse, InvoicePayment } from '@/types'
+import type { Invoice, InvoiceBankAccount, InvoiceListResponse, InvoicePayment } from '@/types'
 import type { ParsedItem } from '@/components/invoice/ExcelImportPanel'
 
 export const getInvoices = (params?: Record<string, unknown>) =>
   api.get<InvoiceListResponse>('/invoices', { params }).then((r) => r.data)
+
+export const getInvoiceBankAccounts = () =>
+  api.get<InvoiceBankAccount[]>('/invoices/bank-accounts').then((r) => r.data)
 
 export const getInvoice = (id: number) =>
   api.get<Invoice>(`/invoices/${id}`).then((r) => r.data)

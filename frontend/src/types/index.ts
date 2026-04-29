@@ -125,6 +125,18 @@ export interface InvoicePayment {
   created_at: string
 }
 
+export interface InvoiceBankAccount {
+  id: number | null
+  account_label: string | null
+  bank_account_name: string | null
+  bank_account_no: string | null
+  bank_swift: string | null
+  bank_name: string | null
+  bank_address: string | null
+  currency: string
+  source: string
+}
+
 export interface Invoice {
   id: number
   invoice_number: string
@@ -558,11 +570,16 @@ export interface BookingCargoLine {
     extracted_at?: string
     confidence?: string
     invoice_id?: number | null
+    invoice_ids?: number[]
     invoice_number?: string | null
+    invoice_numbers?: string[]
+    linked_invoices?: Array<{ id: number; invoice_number: string; total?: number; currency?: string }>
     invoice_no?: string | null
     source_documents?: Array<{ id: number; type: string; filename: string | null; characters?: number }>
     goods?: Array<{
       product_id?: number | null
+      invoice_id?: number | null
+      invoice_number?: string | null
       description?: string
       cartons?: number | null
       quantity?: number | null

@@ -144,6 +144,20 @@ class InvoicePaymentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvoiceBankAccountResponse(BaseModel):
+    id: Optional[int] = None
+    account_label: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_swift: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_address: Optional[str] = None
+    currency: str = "USD"
+    source: str = "invoice_bank_accounts"
+
+    model_config = {"from_attributes": True}
+
+
 # ── Invoice ─────────────────────────────────────────────────────────────────
 
 class InvoiceCreate(BaseModel):
