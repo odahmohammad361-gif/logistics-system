@@ -91,6 +91,24 @@ function StatBox({ label, value, color }: { label: string; value: string; color:
   )
 }
 
+function paymentScheduleDueRows(invoice: Invoice) {
+  const schedule = [...(invoice.payment_schedule ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+  let unappliedPaid = Number(invoice.paid_amount ?? 0)
+
+  return schedule.map((part) => {
+    const amount = Number(part.amount ?? 0)
+    const applied = Math.min(Math.max(unappliedPaid, 0), amount)
+    unappliedPaid = Math.max(unappliedPaid - amount, 0)
+    return { ...part, remaining_amount: Math.max(amount - applied, 0) }
+  }).filter((part) => part.remaining_amount > 0.009)
+}
+
+function suggestedPaymentAmount(invoice: Invoice) {
+  const nextSchedule = paymentScheduleDueRows(invoice)[0]
+  const balanceDue = Number(invoice.balance_due ?? invoice.total ?? 0)
+  return Math.max(nextSchedule?.remaining_amount ?? balanceDue, 0)
+}
+
 // ── StatusChanger ─────────────────────────────────────────────────────────────
 function StatusChanger({
   invoice, onUpdate, canEdit,
@@ -124,7 +142,8 @@ function StatusChanger({
     }
   }, [open])
 
-  const options = ALL_STATUS_KEYS.filter(s => s !== invoice.status)
+  const hasBalanceDue = Number(invoice.balance_due ?? 0) > 0.009
+  const options = ALL_STATUS_KEYS.filter(s => s !== invoice.status && !(s === 'paid' && hasBalanceDue))
 
   async function handleChange(next: InvoiceStatus) {
     setLoading(true); setOpen(false)
@@ -305,7 +324,11 @@ export default function ClientProfile() {
   })
 
   async function handleStatusChange(id: number, status: InvoiceStatus) {
-    await statusMut.mutateAsync({ id, status })
+    try {
+      await statusMut.mutateAsync({ id, status })
+    } catch {
+      window.alert(isAr ? 'تعذر تغيير الحالة. سجل الدفعة أولاً إذا كانت الحالة مدفوعة.' : 'Could not change status. Record the payment first if the invoice is paid.')
+    }
   }
 
   async function handleDownload(inv: Invoice) {
@@ -326,7 +349,7 @@ export default function ClientProfile() {
   }
 
   function openPayment(inv: Invoice) {
-    const due = Number(inv.balance_due ?? inv.total)
+    const due = suggestedPaymentAmount(inv)
     setPaymentInvoice(inv)
     setPaymentForm({
       amount: due > 0 ? due.toFixed(2) : Number(inv.total ?? 0).toFixed(2),
@@ -340,10 +363,20 @@ export default function ClientProfile() {
   async function submitPayment(e: React.FormEvent) {
     e.preventDefault()
     if (!paymentInvoice) return
+    const amount = Number(paymentForm.amount)
+    const balanceDue = Number(paymentInvoice.balance_due ?? paymentInvoice.total ?? 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert(isAr ? 'أدخل مبلغ دفعة صحيح' : 'Enter a valid payment amount')
+      return
+    }
+    if (amount - balanceDue > 0.009) {
+      window.alert(isAr ? 'المبلغ أكبر من الرصيد المتبقي' : 'Amount is greater than the remaining balance')
+      return
+    }
     await paymentMut.mutateAsync({
       id: paymentInvoice.id,
       data: {
-        amount: Number(paymentForm.amount),
+        amount,
         currency: paymentInvoice.currency,
         payment_method: paymentForm.payment_method,
         paid_at: paymentForm.paid_at ? new Date(paymentForm.paid_at).toISOString() : undefined,
@@ -358,8 +391,8 @@ export default function ClientProfile() {
   }
 
   const totalInvoices = invoicesData?.total ?? 0
-  const paidTotal     = invoices.reduce((s, i) => s + Number(i.paid_amount ?? (i.status === 'paid' ? i.total : 0)), 0)
-  const pendingTotal  = invoices.reduce((s, i) => s + Number(i.balance_due ?? (['sent', 'approved'].includes(i.status) ? i.total : 0)), 0)
+  const paidTotal     = invoices.reduce((s, i) => s + Number(i.paid_amount ?? 0), 0)
+  const pendingTotal  = invoices.reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0)
   const currency      = invoices[0]?.currency ?? 'USD'
   const paymentMethods = [
     { value: 'cash', label: isAr ? 'نقداً' : 'Cash' },
@@ -724,6 +757,43 @@ export default function ClientProfile() {
                 <p className="font-mono font-semibold text-amber-400">{fmtMoney(Number(paymentInvoice.balance_due ?? paymentInvoice.total), paymentInvoice.currency)}</p>
               </div>
             </div>
+
+            {paymentScheduleDueRows(paymentInvoice).length > 0 && (
+              <div className="rounded-xl border border-brand-border/80 bg-brand-surface/60 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-brand-text">{isAr ? 'خطة الدفع' : 'Payment plan'}</p>
+                  {paymentInvoice.payment_terms && (
+                    <span className="text-[10px] text-brand-text-muted text-end">{paymentInvoice.payment_terms}</span>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  {paymentScheduleDueRows(paymentInvoice).map((part) => (
+                    <button
+                      key={part.id}
+                      type="button"
+                      onClick={() => setPaymentForm((p) => ({ ...p, amount: part.remaining_amount.toFixed(2) }))}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-brand-border bg-brand-card px-3 py-2 text-start hover:border-brand-primary/50 transition-colors"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-xs text-brand-text truncate">{part.label}</span>
+                        <span className="block text-[10px] text-brand-text-muted">{isAr ? 'المتبقي لهذه الدفعة' : 'Remaining for this installment'}</span>
+                      </span>
+                      <span className="font-mono text-sm text-emerald-400 shrink-0">{fmtMoney(part.remaining_amount, paymentInvoice.currency)}</span>
+                    </button>
+                  ))}
+                  {Number(paymentInvoice.balance_due ?? 0) - suggestedPaymentAmount(paymentInvoice) > 0.009 && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentForm((p) => ({ ...p, amount: Number(paymentInvoice.balance_due ?? 0).toFixed(2) }))}
+                      className="flex items-center justify-between rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-start text-amber-300 hover:border-amber-400/50 transition-colors"
+                    >
+                      <span className="text-xs">{isAr ? 'دفع كامل الرصيد المتبقي' : 'Pay full remaining balance'}</span>
+                      <span className="font-mono text-sm">{fmtMoney(Number(paymentInvoice.balance_due ?? 0), paymentInvoice.currency)}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <label className="block space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'المبلغ' : 'Amount'}</span>

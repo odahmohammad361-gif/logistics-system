@@ -50,10 +50,9 @@ _AIR_DIVISOR = Decimal("6000")
 SMART_PAYMENT_TERMS = [
     "100% payment before shipping",
     "100% payment after shipping",
-    "30% before shipping / 70% after shipping",
-    "30% deposit / 70% before delivery",
+    "30% deposit / 70% before shipping",
     "50% deposit / 50% before shipping",
-    "30% deposit / 40% before loading / 30% before release",
+    "70% deposit / 30% before delivery",
     "Net 7",
     "Net 15",
     "Net 30",
@@ -632,6 +631,14 @@ def create_invoice_payment(
         raise HTTPException(404, "Invoice not found")
     paid_at = payload.paid_at or datetime.now(timezone.utc)
     amount = _q2(payload.amount)
+    current_paid = _money(db.query(func.coalesce(func.sum(InvoicePayment.amount), 0)).filter(
+        InvoicePayment.invoice_id == inv.id
+    ).scalar())
+    balance_due = max(_money(inv.total) - current_paid, Decimal("0"))
+    if balance_due <= 0:
+        raise HTTPException(400, "Invoice is already fully paid")
+    if amount > balance_due:
+        raise HTTPException(400, f"Payment exceeds balance due ({balance_due})")
     receipt_no = _generate_receipt_number(db, paid_at)
 
     entry = AccountingEntry(
@@ -908,6 +915,8 @@ def update_invoice_status(
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
+    if payload.status == InvoiceStatus.PAID and _money(inv.paid_amount) < _money(inv.total):
+        raise HTTPException(400, "Record full payment before marking invoice as paid")
     inv.status = payload.status
     db.commit()
     return {
