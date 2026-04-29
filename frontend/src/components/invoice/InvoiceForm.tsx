@@ -116,6 +116,7 @@ interface FormValues {
   bank_name: string
   bank_address: string
   discount: number
+  discount_percent: number
   notes: string
   notes_ar: string
   items: ItemFormValues[]
@@ -183,6 +184,10 @@ function airCalc(item: ItemFormValues) {
   return { vol: vol.toFixed(2), chargeable: ch.toFixed(2) }
 }
 
+function itemsSubtotal(items: readonly { quantity?: unknown; unit_price?: unknown }[] | undefined) {
+  return (items ?? []).reduce((sum, item) => sum + num(item.quantity) * num(item.unit_price), 0)
+}
+
 // ── Section wrapper ───────────────────────────────────────────────────────────
 function Section({ title, children, accent = 'indigo' }: {
   title: string; children: React.ReactNode; accent?: 'indigo' | 'emerald' | 'blue' | 'amber'
@@ -242,6 +247,11 @@ export default function InvoiceForm({
   const [clientError, setClientError] = useState<string | null>(null)
   const bulkPhotoInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
+  const initialSubtotal = itemsSubtotal(initial?.items)
+  const initialDiscountAmount = initial?.discount != null ? Number(initial.discount) : 0
+  const initialDiscountPercent = initialSubtotal > 0
+    ? Number(((initialDiscountAmount / initialSubtotal) * 100).toFixed(2))
+    : 0
 
   const { data: productsData } = useQuery({
     queryKey: ['invoice-products'],
@@ -288,7 +298,8 @@ export default function InvoiceForm({
       bank_swift:       initial?.bank_swift ?? '',
       bank_name:        initial?.bank_name ?? '',
       bank_address:     initial?.bank_address ?? '',
-      discount:         initial?.discount != null ? Number(initial.discount) : 0,
+      discount:         initialDiscountAmount,
+      discount_percent: initialDiscountPercent,
       notes:            initial?.notes ?? '',
       notes_ar:         initial?.notes_ar ?? '',
       items: initial?.items?.map((item) => ({
@@ -327,8 +338,10 @@ export default function InvoiceForm({
   const watchCurrency   = watch('currency')
   const watchOrigin     = watch('origin')
 
-  const subtotal = watchItems.reduce((s, it) => s + (Number(it.quantity) * Number(it.unit_price)), 0)
-  const discount = Number(watch('discount')) || 0
+  const subtotal = itemsSubtotal(watchItems)
+  const discountPercentRaw = Number(watch('discount_percent')) || 0
+  const discountPercent = Math.min(Math.max(discountPercentRaw, 0), 100)
+  const discount = Math.min(subtotal * discountPercent / 100, subtotal)
   const total    = Math.max(subtotal - discount, 0)
 
   const isAir = watchType === 'AIR'
@@ -514,9 +527,14 @@ export default function InvoiceForm({
   // Sanitize form data before sending to backend:
   // - empty string dates  → undefined (backend expects null or valid date)
   function sanitize(data: FormValues) {
+    const sanitizedSubtotal = itemsSubtotal(data.items)
+    const percent = Math.min(Math.max(num(data.discount_percent), 0), 100)
+    const discountAmount = Number(Math.min(sanitizedSubtotal * percent / 100, sanitizedSubtotal).toFixed(2))
+    const { discount_percent: _discountPercent, ...rest } = data
     return {
-      ...data,
+      ...rest,
       invoice_type: 'PI',
+      discount: discountAmount,
       // lockedClient takes priority (from client profile), else use dropdown selection
       client_id:  lockedClient ? lockedClient.id : (data.client_id || null),
       buyer_name: data.buyer_name || undefined,
@@ -608,6 +626,13 @@ export default function InvoiceForm({
       applyProductPackingToItem(index, product, unit, num(item.quantity, 0))
     })
   }, [watchCurrency, ratesData?.fetched_at, productsData?.results])
+
+  useEffect(() => {
+    const nextDiscount = Number(discount.toFixed(2))
+    if (Math.abs((Number(watch('discount')) || 0) - nextDiscount) > 0.005) {
+      setValue('discount', nextDiscount)
+    }
+  }, [discount, setValue])
 
   return (
     <>
@@ -1076,15 +1101,16 @@ export default function InvoiceForm({
               <div className="flex items-center gap-3">
                 <span className="text-sm text-brand-text-dim shrink-0">{t('invoices.discount')}</span>
                 <input
-                  type="number" min={0} step="0.01"
+                  type="number" min={0} max={100} step="0.01"
                   className="input-base text-xs font-mono w-36"
-                  {...register('discount', { valueAsNumber: true })}
+                  {...register('discount_percent', { valueAsNumber: true })}
                 />
-                <span className="text-xs text-brand-text-muted">{watchCurrency}</span>
+                <span className="text-xs text-brand-text-muted">%</span>
+                <input type="hidden" {...register('discount', { valueAsNumber: true })} />
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-sm text-brand-red">
-                  <span>{t('invoices.discount')}</span>
+                  <span>{t('invoices.discount')} ({discountPercent.toFixed(2)}%)</span>
                   <span className="font-mono">- {discount.toFixed(2)} {watchCurrency}</span>
                 </div>
               )}
