@@ -284,6 +284,20 @@ def _booking_sell_freight(booking: Booking) -> Decimal | None:
     return (buy * (Decimal("1") + (markup / Decimal("100")))).quantize(Decimal("0.01"))
 
 
+def _booking_fcl_sell_freight(db: Session, booking: Booking) -> Decimal | None:
+    if not booking.agent_carrier_rate_id or not booking.container_size:
+        return None
+    rate = db.query(AgentCarrierRate).filter(
+        AgentCarrierRate.id == booking.agent_carrier_rate_id,
+        AgentCarrierRate.is_active == True,  # noqa: E712
+    ).first()
+    if not rate:
+        return None
+    snapshot = _rate_snapshot_values(rate, "FCL", booking.container_size)
+    sell = _money(snapshot.get("sell_freight_cost"))
+    return sell if sell is not None and sell > 0 else None
+
+
 def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
     sell_freight = _booking_sell_freight(booking)
     lines = db.query(BookingCargoLine).filter(
@@ -296,9 +310,29 @@ def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
 
     mode = (booking.mode or "").upper()
     if mode == "LCL":
-        for line in lines:
-            cbm = _money(line.cbm) or Decimal("0")
-            line.freight_share = (sell_freight * cbm).quantize(Decimal("0.01"))
+        cbm_by_line = [(line, _money(line.cbm) or Decimal("0")) for line in lines]
+        chargeable_lines = [(line, cbm) for line, cbm in cbm_by_line if cbm > 0]
+        total_cbm = sum((cbm for _, cbm in chargeable_lines), Decimal("0"))
+        if total_cbm <= 0:
+            for line in lines:
+                line.freight_share = Decimal("0.00")
+            return
+
+        lcl_total = (sell_freight * total_cbm).quantize(Decimal("0.01"))
+        fcl_sell = _booking_fcl_sell_freight(db, booking)
+        total_to_share = min(lcl_total, fcl_sell) if fcl_sell is not None else lcl_total
+
+        assigned = Decimal("0.00")
+        last_chargeable = chargeable_lines[-1][0]
+        for line, cbm in cbm_by_line:
+            if cbm <= 0:
+                line.freight_share = Decimal("0.00")
+            elif line.id == last_chargeable.id:
+                line.freight_share = total_to_share - assigned
+            else:
+                share = (total_to_share * cbm / total_cbm).quantize(Decimal("0.01"))
+                line.freight_share = share
+                assigned += share
         return
 
     if mode == "AIR":
