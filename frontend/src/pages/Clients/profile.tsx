@@ -19,6 +19,7 @@ import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/booking
 import {
   createServiceQuote,
   createShippingInvoiceFromQuote,
+  deleteServiceQuote,
   downloadServiceQuotePackage,
   downloadServiceQuotePrintHtml,
   getServiceQuotes,
@@ -498,6 +499,11 @@ export default function ClientProfile() {
     },
   })
 
+  const deleteServiceQuoteMut = useMutation({
+    mutationFn: deleteServiceQuote,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['service-quotes', { client_id: clientId }] }),
+  })
+
   async function handleStatusChange(id: number, status: InvoiceStatus) {
     try {
       await statusMut.mutateAsync({ id, status })
@@ -529,6 +535,25 @@ export default function ClientProfile() {
     a.download = `${quote.quote_number}-clearance-package.zip`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function handleDeleteServiceQuote(quote: ServiceQuote) {
+    if (quote.invoice_id) {
+      window.alert(isAr ? 'لا يمكن حذف عرض تم إنشاء فاتورة شحن منه. احذف الفاتورة أو افصلها أولاً.' : 'This quote already has a shipping invoice. Delete or unlink the invoice first.')
+      return
+    }
+    const ok = window.confirm(
+      isAr
+        ? `حذف عرض الشحن ${quote.quote_number}؟`
+        : `Delete shipping quote ${quote.quote_number}?`,
+    )
+    if (!ok) return
+    try {
+      await deleteServiceQuoteMut.mutateAsync(quote.id)
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail
+      window.alert(typeof detail === 'string' ? detail : (isAr ? 'تعذر حذف العرض.' : 'Could not delete the quote.'))
+    }
   }
 
   async function openReceipt(inv: Invoice, lang: 'ar' | 'en' = isAr ? 'ar' : 'en') {
@@ -1093,6 +1118,17 @@ export default function ClientProfile() {
                     >
                       <Download size={13} /> {isAr ? 'ملف التخليص' : 'Package'}
                     </Button>
+                    {!quote.invoice_id && (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        loading={deleteServiceQuoteMut.isPending}
+                        onClick={() => handleDeleteServiceQuote(quote)}
+                      >
+                        <Trash2 size={13} /> {isAr ? 'حذف' : 'Delete'}
+                      </Button>
+                    )}
                     {quote.status === 'draft' && (
                       <Button
                         type="button"

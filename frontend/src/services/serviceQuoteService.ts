@@ -55,6 +55,9 @@ export const createServiceQuote = (data: ServiceQuotePayload) =>
 export const updateServiceQuote = (id: number, data: Partial<ServiceQuote>) =>
   api.patch<ServiceQuote>(`/service-quotes/${id}`, data).then((r) => r.data)
 
+export const deleteServiceQuote = (id: number) =>
+  api.delete(`/service-quotes/${id}`)
+
 export const createShippingInvoiceFromQuote = (id: number) =>
   api.post<Invoice>(`/service-quotes/${id}/invoice`).then((r) => r.data)
 

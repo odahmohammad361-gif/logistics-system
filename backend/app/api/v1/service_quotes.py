@@ -807,6 +807,22 @@ def update_service_quote(
     return quote
 
 
+@router.delete("/{quote_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_service_quote(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.STAFF)),
+):
+    quote = db.query(ServiceQuote).filter(ServiceQuote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(404, "Service quote not found")
+    if quote.invoice_id:
+        raise HTTPException(400, "This quote already has a generated invoice. Delete or unlink the invoice first.")
+    db.delete(quote)
+    db.commit()
+    return None
+
+
 def _create_quote_cost_entry(db: Session, quote: ServiceQuote, invoice: Invoice, current_user: User) -> None:
     amount = _q2(_money(quote.total_buy))
     if amount <= 0:
