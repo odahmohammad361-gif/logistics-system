@@ -4,7 +4,7 @@ from app.models.user import User
 from app.models.client import Client
 from app.models.shipping_agent import ShippingAgent
 from app.models.shipping_quote import ShippingQuote
-from app.models.service_quote import ServiceQuote, ServiceQuoteMode, ServiceQuoteStatus, ServiceQuoteScope
+from app.models.service_quote import ServiceQuote, ServiceQuoteCityFee, ServiceQuoteMode, ServiceQuoteStatus, ServiceQuoteScope
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate, ClearanceAgentEditLog
 from app.models.invoice import Invoice, InvoiceType, InvoiceStatus, InvoicePaymentSchedule, InvoicePayment, InvoiceBankAccount
 from app.models.invoice_item import InvoiceItem
@@ -31,7 +31,7 @@ from app.models.customs_calculator import CustomsEstimate, CustomsEstimateLine
 
 __all__ = [
     "Base", "Branch", "User", "Client",
-    "ShippingAgent", "ShippingQuote", "ServiceQuote", "ServiceQuoteMode", "ServiceQuoteStatus", "ServiceQuoteScope",
+    "ShippingAgent", "ShippingQuote", "ServiceQuote", "ServiceQuoteCityFee", "ServiceQuoteMode", "ServiceQuoteStatus", "ServiceQuoteScope",
     "ClearanceAgent", "ClearanceAgentRate", "ClearanceAgentEditLog",
     "Invoice", "InvoiceType", "InvoiceStatus", "InvoicePaymentSchedule", "InvoicePayment", "InvoiceBankAccount",
     "InvoiceItem", "MarketRate",

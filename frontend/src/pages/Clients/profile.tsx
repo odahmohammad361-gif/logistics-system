@@ -16,7 +16,15 @@ import {
   uploadStamp, uploadBackground, createInvoicePayment, downloadPaymentReceiptHtml,
 } from '@/services/invoiceService'
 import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
-import { createServiceQuote, createShippingInvoiceFromQuote, getServiceQuotes, suggestServiceQuoteRates, updateServiceQuote } from '@/services/serviceQuoteService'
+import {
+  createServiceQuote,
+  createShippingInvoiceFromQuote,
+  downloadServiceQuotePackage,
+  downloadServiceQuotePrintHtml,
+  getServiceQuotes,
+  suggestServiceQuoteRates,
+  updateServiceQuote,
+} from '@/services/serviceQuoteService'
 import api from '@/services/api'
 import type { BookingCargoDocument, Invoice, InvoiceStatus, ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteSuggestion } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
@@ -449,6 +457,23 @@ export default function ClientProfile() {
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href = url; a.download = `${inv.invoice_number}.pdf`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function openServiceQuotePrint(quote: ServiceQuote) {
+    const blob = await downloadServiceQuotePrintHtml(quote.id, isAr ? 'ar' : 'en')
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  async function downloadServiceQuoteArchive(quote: ServiceQuote) {
+    const blob = await downloadServiceQuotePackage(quote.id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${quote.quote_number}-clearance-package.zip`
+    a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -934,6 +959,22 @@ export default function ClientProfile() {
                 </p>
                 {isStaff && (
                   <div className="mt-3 pt-3 border-t border-brand-border/50 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openServiceQuotePrint(quote)}
+                    >
+                      <Eye size={13} /> {isAr ? 'طباعة' : 'Print'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => downloadServiceQuoteArchive(quote)}
+                    >
+                      <Download size={13} /> {isAr ? 'ملف التخليص' : 'Package'}
+                    </Button>
                     {quote.status === 'draft' && (
                       <Button
                         type="button"

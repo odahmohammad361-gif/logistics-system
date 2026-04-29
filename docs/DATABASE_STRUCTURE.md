@@ -1,5 +1,5 @@
 # Database Structure
-> Last updated: 2026-04-28
+> Last updated: 2026-04-30
 > Source of truth: SQLAlchemy models in `backend/app/models/` plus Alembic migrations in `backend/alembic/versions/`.
 
 This document is the working database map for the logistics system. It focuses on the tables that drive the current app, how they connect, and the rules that must stay clear when more people push changes.
@@ -93,6 +93,7 @@ Connections:
 - `clients.id` -> `shop_orders.client_id` when a website customer email matches an internal client
 - `clients.id` -> `booking_cargo_lines.client_id`
 - `clients.id` -> `shipping_quotes.client_id`
+- `clients.id` -> `service_quotes.client_id`
 - `clients.id` -> `customs_estimates.client_id`
 - `clients.id` -> `accounting_entries.client_id`
 
@@ -358,6 +359,49 @@ Key fields:
 
 Important:
 - The item stores its own text and numbers. It does not live-update from the product after saving.
+
+---
+
+## 5B. Client Service Quotes
+
+```text
+clients -> service_quotes -> invoices
+service_quotes -> agent_carrier_rates / clearance_agent_rates / service_quote_city_fees
+service_quotes -> bookings / booking_cargo_lines
+service_quotes -> accounting_entries through generated shipping invoices
+```
+
+### `service_quotes`
+Client-facing shipping/service quote snapshot.
+
+Key fields:
+- Links: `client_id`, `invoice_id`, `booking_id`, `booking_cargo_line_id`
+- Mode/scope: `mode`, `service_scope`, `cargo_source`, `status`
+- Route: `origin_country`, `origin_city`, `pickup_address`, `loading_warehouse_id`, `port_of_loading`, `port_of_discharge`, `destination_country`, `destination_city`, `final_address`
+- Cargo: `container_size`, `cbm`, `gross_weight_kg`, `chargeable_weight_kg`, `cartons`, `goods_description`
+- Clearance: `clearance_through_us`, `delivery_through_us`, `clearance_agent_id`, `clearance_agent_rate_id`, `customs_value_usd`
+- Pricing sources: `shipping_agent_id`, `agent_carrier_rate_id`, `agent_quote_id`, `city_fee_id`, `carrier_name`
+- Calculation snapshot: `rate_basis`, `buy_rate`, `sell_rate`, `chargeable_quantity`
+- Totals: freight/origin/destination/other buy and sell, `total_buy`, `total_sell`, `profit`, `margin_pct`
+- `rate_snapshot`, `calculation_notes`, `notes`
+
+Rules:
+- Quotes snapshot rates so old client offers do not change when agent prices are edited later.
+- Quotes can be created manually or from a `booking_cargo_lines` row.
+- Creating a shipping invoice from a quote also creates a `needs_review` money-out accounting entry for the expected buy cost.
+- Quote export packages include linked cargo documents/photos when `booking_cargo_line_id` exists.
+
+### `service_quote_city_fees`
+Optional origin city fee rules.
+
+Key fields:
+- `origin_country`, `origin_city`, `port_of_loading`, `service_scope`
+- `buy_trucking`, `sell_trucking`, `buy_handling`, `sell_handling`
+- `is_active`, `notes`, `created_by_id`
+
+Usage:
+- Adds a reusable origin pickup/trucking/handling layer for cases such as factory in Ningbo or Yiwu instead of the normal Foshan warehouse.
+- Manual quote origin fees can still override these rules.
 
 ---
 
@@ -729,6 +773,7 @@ All admin API routes are under `/api/v1`.
 | `/shop` | public products, customer auth, shop orders, shipping calculator |
 | `/client-portal` | `clients`, invoices, bookings |
 | `/invoices` | active client profile invoice API: `invoices`, `invoice_items` |
+| `/service-quotes` | client shipping/service quotes, origin city fees, quote print/export, generated shipping invoices |
 | `/invoice-packages` | inactive/removed from active router; tables may remain for stored package records |
 | `/bookings` | `bookings`, cargo lines, cargo docs/images, loading photos |
 | `/shipping-agents` | shipping agents, current rates, history, contracts, quotes |
@@ -760,6 +805,7 @@ PRODUCT REFERENCE
 
 INVOICING
   clients -> invoices -> invoice_items -> optional product source snapshots
+  clients -> service_quotes -> generated shipping invoices -> accounting needs_review cost entries
 
 CONTAINERS
   shipping_agents -> agent_carrier_rates -> bookings
@@ -770,6 +816,7 @@ CONTAINERS
 
 PRICING
   shipping agent current rate -> booking freight snapshot
+  shipping agent/clearance agent/city fee rules -> service quote snapshot
   clearance agent permanent rate -> cargo line clearance selection
   hs_code_reference -> customs estimate values/taxes
 
@@ -800,6 +847,7 @@ EXPORT
 
 العملاء الداخليين clients
   -> الفواتير invoices
+  -> عروض الشحن والخدمات service_quotes
   -> بضائع الحاويات booking_cargo_lines
   -> القيود المالية accounting_entries
 
@@ -828,6 +876,14 @@ EXPORT
       -> booking_cargo_documents ملفات PL/PI/CI/SC/CO/B/L وغيرها
       -> booking_cargo_images   صور البضاعة
       -> clearance_agent_rates  سعر التخليص المناسب
+
+عروض الشحن والخدمات
+  service_quotes
+    -> agent_carrier_rates      سعر الشحن المختار أو المقترح
+    -> service_quote_city_fees  رسوم مدينة المصدر إن وجدت
+    -> clearance_agent_rates    رسوم التخليص إن كانت عن طريقنا
+    -> invoices                 فاتورة شحن للعميل
+    -> accounting_entries       قيد دفع متوقع لتكلفة الشراء
 
 وكلاء التخليص
   clearance_agents

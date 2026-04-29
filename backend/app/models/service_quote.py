@@ -68,10 +68,14 @@ class ServiceQuote(Base):
 
     clearance_through_us = Column(Boolean, nullable=False, default=False)
     delivery_through_us = Column(Boolean, nullable=False, default=False)
+    clearance_agent_id = Column(Integer, ForeignKey("clearance_agents.id"), nullable=True)
+    clearance_agent_rate_id = Column(Integer, ForeignKey("clearance_agent_rates.id"), nullable=True)
+    customs_value_usd = Column(Numeric(14, 2), nullable=True)
 
     shipping_agent_id = Column(Integer, ForeignKey("shipping_agents.id"), nullable=True)
     agent_carrier_rate_id = Column(Integer, ForeignKey("agent_carrier_rates.id"), nullable=True)
     agent_quote_id = Column(Integer, ForeignKey("shipping_quotes.id"), nullable=True)
+    city_fee_id = Column(Integer, ForeignKey("service_quote_city_fees.id"), nullable=True)
     carrier_name = Column(String(120), nullable=True)
 
     currency = Column(String(10), nullable=False, default="USD")
@@ -106,7 +110,37 @@ class ServiceQuote(Base):
     booking = relationship("Booking")
     booking_cargo_line = relationship("BookingCargoLine")
     loading_warehouse = relationship("CompanyWarehouse")
+    clearance_agent = relationship("ClearanceAgent")
+    clearance_agent_rate = relationship("ClearanceAgentRate")
     shipping_agent = relationship("ShippingAgent")
     agent_carrier_rate = relationship("AgentCarrierRate")
     agent_quote = relationship("ShippingQuote")
+    city_fee = relationship("ServiceQuoteCityFee")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class ServiceQuoteCityFee(Base):
+    """Origin pickup/trucking rule by city and loading port.
+
+    Example: Ningbo factory -> Ningbo port or Foshan warehouse -> Yantian.
+    These rules are optional helpers; manual fees can still override them.
+    """
+
+    __tablename__ = "service_quote_city_fees"
+
+    id = Column(Integer, primary_key=True, index=True)
+    origin_country = Column(String(80), nullable=True, default="China")
+    origin_city = Column(String(120), nullable=False, index=True)
+    port_of_loading = Column(String(150), nullable=True, index=True)
+    service_scope = Column(String(40), nullable=True)
+    buy_trucking = Column(Numeric(14, 2), nullable=False, default=0)
+    sell_trucking = Column(Numeric(14, 2), nullable=False, default=0)
+    buy_handling = Column(Numeric(14, 2), nullable=False, default=0)
+    sell_handling = Column(Numeric(14, 2), nullable=False, default=0)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
     created_by = relationship("User", foreign_keys=[created_by_id])

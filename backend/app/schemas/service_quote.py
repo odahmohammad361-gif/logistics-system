@@ -29,9 +29,13 @@ class ServiceQuoteBase(BaseModel):
     goods_description: Optional[str] = None
     clearance_through_us: bool = False
     delivery_through_us: bool = False
+    clearance_agent_id: Optional[int] = None
+    clearance_agent_rate_id: Optional[int] = None
+    customs_value_usd: Optional[Decimal] = Field(default=None, ge=0)
     shipping_agent_id: Optional[int] = None
     agent_carrier_rate_id: Optional[int] = None
     agent_quote_id: Optional[int] = None
+    city_fee_id: Optional[int] = None
     carrier_name: Optional[str] = None
     currency: str = "USD"
     manual_sell_rate: Optional[Decimal] = Field(default=None, ge=0)
@@ -63,6 +67,32 @@ class ServiceQuoteUpdate(BaseModel):
     invoice_id: Optional[int] = None
     booking_id: Optional[int] = None
     booking_cargo_line_id: Optional[int] = None
+
+
+class ServiceQuoteFromCargoLineCreate(BaseModel):
+    service_scope: ServiceQuoteScope = ServiceQuoteScope.WAREHOUSE_TO_PORT
+    cargo_source: str = "client_ready_goods"
+    origin_country: Optional[str] = "China"
+    origin_city: Optional[str] = None
+    pickup_address: Optional[str] = None
+    destination_city: Optional[str] = None
+    final_address: Optional[str] = None
+    clearance_through_us: Optional[bool] = None
+    delivery_through_us: bool = False
+    clearance_agent_id: Optional[int] = None
+    clearance_agent_rate_id: Optional[int] = None
+    customs_value_usd: Optional[Decimal] = Field(default=None, ge=0)
+    city_fee_id: Optional[int] = None
+    manual_sell_rate: Optional[Decimal] = Field(default=None, ge=0)
+    manual_buy_rate: Optional[Decimal] = Field(default=None, ge=0)
+    origin_fees_sell: Optional[Decimal] = Field(default=None, ge=0)
+    origin_fees_buy: Optional[Decimal] = Field(default=None, ge=0)
+    destination_fees_sell: Optional[Decimal] = Field(default=None, ge=0)
+    destination_fees_buy: Optional[Decimal] = Field(default=None, ge=0)
+    other_fees_sell: Optional[Decimal] = Field(default=None, ge=0)
+    other_fees_buy: Optional[Decimal] = Field(default=None, ge=0)
+    extract_documents: bool = False
+    notes: Optional[str] = None
 
 
 class ServiceQuoteSuggestion(BaseModel):
@@ -134,9 +164,13 @@ class ServiceQuoteResponse(BaseModel):
     goods_description: Optional[str]
     clearance_through_us: bool
     delivery_through_us: bool
+    clearance_agent_id: Optional[int]
+    clearance_agent_rate_id: Optional[int]
+    customs_value_usd: Optional[Decimal]
     shipping_agent_id: Optional[int]
     agent_carrier_rate_id: Optional[int]
     agent_quote_id: Optional[int]
+    city_fee_id: Optional[int]
     carrier_name: Optional[str]
     currency: str
     rate_basis: Optional[str]
@@ -168,3 +202,35 @@ class ServiceQuoteResponse(BaseModel):
 class ServiceQuoteListResponse(BaseModel):
     total: int
     results: list[ServiceQuoteResponse]
+
+
+class ServiceQuoteCityFeeCreate(BaseModel):
+    origin_country: Optional[str] = "China"
+    origin_city: str
+    port_of_loading: Optional[str] = None
+    service_scope: Optional[ServiceQuoteScope] = None
+    buy_trucking: Decimal = Field(default=Decimal("0"), ge=0)
+    sell_trucking: Decimal = Field(default=Decimal("0"), ge=0)
+    buy_handling: Decimal = Field(default=Decimal("0"), ge=0)
+    sell_handling: Decimal = Field(default=Decimal("0"), ge=0)
+    notes: Optional[str] = None
+    is_active: bool = True
+
+
+class ServiceQuoteCityFeeResponse(BaseModel):
+    id: int
+    origin_country: Optional[str]
+    origin_city: str
+    port_of_loading: Optional[str]
+    service_scope: Optional[str]
+    buy_trucking: Decimal
+    sell_trucking: Decimal
+    buy_handling: Decimal
+    sell_handling: Decimal
+    notes: Optional[str]
+    is_active: bool
+    created_by_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

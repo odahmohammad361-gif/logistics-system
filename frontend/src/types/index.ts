@@ -227,9 +227,13 @@ export interface ServiceQuote {
   goods_description: string | null
   clearance_through_us: boolean
   delivery_through_us: boolean
+  clearance_agent_id: number | null
+  clearance_agent_rate_id: number | null
+  customs_value_usd: number | null
   shipping_agent_id: number | null
   agent_carrier_rate_id: number | null
   agent_quote_id: number | null
+  city_fee_id: number | null
   carrier_name: string | null
   currency: string
   rate_basis: string | null

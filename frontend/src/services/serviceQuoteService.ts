@@ -23,8 +23,12 @@ export interface ServiceQuotePayload {
   goods_description?: string | null
   clearance_through_us?: boolean
   delivery_through_us?: boolean
+  clearance_agent_id?: number | null
+  clearance_agent_rate_id?: number | null
+  customs_value_usd?: number | null
   shipping_agent_id?: number | null
   agent_carrier_rate_id?: number | null
+  city_fee_id?: number | null
   carrier_name?: string | null
   manual_sell_rate?: number | null
   manual_buy_rate?: number | null
@@ -51,3 +55,17 @@ export const updateServiceQuote = (id: number, data: Partial<ServiceQuote>) =>
 
 export const createShippingInvoiceFromQuote = (id: number) =>
   api.post<Invoice>(`/service-quotes/${id}/invoice`).then((r) => r.data)
+
+export const downloadServiceQuotePrintHtml = (id: number, lang: 'ar' | 'en' = 'en') =>
+  api.get<Blob>(`/service-quotes/${id}/print`, {
+    params: { lang },
+    responseType: 'blob',
+  }).then((r) => r.data)
+
+export const downloadServiceQuotePackage = (id: number) =>
+  api.get<Blob>(`/service-quotes/${id}/clearance-package.zip`, {
+    responseType: 'blob',
+  }).then((r) => r.data)
+
+export const createServiceQuoteFromCargoLine = (lineId: number, data: Partial<ServiceQuotePayload> = {}) =>
+  api.post<ServiceQuote>(`/service-quotes/from-cargo-line/${lineId}`, data).then((r) => r.data)

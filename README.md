@@ -38,6 +38,7 @@ Current focus before the next round:
 | --- | --- |
 | Clients | Client profiles, branch assignment, generated client codes |
 | Client Invoices | Managed inside each client profile and linked to container cargo when needed; the standalone invoice sidebar section is hidden to avoid duplicate workflows |
+| Service Quotes | Client-profile shipping/service quotes from agent rates or container cargo, with clearance/origin fees, shipping invoice generation, printable quote, and clearance package export |
 | Containers | Sea and air booking cards, clickable card profile navigation, status flow, linked client and agent data |
 | Shipping Agents | Agent cards and profiles, weekly/current sea rates, FCL/LCL per container size, air rates, origin fees, history of expired offers |
 | Clearance Agents | Agent cards and profiles, permanent editable clearance rates, edit log, multi-quote price update |
@@ -96,6 +97,20 @@ Air price fields include:
 - Transit days.
 
 Expired weekly shipping offers should appear in history, while current offers stay in current rates.
+
+## Client Service Quotes
+
+Service quotes live inside the client profile. They can be entered manually, suggested from current shipping-agent rates, or generated from linked container cargo lines.
+
+Service quote calculations snapshot:
+
+- Agent freight buy/sell rate.
+- Origin warehouse/factory to loading port fees, including optional city fee rules.
+- Destination/clearance costs from selected clearance-agent rates.
+- Other manual sell/buy fees.
+- Total buy, total sell, profit, and margin.
+
+Accepted quotes can generate a shipping invoice for the client. When the invoice is created, the system also opens a `needs_review` accounting money-out entry for the expected buy cost so the accountant can later attach supplier receipts and post it. A quote can also be printed or exported as a clearance package ZIP with linked cargo line files when available.
 
 ---
 

@@ -1,5 +1,5 @@
 # System Tree And Connection Map
-> Last updated: 2026-04-28
+> Last updated: 2026-04-30
 > Purpose: explain how the business sections connect so development changes can be followed after each pull/commit.
 
 This is not a user manual. It is the mental map of the system: which section owns the data, which section reads it, and what must stay connected.
@@ -39,6 +39,17 @@ Logistics System
 │   ├── Container cargo links
 │   ├── Shop order links
 │   └── PDF export
+│
+├── Client Shipping / Service Quotes
+│   ├── Lives inside the client profile
+│   ├── Manual quote or generated from container cargo line
+│   ├── Suggested from current shipping agent rates
+│   ├── Optional city origin fee rule
+│   ├── Optional clearance-agent rate fees
+│   ├── Generates client shipping invoice
+│   ├── Creates accounting money-out draft for expected buy cost
+│   ├── Printable quote
+│   └── Clearance package ZIP with linked cargo documents
 │
 ├── Containers
 │   ├── Booking card and profile
@@ -324,6 +335,7 @@ Accounting should become the human-accountant-style source for company money mov
 | Clients | `frontend/src/pages/Clients/` | `backend/app/api/v1/clients.py` | `client.py` |
 | Accounting | `frontend/src/pages/Accounting/` | `backend/app/api/v1/accounting.py` | `accounting.py` |
 | Client Invoices | `frontend/src/pages/Clients/profile.tsx`, `frontend/src/components/invoice/` | `backend/app/api/v1/invoices.py` | `invoice.py`, `invoice_item.py` |
+| Client Service Quotes | `frontend/src/pages/Clients/profile.tsx` | `backend/app/api/v1/service_quotes.py` | `service_quote.py` |
 | Shop Orders | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `shop_order.py`, `customer.py` |
 | Containers | `frontend/src/pages/Containers/`, `frontend/src/components/booking/` | `backend/app/api/v1/bookings.py` | `booking.py` |
 | Shipping Agents | `frontend/src/pages/ShippingAgents/` | `backend/app/api/v1/shipping_agents.py` | `shipping_agent.py`, `shipping_quote.py` |
@@ -396,6 +408,17 @@ Update docs when any of these changed:
 │   ├── رابط بضائع الحاوية
 │   ├── رابط طلب المتجر
 │   └── تصدير PDF
+│
+├── عروض الشحن والخدمات للعميل
+│   ├── داخل ملف العميل
+│   ├── إدخال يدوي أو إنشاء من بضاعة مرتبطة بحاوية
+│   ├── اقتراح من أسعار وكلاء الشحن الحالية
+│   ├── قاعدة اختيارية لرسوم مدينة المصدر
+│   ├── رسوم اختيارية من سعر وكيل التخليص
+│   ├── إنشاء فاتورة شحن للعميل
+│   ├── إنشاء قيد دفع متوقع في الحسابات لتكلفة الشراء
+│   ├── طباعة العرض
+│   └── ZIP للتخليص مع ملفات البضاعة المرتبطة
 │
 ├── الحاويات
 │   ├── بطاقة الحجز وملف الحاوية
@@ -662,6 +685,7 @@ Update docs when any of these changed:
 | العملاء | `frontend/src/pages/Clients/` | `backend/app/api/v1/clients.py` | `client.py` |
 | الحسابات | `frontend/src/pages/Accounting/` | `backend/app/api/v1/accounting.py` | `accounting.py` |
 | فواتير العملاء | `frontend/src/pages/Clients/profile.tsx`, `frontend/src/components/invoice/` | `backend/app/api/v1/invoices.py` | `invoice.py`, `invoice_item.py` |
+| عروض الشحن والخدمات | `frontend/src/pages/Clients/profile.tsx` | `backend/app/api/v1/service_quotes.py` | `service_quote.py` |
 | المتجر | `frontend/src/pages/Shop/` | `backend/app/api/v1/shop.py` | `customer.py`, `shop_order.py` |
 | الحاويات | `frontend/src/pages/Containers/` | `backend/app/api/v1/bookings.py` | `booking.py` |
 | وكلاء الشحن | `frontend/src/pages/ShippingAgents/` | `backend/app/api/v1/shipping_agents.py` | `shipping_agent.py`, `shipping_quote.py` |
