@@ -298,6 +298,14 @@ def _booking_fcl_sell_freight(db: Session, booking: Booking) -> Decimal | None:
     return sell if sell is not None and sell > 0 else None
 
 
+def _booking_lcl_sell_per_cbm(db: Session, booking: Booking, sell_freight: Decimal) -> Decimal:
+    fcl_sell = _booking_fcl_sell_freight(db, booking)
+    capacity = _booking_capacity(booking)
+    if fcl_sell is not None and capacity is not None and capacity > 0 and sell_freight >= fcl_sell:
+        return (fcl_sell / capacity).quantize(Decimal("0.0001"))
+    return sell_freight
+
+
 def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
     sell_freight = _booking_sell_freight(booking)
     lines = db.query(BookingCargoLine).filter(
@@ -310,6 +318,7 @@ def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
 
     mode = (booking.mode or "").upper()
     if mode == "LCL":
+        sell_per_cbm = _booking_lcl_sell_per_cbm(db, booking, sell_freight)
         cbm_by_line = [(line, _money(line.cbm) or Decimal("0")) for line in lines]
         chargeable_lines = [(line, cbm) for line, cbm in cbm_by_line if cbm > 0]
         total_cbm = sum((cbm for _, cbm in chargeable_lines), Decimal("0"))
@@ -318,7 +327,7 @@ def _recalculate_freight_shares(db: Session, booking: Booking) -> None:
                 line.freight_share = Decimal("0.00")
             return
 
-        lcl_total = (sell_freight * total_cbm).quantize(Decimal("0.01"))
+        lcl_total = (sell_per_cbm * total_cbm).quantize(Decimal("0.01"))
         fcl_sell = _booking_fcl_sell_freight(db, booking)
         total_to_share = min(lcl_total, fcl_sell) if fcl_sell is not None else lcl_total
 
