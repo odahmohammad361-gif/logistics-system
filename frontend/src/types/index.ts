@@ -193,6 +193,101 @@ export interface InvoiceListResponse {
   results: Invoice[]
 }
 
+// ── Client Service / Shipping Quotes ─────────────────────────────────────────
+export type ServiceQuoteMode = 'SEA_LCL' | 'SEA_FCL' | 'AIR'
+export type ServiceQuoteStatus = 'draft' | 'sent' | 'accepted' | 'invoiced' | 'cancelled'
+export type ServiceQuoteScope = 'port_to_port' | 'warehouse_to_port' | 'factory_to_port' | 'warehouse_to_door' | 'factory_to_door'
+
+export interface ServiceQuote {
+  id: number
+  quote_number: string
+  client_id: number
+  invoice_id: number | null
+  booking_id: number | null
+  booking_cargo_line_id: number | null
+  mode: ServiceQuoteMode
+  status: ServiceQuoteStatus
+  service_scope: ServiceQuoteScope
+  cargo_source: string
+  origin_country: string | null
+  origin_city: string | null
+  pickup_address: string | null
+  loading_warehouse_id: number | null
+  port_of_loading: string | null
+  port_of_discharge: string | null
+  destination_country: string | null
+  destination_city: string | null
+  final_address: string | null
+  container_size: string | null
+  cbm: number | null
+  gross_weight_kg: number | null
+  chargeable_weight_kg: number | null
+  cartons: number | null
+  goods_description: string | null
+  clearance_through_us: boolean
+  delivery_through_us: boolean
+  shipping_agent_id: number | null
+  agent_carrier_rate_id: number | null
+  agent_quote_id: number | null
+  carrier_name: string | null
+  currency: string
+  rate_basis: string | null
+  buy_rate: number | null
+  sell_rate: number | null
+  chargeable_quantity: number | null
+  freight_buy: number
+  freight_sell: number
+  origin_fees_buy: number
+  origin_fees_sell: number
+  destination_fees_buy: number
+  destination_fees_sell: number
+  other_fees_buy: number
+  other_fees_sell: number
+  total_buy: number
+  total_sell: number
+  profit: number
+  margin_pct: number | null
+  rate_snapshot?: Record<string, unknown> | null
+  calculation_notes: string | null
+  notes: string | null
+  created_by_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ServiceQuoteSuggestion {
+  agent_id: number
+  agent_name: string
+  agent_name_ar: string | null
+  agent_carrier_rate_id: number | null
+  agent_quote_id: number | null
+  carrier_name: string | null
+  rate_basis: string
+  buy_rate: number
+  sell_rate: number
+  chargeable_quantity: number
+  freight_buy: number
+  freight_sell: number
+  origin_fees_buy: number
+  origin_fees_sell: number
+  total_buy: number
+  total_sell: number
+  profit: number
+  margin_pct: number | null
+  currency: string
+  port_of_loading: string | null
+  port_of_discharge: string | null
+  transit_days: number | null
+  vessel_day: string | null
+  notes: string | null
+  snapshot: Record<string, unknown>
+}
+
+export interface ServiceQuoteListResponse {
+  total: number
+  results: ServiceQuote[]
+}
+
 // ── Shipping Agent ────────────────────────────────────────────────────────────
 export interface AgentCarrierRate {
   id: number

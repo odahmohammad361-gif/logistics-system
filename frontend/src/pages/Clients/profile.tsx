@@ -8,7 +8,7 @@ import {
   Hash, Calendar, FileText, TrendingUp, Package,
   Barcode, CheckCircle2, XCircle, Plus, Eye, Pencil,
   Trash2, Download, ChevronDown, Loader2, KeyRound, Copy, RefreshCw,
-  CreditCard, ReceiptText,
+  CreditCard, ReceiptText, Ship, Calculator, Truck,
 } from 'lucide-react'
 import { getClient } from '@/services/clientService'
 import {
@@ -16,8 +16,9 @@ import {
   uploadStamp, uploadBackground, createInvoicePayment, downloadPaymentReceiptHtml,
 } from '@/services/invoiceService'
 import { getBookings, getBooking, getCargoDocumentUrl } from '@/services/bookingService'
+import { createServiceQuote, getServiceQuotes, suggestServiceQuoteRates } from '@/services/serviceQuoteService'
 import api from '@/services/api'
-import type { BookingCargoDocument, Invoice, InvoiceStatus } from '@/types'
+import type { BookingCargoDocument, Invoice, InvoiceStatus, ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteSuggestion } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -51,6 +52,11 @@ function fmtMoney(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount) + ' ' + currency
 }
 
+function numOrNull(value: string) {
+  const n = Number(value)
+  return Number.isFinite(n) && value.trim() !== '' ? n : null
+}
+
 function toLocalDateTimeInput(date = new Date()) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return local.toISOString().slice(0, 16)
@@ -63,6 +69,60 @@ interface ClientPackingListFile {
   blNumber: string | null
   lineId: number
   doc: BookingCargoDocument
+}
+
+interface ServiceQuoteFormState {
+  mode: ServiceQuoteMode
+  service_scope: ServiceQuoteScope
+  cargo_source: string
+  origin_city: string
+  pickup_address: string
+  port_of_loading: string
+  port_of_discharge: string
+  destination_country: string
+  destination_city: string
+  container_size: string
+  cbm: string
+  gross_weight_kg: string
+  chargeable_weight_kg: string
+  cartons: string
+  goods_description: string
+  clearance_through_us: boolean
+  delivery_through_us: boolean
+  manual_sell_rate: string
+  manual_buy_rate: string
+  destination_fees_sell: string
+  other_fees_sell: string
+  notes: string
+  selected_rate_id: number | null
+}
+
+function defaultServiceQuoteForm(destinationCountry = ''): ServiceQuoteFormState {
+  return {
+    mode: 'SEA_LCL',
+    service_scope: 'warehouse_to_port',
+    cargo_source: 'outside_supplier',
+    origin_city: '',
+    pickup_address: '',
+    port_of_loading: '',
+    port_of_discharge: '',
+    destination_country: destinationCountry,
+    destination_city: '',
+    container_size: '40HQ',
+    cbm: '',
+    gross_weight_kg: '',
+    chargeable_weight_kg: '',
+    cartons: '',
+    goods_description: '',
+    clearance_through_us: false,
+    delivery_through_us: false,
+    manual_sell_rate: '',
+    manual_buy_rate: '',
+    destination_fees_sell: '',
+    other_fees_sell: '',
+    notes: '',
+    selected_rate_id: null,
+  }
 }
 
 // ── Info Row ──────────────────────────────────────────────────────────────────
@@ -107,6 +167,24 @@ function suggestedPaymentAmount(invoice: Invoice) {
   const nextSchedule = paymentScheduleDueRows(invoice)[0]
   const balanceDue = Number(invoice.balance_due ?? invoice.total ?? 0)
   return Math.max(nextSchedule?.remaining_amount ?? balanceDue, 0)
+}
+
+function quoteModeLabel(mode: string, isAr: boolean) {
+  if (mode === 'SEA_LCL') return isAr ? 'بحري LCL' : 'Sea LCL'
+  if (mode === 'SEA_FCL') return isAr ? 'بحري FCL' : 'Sea FCL'
+  if (mode === 'AIR') return isAr ? 'جوي' : 'Air'
+  return mode
+}
+
+function quoteScopeLabel(scope: string, isAr: boolean) {
+  const labels: Record<string, { en: string; ar: string }> = {
+    port_to_port: { en: 'Port to port', ar: 'من ميناء إلى ميناء' },
+    warehouse_to_port: { en: 'Warehouse to port', ar: 'من المستودع إلى الميناء' },
+    factory_to_port: { en: 'Factory to port', ar: 'من المصنع إلى الميناء' },
+    warehouse_to_door: { en: 'Warehouse to door', ar: 'من المستودع إلى الباب' },
+    factory_to_door: { en: 'Factory to door', ar: 'من المصنع إلى الباب' },
+  }
+  return labels[scope]?.[isAr ? 'ar' : 'en'] ?? scope
 }
 
 // ── StatusChanger ─────────────────────────────────────────────────────────────
@@ -236,6 +314,10 @@ export default function ClientProfile() {
   const [pwdResult, setPwdResult]     = useState<{ password: string; client_code: string } | null>(null)
   const [pwdLoading, setPwdLoading]   = useState(false)
   const [copied, setCopied]           = useState(false)
+  const [serviceQuoteOpen, setServiceQuoteOpen] = useState(false)
+  const [serviceQuoteForm, setServiceQuoteForm] = useState<ServiceQuoteFormState>(() => defaultServiceQuoteForm())
+  const [serviceQuoteSuggestions, setServiceQuoteSuggestions] = useState<ServiceQuoteSuggestion[]>([])
+  const [serviceQuoteSuggesting, setServiceQuoteSuggesting] = useState(false)
 
   async function generatePortalPassword() {
     setPwdLoading(true)
@@ -267,6 +349,14 @@ export default function ClientProfile() {
   })
 
   const invoices = invoicesData?.results ?? []
+
+  const { data: serviceQuotesData, isLoading: serviceQuotesLoading } = useQuery({
+    queryKey: ['service-quotes', { client_id: clientId }],
+    queryFn: () => getServiceQuotes(clientId),
+    enabled: !!clientId,
+  })
+
+  const serviceQuotes = serviceQuotesData?.results ?? []
 
   const { data: packingListFiles = [], isLoading: plLoading } = useQuery({
     queryKey: ['client-packing-lists', clientId],
@@ -320,6 +410,15 @@ export default function ClientProfile() {
       qc.invalidateQueries({ queryKey: ['invoices', { client_id: clientId }] })
       qc.invalidateQueries({ queryKey: ['invoices'] })
       setPaymentInvoice(null)
+    },
+  })
+
+  const createServiceQuoteMut = useMutation({
+    mutationFn: createServiceQuote,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['service-quotes', { client_id: clientId }] })
+      setServiceQuoteOpen(false)
+      setServiceQuoteSuggestions([])
     },
   })
 
@@ -383,6 +482,68 @@ export default function ClientProfile() {
         reference_no: paymentForm.reference_no || null,
         notes: paymentForm.notes || null,
       },
+    })
+  }
+
+  function openServiceQuote() {
+    setServiceQuoteForm(defaultServiceQuoteForm(client?.country ?? ''))
+    setServiceQuoteSuggestions([])
+    setServiceQuoteOpen(true)
+  }
+
+  async function loadServiceQuoteSuggestions() {
+    setServiceQuoteSuggesting(true)
+    try {
+      const rows = await suggestServiceQuoteRates({
+        mode: serviceQuoteForm.mode,
+        service_scope: serviceQuoteForm.service_scope,
+        container_size: serviceQuoteForm.container_size || undefined,
+        cbm: numOrNull(serviceQuoteForm.cbm),
+        gross_weight_kg: numOrNull(serviceQuoteForm.gross_weight_kg),
+        chargeable_weight_kg: numOrNull(serviceQuoteForm.chargeable_weight_kg),
+        port_of_loading: serviceQuoteForm.port_of_loading || undefined,
+        port_of_discharge: serviceQuoteForm.port_of_discharge || undefined,
+      })
+      setServiceQuoteSuggestions(rows)
+      if (rows[0]?.agent_carrier_rate_id) {
+        setServiceQuoteForm((p) => ({ ...p, selected_rate_id: rows[0].agent_carrier_rate_id }))
+      }
+    } finally {
+      setServiceQuoteSuggesting(false)
+    }
+  }
+
+  async function submitServiceQuote(e: React.FormEvent) {
+    e.preventDefault()
+    const selected = serviceQuoteSuggestions.find((row) => row.agent_carrier_rate_id === serviceQuoteForm.selected_rate_id)
+    await createServiceQuoteMut.mutateAsync({
+      client_id: clientId,
+      mode: serviceQuoteForm.mode,
+      service_scope: serviceQuoteForm.service_scope,
+      cargo_source: serviceQuoteForm.cargo_source,
+      origin_country: 'China',
+      origin_city: serviceQuoteForm.origin_city || null,
+      pickup_address: serviceQuoteForm.pickup_address || null,
+      port_of_loading: serviceQuoteForm.port_of_loading || selected?.port_of_loading || null,
+      port_of_discharge: serviceQuoteForm.port_of_discharge || selected?.port_of_discharge || null,
+      destination_country: serviceQuoteForm.destination_country || null,
+      destination_city: serviceQuoteForm.destination_city || null,
+      container_size: serviceQuoteForm.mode === 'SEA_FCL' || serviceQuoteForm.mode === 'SEA_LCL' ? serviceQuoteForm.container_size || null : null,
+      cbm: numOrNull(serviceQuoteForm.cbm),
+      gross_weight_kg: numOrNull(serviceQuoteForm.gross_weight_kg),
+      chargeable_weight_kg: numOrNull(serviceQuoteForm.chargeable_weight_kg),
+      cartons: numOrNull(serviceQuoteForm.cartons),
+      goods_description: serviceQuoteForm.goods_description || null,
+      clearance_through_us: serviceQuoteForm.clearance_through_us,
+      delivery_through_us: serviceQuoteForm.delivery_through_us,
+      shipping_agent_id: selected?.agent_id ?? null,
+      agent_carrier_rate_id: serviceQuoteForm.selected_rate_id,
+      carrier_name: selected?.carrier_name ?? null,
+      manual_sell_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_sell_rate),
+      manual_buy_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_buy_rate),
+      destination_fees_sell: numOrNull(serviceQuoteForm.destination_fees_sell),
+      other_fees_sell: numOrNull(serviceQuoteForm.other_fees_sell),
+      notes: serviceQuoteForm.notes || null,
     })
   }
 
@@ -687,6 +848,77 @@ export default function ClientProfile() {
 
       </div>
 
+      {/* Shipping / Service Quotes */}
+      <div className="card">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-sky-500/15 flex items-center justify-center">
+              <Ship size={16} className="text-sky-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-brand-text">{isAr ? 'عروض الشحن والخدمات' : 'Shipping & Service Quotes'}</h3>
+              <p className="text-xs text-brand-text-muted">
+                {isAr ? 'احسب الشحن حسب CBM / KG / الحاوية مع حفظ نسخة من سعر الوكيل.' : 'Calculate CBM / KG / container service pricing and snapshot the agent rate.'}
+              </p>
+            </div>
+          </div>
+          {isStaff && (
+            <Button size="sm" onClick={openServiceQuote}>
+              <Plus size={13} /> {isAr ? 'عرض شحن جديد' : 'New Shipping Quote'}
+            </Button>
+          )}
+        </div>
+
+        {serviceQuotesLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[...Array(2)].map((_, i) => <div key={i} className="skeleton h-28 rounded-xl" />)}
+          </div>
+        ) : serviceQuotes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/40 px-4 py-8 text-center text-sm text-brand-text-muted">
+            {isAr ? 'لا توجد عروض شحن لهذا العميل بعد.' : 'No shipping quotes for this client yet.'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {serviceQuotes.map((quote: ServiceQuote) => (
+              <div key={quote.id} className="rounded-xl border border-brand-border bg-brand-surface p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-xs text-brand-primary">{quote.quote_number}</p>
+                    <h4 className="text-sm font-semibold text-brand-text mt-1">
+                      {quoteModeLabel(quote.mode, isAr)} · {quoteScopeLabel(quote.service_scope, isAr)}
+                    </h4>
+                  </div>
+                  <span className="badge bg-brand-card border border-brand-border text-brand-text-muted text-[10px]">
+                    {quote.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-brand-text-muted">{isAr ? 'الكمية المحسوبة' : 'Chargeable'}</p>
+                    <p className="font-mono text-brand-text">{quote.chargeable_quantity ?? '—'} {quote.rate_basis ?? ''}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-text-muted">{isAr ? 'سعر البيع' : 'Sell total'}</p>
+                    <p className="font-mono font-semibold text-emerald-400">{fmtMoney(Number(quote.total_sell), quote.currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-text-muted">{isAr ? 'الناقل' : 'Carrier'}</p>
+                    <p className="text-brand-text truncate">{quote.carrier_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-text-muted">{isAr ? 'الربح' : 'Profit'}</p>
+                    <p className="font-mono text-brand-text">{fmtMoney(Number(quote.profit), quote.currency)}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] text-brand-text-muted truncate">
+                  {(quote.port_of_loading || '—')} → {(quote.port_of_discharge || '—')}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Create Invoice Modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('clients.inv_new_title')} size="xl">
         <InvoiceForm
@@ -696,6 +928,132 @@ export default function ClientProfile() {
           loading={createMut.isPending}
           hideStatus
         />
+      </Modal>
+
+      <Modal open={serviceQuoteOpen} onClose={() => setServiceQuoteOpen(false)} title={isAr ? 'عرض شحن / خدمة جديد' : 'New Shipping / Service Quote'} size="xl">
+        <form onSubmit={submitServiceQuote} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'نوع الخدمة' : 'Mode'}</span>
+              <select value={serviceQuoteForm.mode} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, mode: e.target.value as ServiceQuoteMode, selected_rate_id: null }))} className="input-base [color-scheme:dark]">
+                <option value="SEA_LCL">{isAr ? 'بحري LCL' : 'Sea LCL'}</option>
+                <option value="SEA_FCL">{isAr ? 'بحري FCL' : 'Sea FCL'}</option>
+                <option value="AIR">{isAr ? 'جوي' : 'Air'}</option>
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'نطاق الخدمة' : 'Scope'}</span>
+              <select value={serviceQuoteForm.service_scope} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, service_scope: e.target.value as ServiceQuoteScope }))} className="input-base [color-scheme:dark]">
+                {(['port_to_port', 'warehouse_to_port', 'factory_to_port', 'warehouse_to_door', 'factory_to_door'] as ServiceQuoteScope[]).map((scope) => (
+                  <option key={scope} value={scope}>{quoteScopeLabel(scope, isAr)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'مصدر البضاعة' : 'Cargo source'}</span>
+              <select value={serviceQuoteForm.cargo_source} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, cargo_source: e.target.value }))} className="input-base [color-scheme:dark]">
+                <option value="outside_supplier">{isAr ? 'مصدر خارجي' : 'Outside supplier'}</option>
+                <option value="company_goods">{isAr ? 'من شركتنا' : 'Company goods'}</option>
+                <option value="client_ready_goods">{isAr ? 'بضاعة العميل' : 'Client goods'}</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {serviceQuoteForm.mode !== 'AIR' && (
+              <label className="space-y-1.5">
+                <span className="text-xs text-brand-text-muted">{isAr ? 'حجم الحاوية' : 'Container size'}</span>
+                <select value={serviceQuoteForm.container_size} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, container_size: e.target.value, selected_rate_id: null }))} className="input-base [color-scheme:dark]">
+                  <option value="20GP">20GP</option>
+                  <option value="40GP">40GP</option>
+                  <option value="40HQ">40HQ</option>
+                </select>
+              </label>
+            )}
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">CBM</span>
+              <input type="number" min="0" step="0.0001" value={serviceQuoteForm.cbm} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, cbm: e.target.value }))} className="input-base [color-scheme:dark]" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'الوزن الإجمالي' : 'Gross kg'}</span>
+              <input type="number" min="0" step="0.001" value={serviceQuoteForm.gross_weight_kg} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, gross_weight_kg: e.target.value }))} className="input-base [color-scheme:dark]" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'الوزن المحسوب' : 'Chargeable kg'}</span>
+              <input type="number" min="0" step="0.001" value={serviceQuoteForm.chargeable_weight_kg} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, chargeable_weight_kg: e.target.value }))} className="input-base [color-scheme:dark]" />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'مدينة المصدر' : 'Origin city'}</span>
+              <input value={serviceQuoteForm.origin_city} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, origin_city: e.target.value }))} className="input-base" placeholder="Foshan / Ningbo" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'ميناء التحميل' : 'POL'}</span>
+              <input value={serviceQuoteForm.port_of_loading} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_loading: e.target.value }))} className="input-base" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'ميناء التفريغ' : 'POD'}</span>
+              <input value={serviceQuoteForm.port_of_discharge} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_discharge: e.target.value }))} className="input-base" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-brand-text-muted">{isAr ? 'بلد الوجهة' : 'Destination'}</span>
+              <input value={serviceQuoteForm.destination_country} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, destination_country: e.target.value }))} className="input-base" />
+            </label>
+          </div>
+
+          <textarea value={serviceQuoteForm.goods_description} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, goods_description: e.target.value }))} className="input-base min-h-20 resize-none" placeholder={isAr ? 'وصف البضاعة / عنوان المصنع / ملاحظات الاستلام' : 'Goods description / factory address / pickup notes'} />
+
+          <div className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-brand-text flex items-center gap-2"><Calculator size={14} className="text-brand-primary" />{isAr ? 'اقتراحات الأسعار' : 'Rate suggestions'}</h4>
+                <p className="text-xs text-brand-text-muted">{isAr ? 'من أسعار الشحن الحالية المخزنة للوكلاء.' : 'From current stored shipping agent rates.'}</p>
+              </div>
+              <Button type="button" variant="secondary" size="sm" onClick={loadServiceQuoteSuggestions} loading={serviceQuoteSuggesting}>{isAr ? 'اقترح أسعار' : 'Suggest Rates'}</Button>
+            </div>
+            {serviceQuoteSuggestions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {serviceQuoteSuggestions.map((row) => (
+                  <button type="button" key={row.agent_carrier_rate_id ?? `${row.agent_id}-${row.carrier_name}`} onClick={() => setServiceQuoteForm((p) => ({ ...p, selected_rate_id: row.agent_carrier_rate_id, port_of_loading: p.port_of_loading || row.port_of_loading || '', port_of_discharge: p.port_of_discharge || row.port_of_discharge || '' }))} className={clsx('rounded-xl border p-3 text-start transition-colors', serviceQuoteForm.selected_rate_id === row.agent_carrier_rate_id ? 'border-brand-primary bg-brand-primary/10' : 'border-brand-border bg-brand-card hover:border-brand-primary/50')}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-brand-text truncate">{isAr ? row.agent_name_ar || row.agent_name : row.agent_name}</span>
+                      <span className="font-mono text-sm text-emerald-400">{fmtMoney(row.total_sell, row.currency)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-brand-text-muted truncate">{row.carrier_name || '—'} · {row.sell_rate}/{row.rate_basis} · {row.chargeable_quantity} {row.rate_basis}</p>
+                    <p className="mt-1 text-[11px] text-brand-text-muted truncate">{row.port_of_loading || '—'} → {row.port_of_discharge || '—'}</p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-brand-text-muted">{isAr ? 'إذا لم يظهر سعر مناسب أدخل سعر البيع اليدوي.' : 'If no rate matches, enter a manual sell rate.'}</p>
+            )}
+            {!serviceQuoteForm.selected_rate_id && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input type="number" min="0" step="0.01" value={serviceQuoteForm.manual_sell_rate} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, manual_sell_rate: e.target.value }))} className="input-base [color-scheme:dark]" placeholder={isAr ? 'سعر البيع اليدوي' : 'Manual sell rate'} />
+                <input type="number" min="0" step="0.01" value={serviceQuoteForm.manual_buy_rate} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, manual_buy_rate: e.target.value }))} className="input-base [color-scheme:dark]" placeholder={isAr ? 'سعر الشراء اليدوي' : 'Manual buy rate'} />
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="flex items-center gap-2 rounded-xl border border-brand-border bg-brand-surface px-3 py-3 text-sm text-brand-text">
+              <input type="checkbox" checked={serviceQuoteForm.clearance_through_us} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, clearance_through_us: e.target.checked }))} />
+              {isAr ? 'التخليص عن طريقنا' : 'Clearance through us'}
+            </label>
+            <label className="flex items-center gap-2 rounded-xl border border-brand-border bg-brand-surface px-3 py-3 text-sm text-brand-text">
+              <input type="checkbox" checked={serviceQuoteForm.delivery_through_us} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, delivery_through_us: e.target.checked }))} />
+              {isAr ? 'توصيل داخلي' : 'Local delivery'}
+            </label>
+            <input type="number" min="0" step="0.01" value={serviceQuoteForm.other_fees_sell} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, other_fees_sell: e.target.value }))} className="input-base [color-scheme:dark]" placeholder={isAr ? 'رسوم أخرى للبيع' : 'Other sell fees'} />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-brand-border">
+            <Button type="button" variant="secondary" onClick={() => setServiceQuoteOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={createServiceQuoteMut.isPending}><Truck size={14} /> {isAr ? 'حفظ العرض' : 'Save Quote'}</Button>
+          </div>
+        </form>
       </Modal>
 
       {/* Edit Invoice Modal */}
