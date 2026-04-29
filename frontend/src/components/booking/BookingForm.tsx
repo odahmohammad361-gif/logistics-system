@@ -79,6 +79,45 @@ function setAgentDates(rate: AgentCarrierRate, setValue: ReturnType<typeof useFo
   if (rate.vessel_day) setValue('etd', rate.vessel_day)
 }
 
+function hasFclPrice(rate: AgentCarrierRate) {
+  return rate.sell_20gp != null || rate.sell_40ft != null || rate.sell_40hq != null ||
+    rate.buy_20gp != null || rate.buy_40ft != null || rate.buy_40hq != null
+}
+
+function hasLclPrice(rate: AgentCarrierRate) {
+  return rate.sell_lcl_cbm != null || rate.sell_lcl_20gp != null || rate.sell_lcl_40ft != null || rate.sell_lcl_40hq != null ||
+    rate.buy_lcl_cbm != null || rate.buy_lcl_20gp != null || rate.buy_lcl_40ft != null || rate.buy_lcl_40hq != null
+}
+
+function hasAirPrice(rate: AgentCarrierRate) {
+  return rate.sell_air_kg != null || rate.buy_air_kg != null
+}
+
+function rateSupportsMode(rate: AgentCarrierRate, mode: BookingMode) {
+  if (mode === 'AIR') return hasAirPrice(rate)
+  if (mode === 'LCL') return hasLclPrice(rate)
+  return hasFclPrice(rate)
+}
+
+function sizeHasPrice(rate: AgentCarrierRate, size: string, mode: BookingMode) {
+  if (mode === 'LCL') {
+    if (size === '20GP') return rate.sell_lcl_20gp != null || rate.buy_lcl_20gp != null || rate.sell_lcl_cbm != null || rate.buy_lcl_cbm != null
+    if (size === '40GP') return rate.sell_lcl_40ft != null || rate.buy_lcl_40ft != null || rate.sell_lcl_cbm != null || rate.buy_lcl_cbm != null
+    if (size === '40HQ') return rate.sell_lcl_40hq != null || rate.buy_lcl_40hq != null || rate.sell_lcl_cbm != null || rate.buy_lcl_cbm != null
+  }
+  if (mode === 'FCL') {
+    if (size === '20GP') return rate.sell_20gp != null || rate.buy_20gp != null
+    if (size === '40GP') return rate.sell_40ft != null || rate.buy_40ft != null
+    if (size === '40HQ') return rate.sell_40hq != null || rate.buy_40hq != null
+  }
+  return false
+}
+
+function bestContainerSize(rate: AgentCarrierRate, mode: BookingMode, currentSize?: string | null) {
+  if (currentSize && sizeHasPrice(rate, currentSize, mode)) return currentSize
+  return ['40HQ', '40GP', '20GP'].find(size => sizeHasPrice(rate, size, mode)) ?? ''
+}
+
 export default function BookingForm({ open, onClose, onSubmit, initial, saving }: Props) {
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
@@ -151,68 +190,56 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
   function applyCarrierRate(rateId: string) {
     const rate = (carrierRates ?? []).find(r => String(r.id) === String(rateId))
     if (!rate) { setLockedFromAgent(false); return }
+    const modeNow = watch('mode')
+    if (!rateSupportsMode(rate, modeNow)) {
+      setValue('agent_carrier_rate_id', '')
+      setValue('carrier_name', '')
+      setValue('freight_cost', '')
+      setValue('markup_pct', '0')
+      setLockedFromAgent(false)
+      return
+    }
     if (rate.pol) setValue('port_of_loading', rate.pol)
     if (rate.pod) setValue('port_of_discharge', rate.pod)
     setAgentDates(rate, setValue)
     setValue('agent_carrier_rate_id', String(rate.id))
     setValue('carrier_name', rate.carrier_name)
 
-    const hasFcl = rate.sell_20gp != null || rate.sell_40ft != null || rate.sell_40hq != null
-    const hasLcl = rate.sell_lcl_cbm != null || rate.sell_lcl_20gp != null || rate.sell_lcl_40ft != null || rate.sell_lcl_40hq != null
-    const modeNow = watch('mode')
-    if (modeNow === 'AIR' && rate.sell_air_kg != null) {
-      const p = priceFromRate(rate, '', 'AIR')
-      if (p.buy != null) setValue('freight_cost', String(p.buy))
-      setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
-    } else if (modeNow === 'LCL' && hasLcl) {
-      const size = watch('container_size') || '40HQ'
-      setValue('container_size', size)
-      const p = priceFromRate(rate, size, 'LCL')
-      if (p.buy != null) setValue('freight_cost', String(p.buy))
-      if (p.capacity != null) setValue('max_cbm', String(p.capacity))
-      setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
-    } else if (!hasFcl && hasLcl) {
-      setValue('mode', 'LCL')
-      const size = watch('container_size') || '40HQ'
-      setValue('container_size', size)
-      const p = priceFromRate(rate, size, 'LCL')
-      if (p.buy != null) setValue('freight_cost', String(p.buy))
-      if (p.capacity != null) setValue('max_cbm', String(p.capacity))
+    if (modeNow === 'AIR') {
+      const p = priceFromRate(rate, '', modeNow)
+      setValue('freight_cost', p.buy != null ? String(p.buy) : '')
       setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
     } else {
-      setValue('mode', 'FCL')
-      if (rate.sell_40hq != null) {
-        setValue('container_size', '40HQ')
-        setValue('freight_cost', String(rate.buy_40hq ?? ''))
-        setValue('max_cbm', String(rate.cbm_40hq ?? 76))
-        setValue('markup_pct', String(marginPct(rate.buy_40hq, rate.sell_40hq).toFixed(2)))
-      } else if (rate.sell_40ft != null) {
-        setValue('container_size', '40GP')
-        setValue('freight_cost', String(rate.buy_40ft ?? ''))
-        setValue('max_cbm', String(rate.cbm_40ft ?? 67))
-        setValue('markup_pct', String(marginPct(rate.buy_40ft, rate.sell_40ft).toFixed(2)))
-      } else if (rate.sell_20gp != null) {
-        setValue('container_size', '20GP')
-        setValue('freight_cost', String(rate.buy_20gp ?? ''))
-        setValue('max_cbm', String(rate.cbm_20gp ?? 28))
-        setValue('markup_pct', String(marginPct(rate.buy_20gp, rate.sell_20gp).toFixed(2)))
-      }
+      const size = bestContainerSize(rate, modeNow, watch('container_size')) || watch('container_size') || '40HQ'
+      setValue('container_size', size)
+      const p = priceFromRate(rate, size, modeNow)
+      setValue('freight_cost', p.buy != null ? String(p.buy) : '')
+      setValue('max_cbm', String(p.capacity ?? CONTAINER_CBM_DEFAULTS[size] ?? ''))
+      setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
     }
     setLockedFromAgent(true)
   }
 
   useEffect(() => {
     if (!selectedRate) return
+    if (!rateSupportsMode(selectedRate, mode)) {
+      setValue('agent_carrier_rate_id', '')
+      setValue('carrier_name', '')
+      setValue('freight_cost', '')
+      setValue('markup_pct', '0')
+      setLockedFromAgent(false)
+      return
+    }
     if (selectedRate.pol) setValue('port_of_loading', selectedRate.pol)
     if (selectedRate.pod) setValue('port_of_discharge', selectedRate.pod)
     setAgentDates(selectedRate, setValue)
     setValue('carrier_name', selectedRate.carrier_name)
 
-    const size = mode === 'AIR' ? '' : (containerSize || '40HQ')
+    const size = mode === 'AIR' ? '' : (bestContainerSize(selectedRate, mode, containerSize) || containerSize || '40HQ')
     if (mode !== 'AIR' && !containerSize) setValue('container_size', size)
     const p = priceFromRate(selectedRate, size, mode)
-    if (p.buy != null) setValue('freight_cost', String(p.buy))
-    if (p.capacity != null) setValue('max_cbm', String(p.capacity))
+    setValue('freight_cost', p.buy != null ? String(p.buy) : '')
+    if (mode !== 'AIR') setValue('max_cbm', String(p.capacity ?? CONTAINER_CBM_DEFAULTS[size] ?? ''))
     setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
     setLockedFromAgent(true)
   }, [selectedRate, containerSize, mode, setValue])
@@ -224,8 +251,8 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
     if (rate) {
       const modeNow = watch('mode')
       const p = priceFromRate(rate, size, modeNow)
-      if (p.buy != null) setValue('freight_cost', String(p.buy))
-      if (p.capacity != null) setValue('max_cbm', String(p.capacity))
+      setValue('freight_cost', p.buy != null ? String(p.buy) : '')
+      if (modeNow !== 'AIR') setValue('max_cbm', String(p.capacity ?? CONTAINER_CBM_DEFAULTS[size] ?? ''))
       setValue('markup_pct', String(marginPct(p.buy, p.sell).toFixed(2)))
     }
   }
@@ -259,7 +286,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
   // Build carrier options from agent's rates (if loaded), otherwise fall back to static list
   const carrierOptionsFromAgent = useMemo(() => {
     if (!carrierRates || carrierRates.length === 0) return null
-    const filtered = carrierRates.filter(r => mode === 'AIR' ? r.rate_type === 'air' || r.sell_air_kg != null : r.rate_type !== 'air')
+    const filtered = carrierRates.filter(r => rateSupportsMode(r, mode))
     return filtered.map(r => ({
       value: String(r.id),
       label: `${r.carrier_name}${r.pol && r.pod ? ` (${r.pol} → ${r.pod})` : ''}`,

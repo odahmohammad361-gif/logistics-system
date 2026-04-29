@@ -1053,6 +1053,11 @@ def create_booking(
         if payload.shipping_agent_id and rate.agent_id != payload.shipping_agent_id:
             raise HTTPException(400, "Selected carrier rate does not belong to this shipping agent")
         rate_snapshot = _rate_snapshot_values(rate, mode, payload.container_size)
+        if rate_snapshot.get("freight_cost") is None and rate_snapshot.get("sell_freight_cost") is None:
+            raise HTTPException(
+                400,
+                f"Selected carrier rate has no {mode} price for this container size.",
+            )
         payload.shipping_agent_id = rate.agent_id
 
     booking = Booking(
