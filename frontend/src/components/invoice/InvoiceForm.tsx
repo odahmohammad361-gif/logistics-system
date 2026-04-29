@@ -13,9 +13,10 @@ import Modal from '@/components/ui/Modal'
 import type { Invoice, Product } from '@/types'
 import { listProducts } from '@/services/productService'
 import {
-  SHIPPING_TERMS, PAYMENT_TERMS, getFlatPortOptions,
+  localizedPaymentTermOptions, localizedShippingTermOptions,
   calcVolumetricWeight, calcChargeableWeight,
 } from '@/constants/logistics'
+import { localizedCountryOptions } from '@/constants/contact'
 import ImageUploadZone from './ImageUploadZone'
 import StampPositionPicker from './StampPositionPicker'
 import ExcelImportPanel from './ExcelImportPanel'
@@ -27,9 +28,6 @@ import clsx from 'clsx'
 const CURRENCIES = ['USD', 'EUR', 'CNY', 'JOD', 'IQD', 'SAR', 'AED']
 
 const UNIT_VALUES = ['pcs','pairs','sets','kg','tons','cbm','rolls','bags','boxes','cartons'] as const
-
-const SEA_PORT_OPTIONS  = getFlatPortOptions('sea')
-const AIR_PORT_OPTIONS  = getFlatPortOptions('air')
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type TabId = 'info' | 'shipping' | 'items' | 'bank' | 'notes'
@@ -244,14 +242,20 @@ export default function InvoiceForm({
   const watchItems      = watch('items')
   const watchType       = watch('invoice_type')
   const watchCurrency   = watch('currency')
+  const watchOrigin     = watch('origin')
 
   const subtotal = watchItems.reduce((s, it) => s + (Number(it.quantity) * Number(it.unit_price)), 0)
   const discount = Number(watch('discount')) || 0
   const total    = Math.max(subtotal - discount, 0)
 
   const isAir = watchType === 'AIR'
-  const portOptions = isAir ? AIR_PORT_OPTIONS : SEA_PORT_OPTIONS
   const products = productsData?.results ?? []
+  const originOptions = localizedCountryOptions(isRTL)
+  if (watchOrigin && !originOptions.some((option) => option.value === watchOrigin)) {
+    originOptions.push({ value: watchOrigin, label: watchOrigin })
+  }
+  const shippingTermOptions = localizedShippingTermOptions(isRTL)
+  const paymentTermOptions = localizedPaymentTermOptions(isRTL)
 
   function productLabel(product: Product) {
     const name = isRTL ? product.name_ar || product.name : product.name
@@ -496,21 +500,21 @@ export default function InvoiceForm({
 
             <Section title={t('invoices.section_shipping_info')} accent="blue">
               <FormRow>
-                <Input
+                <Select
                   label={t('invoices.origin')}
-                  placeholder={t('invoices.origin_placeholder')}
+                  options={originOptions}
                   {...register('origin')}
                 />
                 <Select
                   label={t('invoices.shipping_term')}
-                  options={[{ value: '', label: t('invoices.select_placeholder') }, ...SHIPPING_TERMS.map((v) => ({ value: v, label: v }))]}
+                  options={shippingTermOptions}
                   {...register('shipping_term')}
                 />
               </FormRow>
               <FormRow>
                 <Select
                   label={t('invoices.payment_terms')}
-                  options={[{ value: '', label: t('invoices.select_placeholder') }, ...PAYMENT_TERMS.map((v) => ({ value: v, label: v }))]}
+                  options={paymentTermOptions}
                   {...register('payment_terms')}
                 />
                 <Input
@@ -519,30 +523,6 @@ export default function InvoiceForm({
                   {...register('shipping_marks')}
                 />
               </FormRow>
-              <FormRow>
-                <Select
-                  label={t('invoices.port_loading')}
-                  options={portOptions}
-                  {...register('port_of_loading')}
-                />
-                <Select
-                  label={t('invoices.port_discharge')}
-                  options={portOptions}
-                  {...register('port_of_discharge')}
-                />
-              </FormRow>
-            </Section>
-
-            <Section title={t('invoices.container_bl_title', 'بيانات الحاوية وسند الشحن')} accent="blue">
-              <FormRow>
-                <Input label={t('invoices.container_no')} placeholder="SEGU6361144" {...register('container_no')} />
-                <Input label={t('invoices.seal_no')}      placeholder="M5796799"    {...register('seal_no')} />
-              </FormRow>
-              <FormRow>
-                <Input label={t('invoices.bl_number')} placeholder="GGZ2848838" {...register('bl_number')} />
-                <Input label={t('invoices.vessel')}                              {...register('vessel_name')} />
-              </FormRow>
-              <Input label={t('invoices.voyage_number')} {...register('voyage_number')} />
             </Section>
           </div>
         )}
@@ -868,7 +848,7 @@ export default function InvoiceForm({
                   if (idx > 0) setActiveTab(TABS[idx - 1].id)
                 }}
               >
-                {isRTL ? 'التالي →' : '← ' + t('common.prev')}
+                {isRTL ? `${t('common.prev')} →` : '← ' + t('common.prev')}
               </button>
             )}
             {activeTab !== 'notes' && (
@@ -880,7 +860,7 @@ export default function InvoiceForm({
                   if (idx < TABS.length - 1) setActiveTab(TABS[idx + 1].id)
                 }}
               >
-                {isRTL ? '← السابق' : t('common.next') + ' →'}
+                {isRTL ? `← ${t('common.next')}` : t('common.next') + ' →'}
               </button>
             )}
             <Button type="submit" loading={loading}>

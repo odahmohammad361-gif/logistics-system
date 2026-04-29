@@ -1,8 +1,19 @@
 // Logistics reference constants — mirrors backend app/utils/constants.py
 
-export const SHIPPING_TERMS = [
-  'FOB', 'CFR', 'CIF', 'EXW', 'DDP', 'FCA', 'DAP', 'DDU',
-]
+export const SHIPPING_TERMS = ['EXW', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP', 'FCA', 'CPT', 'CIP', 'DPU']
+
+export const INCOTERM_LABELS: Record<string, { en: string; ar: string }> = {
+  EXW: { en: 'Ex Works', ar: 'تسليم من مقر البائع' },
+  FOB: { en: 'Free On Board', ar: 'تسليم على ظهر السفينة' },
+  CFR: { en: 'Cost and Freight', ar: 'التكلفة والشحن' },
+  CIF: { en: 'Cost, Insurance and Freight', ar: 'التكلفة والتأمين والشحن' },
+  DAP: { en: 'Delivered At Place', ar: 'تسليم في المكان' },
+  DDP: { en: 'Delivered Duty Paid', ar: 'تسليم خالص الرسوم' },
+  FCA: { en: 'Free Carrier', ar: 'تسليم للناقل' },
+  CPT: { en: 'Carriage Paid To', ar: 'النقل مدفوع إلى' },
+  CIP: { en: 'Carriage and Insurance Paid To', ar: 'النقل والتأمين مدفوعان إلى' },
+  DPU: { en: 'Delivered at Place Unloaded', ar: 'تسليم في المكان بعد التفريغ' },
+}
 
 export const PAYMENT_TERMS = [
   'T/T',
@@ -13,6 +24,40 @@ export const PAYMENT_TERMS = [
   '100% payment before shipping',
   '100% payment after shipping',
 ]
+
+export const PAYMENT_TERM_LABELS: Record<string, { en: string; ar: string }> = {
+  'T/T': { en: 'Telegraphic Transfer', ar: 'حوالة بنكية' },
+  'L/C': { en: 'Letter of Credit', ar: 'اعتماد مستندي' },
+  Cash: { en: 'Cash', ar: 'نقداً' },
+  'D/P': { en: 'Documents Against Payment', ar: 'مستندات مقابل الدفع' },
+  'D/A': { en: 'Documents Against Acceptance', ar: 'مستندات مقابل قبول' },
+  '100% payment before shipping': { en: '100% payment before shipping', ar: 'دفع 100% قبل الشحن' },
+  '100% payment after shipping': { en: '100% payment after shipping', ar: 'دفع 100% بعد الشحن' },
+}
+
+export function localizedShippingTermOptions(isAr: boolean, includeBlank = true) {
+  const blank = includeBlank ? [{ value: '', label: isAr ? '— اختر شرط الشحن —' : '— Select shipping term —' }] : []
+  return [
+    ...blank,
+    ...SHIPPING_TERMS.map((term) => ({
+      value: term,
+      label: `${term} - ${INCOTERM_LABELS[term]?.[isAr ? 'ar' : 'en'] ?? term}`,
+    })),
+  ]
+}
+
+export function localizedPaymentTermOptions(isAr: boolean, includeBlank = true) {
+  const blank = includeBlank ? [{ value: '', label: isAr ? '— اختر شروط الدفع —' : '— Select payment terms —' }] : []
+  return [
+    ...blank,
+    ...PAYMENT_TERMS.map((term) => ({
+      value: term,
+      label: term.includes('%')
+        ? (PAYMENT_TERM_LABELS[term]?.[isAr ? 'ar' : 'en'] ?? term)
+        : `${term} - ${PAYMENT_TERM_LABELS[term]?.[isAr ? 'ar' : 'en'] ?? term}`,
+    })),
+  ]
+}
 
 export const STAMP_POSITIONS = [
   { value: 'top-left',     label: 'Top Left' },

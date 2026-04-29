@@ -9,7 +9,7 @@ import Modal from '@/components/ui/Modal'
 import clsx from 'clsx'
 import { Lock } from 'lucide-react'
 import type { Booking, BookingMode, BookingStatus, AgentCarrierRate } from '@/types'
-import { getFlatPortOptions } from '@/constants/logistics'
+import { getFlatPortOptions, INCOTERM_LABELS, SHIPPING_TERMS } from '@/constants/logistics'
 
 const SEA_PORT_OPTIONS = getFlatPortOptions('sea')
 const AIR_PORT_OPTIONS = getFlatPortOptions('air')
@@ -68,20 +68,6 @@ interface Props {
 const MODES: BookingMode[] = ['LCL', 'FCL', 'AIR']
 const STATUSES: BookingStatus[] = ['draft', 'confirmed', 'in_transit', 'arrived', 'delivered', 'cancelled']
 const CONTAINER_SIZES = ['20GP', '40GP', '40HQ']
-const INCOTERMS = ['EXW', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP', 'FCA', 'CPT', 'CIP', 'DPU']
-const INCOTERM_LABELS: Record<string, { en: string; ar: string }> = {
-  EXW: { en: 'Ex Works', ar: 'تسليم من مقر البائع' },
-  FOB: { en: 'Free On Board', ar: 'تسليم على ظهر السفينة' },
-  CFR: { en: 'Cost and Freight', ar: 'التكلفة والشحن' },
-  CIF: { en: 'Cost, Insurance and Freight', ar: 'التكلفة والتأمين والشحن' },
-  DAP: { en: 'Delivered At Place', ar: 'تسليم في المكان' },
-  DDP: { en: 'Delivered Duty Paid', ar: 'تسليم خالص الرسوم' },
-  FCA: { en: 'Free Carrier', ar: 'تسليم للناقل' },
-  CPT: { en: 'Carriage Paid To', ar: 'النقل مدفوع إلى' },
-  CIP: { en: 'Carriage and Insurance Paid To', ar: 'النقل والتأمين مدفوعان إلى' },
-  DPU: { en: 'Delivered at Place Unloaded', ar: 'تسليم في المكان بعد التفريغ' },
-}
-
 function marginPct(buy: number | null | undefined, sell: number | null | undefined) {
   const b = Number(buy ?? 0)
   const s = Number(sell ?? 0)
@@ -300,7 +286,7 @@ export default function BookingForm({ open, onClose, onSubmit, initial, saving }
 
   const statusOptions        = STATUSES.map(s => ({ value: s, label: t(`bookings.status_${s}`) }))
   const containerSizeOptions = sizeOptionsForCarrier
-  const incotermOptions      = INCOTERMS.map(i => ({ value: i, label: `${i} - ${INCOTERM_LABELS[i][isAr ? 'ar' : 'en']}` }))
+  const incotermOptions      = SHIPPING_TERMS.map(i => ({ value: i, label: `${i} - ${INCOTERM_LABELS[i][isAr ? 'ar' : 'en']}` }))
   const directCarrierOptions = (mode === 'AIR' ? AIR_CARRIERS : SEA_CARRIERS).map(c => ({ value: c, label: c }))
 
   const selectedAgentPrice = priceFromRate(selectedRate, containerSize, mode)

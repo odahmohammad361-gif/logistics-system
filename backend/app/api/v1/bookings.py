@@ -23,6 +23,7 @@ from app.models.booking import Booking, BookingCargoLine, BookingCargoImage, Boo
 from app.models.company_warehouse import CompanyWarehouse
 from app.models.client import Client
 from app.models.invoice import Invoice
+from app.models.invoice_package import InvoicePackage
 from app.models.shipping_agent import AgentCarrierRate
 from app.models.clearance_agent import ClearanceAgent, ClearanceAgentRate
 from app.schemas.booking import (
@@ -446,6 +447,27 @@ def _validate_invoice_selection(db: Session, invoice_id: int | None, client_id: 
     if invoice.client_id and client_id and invoice.client_id != client_id:
         raise HTTPException(400, "Selected invoice belongs to a different client")
     return invoice
+
+
+def _sync_invoice_from_booking(invoice: Invoice | None, booking: Booking | None) -> None:
+    if not invoice or not booking:
+        return
+    invoice.port_of_loading = booking.port_of_loading
+    invoice.port_of_discharge = booking.port_of_discharge
+    invoice.shipping_term = booking.incoterm or invoice.shipping_term
+    invoice.container_no = booking.container_no
+    invoice.seal_no = booking.seal_no
+    invoice.bl_number = booking.bl_number or booking.awb_number
+    invoice.vessel_name = booking.vessel_name or booking.flight_number
+    invoice.voyage_number = booking.voyage_number
+
+
+def _sync_linked_invoices_from_booking(booking: Booking) -> None:
+    seen: set[int] = set()
+    for line in booking.cargo_lines:
+        if line.invoice and line.invoice_id and line.invoice_id not in seen:
+            _sync_invoice_from_booking(line.invoice, booking)
+            seen.add(line.invoice_id)
 
 
 def _validate_goods_source(source: str | None) -> str | None:
@@ -1309,6 +1331,12 @@ def update_booking(
     if {"freight_cost", "sell_freight_cost", "markup_pct", "container_size", "mode"} & set(data.keys()):
         db.flush()
         _recalculate_freight_shares(db, b)
+    if {
+        "port_of_loading", "port_of_discharge", "incoterm", "container_no",
+        "seal_no", "bl_number", "awb_number", "vessel_name",
+        "flight_number", "voyage_number",
+    } & set(data.keys()):
+        _sync_linked_invoices_from_booking(b)
 
     db.commit()
     db.refresh(b)
@@ -1412,13 +1440,15 @@ def add_cargo_line(
             )
     _assert_full_container_rules(b, payload.is_full_container_client)
     _assert_cargo_capacity(b, payload.cbm)
-    _validate_invoice_selection(db, payload.invoice_id, payload.client_id)
+    invoice = _validate_invoice_selection(db, payload.invoice_id, payload.client_id)
+    package = db.query(InvoicePackage).filter(InvoicePackage.id == invoice.package_id).first() if invoice and invoice.package_id else None
     _validate_clearance_selection(db, payload, b)
 
     line = BookingCargoLine(
         booking_id=booking_id,
         client_id=payload.client_id,
         invoice_id=payload.invoice_id,
+        invoice_package_id=package.id if package else None,
         sort_order=payload.sort_order,
         goods_source=_validate_goods_source(payload.goods_source),
         is_full_container_client=payload.is_full_container_client,
@@ -1454,6 +1484,7 @@ def add_cargo_line(
         package.booking_cargo_line_id = line.id
         if not package.client_id:
             package.client_id = line.client_id
+    _sync_invoice_from_booking(invoice, b)
     _recalculate_freight_shares(db, b)
     db.commit()
     db.refresh(line)
@@ -1484,7 +1515,9 @@ def update_cargo_line(
     if "goods_source" in data:
         data["goods_source"] = _validate_goods_source(data["goods_source"])
     effective_invoice_id = data.get("invoice_id", line.invoice_id)
-    _validate_invoice_selection(db, effective_invoice_id, line.client_id)
+    invoice = _validate_invoice_selection(db, effective_invoice_id, line.client_id)
+    if "invoice_id" in data:
+        data["invoice_package_id"] = invoice.package_id if invoice and invoice.package_id else None
     merged = {
         "clearance_through_us": line.clearance_through_us,
         "clearance_agent_id": line.clearance_agent_id,
@@ -1514,6 +1547,7 @@ def update_cargo_line(
         if effective_full_client:
             _refresh_booking_rate_snapshot(db, b)
         db.flush()
+        _sync_invoice_from_booking(invoice, b)
         _recalculate_freight_shares(db, b)
 
     db.commit()
