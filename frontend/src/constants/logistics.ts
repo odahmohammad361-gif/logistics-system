@@ -131,6 +131,26 @@ export const PORTS_BY_COUNTRY: Record<string, { sea: string[]; air: string[] }> 
   },
 }
 
+export const CHINA_ORIGIN_CITIES = [
+  'Foshan',
+  'Guangzhou',
+  'Shenzhen',
+  'Dongguan',
+  'Zhongshan',
+  'Yiwu',
+  'Ningbo',
+  'Shanghai',
+  'Hangzhou',
+  'Suzhou',
+  'Qingdao',
+  'Tianjin',
+  'Xiamen',
+  'Fuzhou',
+  'Shantou',
+  'Wenzhou',
+  'Quanzhou',
+]
+
 /** Flat list of all sea ports for a given mode */
 export function getPortOptions(mode: PortMode): { group: string; options: string[] }[] {
   return Object.entries(PORTS_BY_COUNTRY).map(([country, p]) => ({

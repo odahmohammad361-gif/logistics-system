@@ -379,7 +379,7 @@ Key fields:
 - Mode/scope: `mode`, `service_scope`, `cargo_source`, `status`
 - Route: `origin_country`, `origin_city`, `pickup_address`, `loading_warehouse_id`, `port_of_loading`, `port_of_discharge`, `destination_country`, `destination_city`, `final_address`
 - Cargo: `container_size`, `cbm`, `gross_weight_kg`, `chargeable_weight_kg`, `cartons`, `goods_description`
-- Clearance: `clearance_through_us`, `delivery_through_us`, `clearance_agent_id`, `clearance_agent_rate_id`, `customs_value_usd`
+- Customs/clearance: `hs_code_ref_id`, `hs_code`, `clearance_through_us`, `delivery_through_us`, `clearance_agent_id`, `clearance_agent_rate_id`, `customs_value_usd`
 - Pricing sources: `shipping_agent_id`, `agent_carrier_rate_id`, `agent_quote_id`, `city_fee_id`, `carrier_name`
 - Calculation snapshot: `rate_basis`, `buy_rate`, `sell_rate`, `chargeable_quantity`
 - Totals: freight/origin/destination/other buy and sell, `total_buy`, `total_sell`, `profit`, `margin_pct`

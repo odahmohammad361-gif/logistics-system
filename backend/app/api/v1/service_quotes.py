@@ -307,6 +307,15 @@ def _combined_snapshot(
     return snapshot
 
 
+def _port_match_filter(column, value: str | None):
+    if not value:
+        return None
+    raw = value.strip()
+    terms = {raw}
+    terms.update(part.strip() for part in re.split(r"[,()/\\-]", raw) if len(part.strip()) >= 4)
+    return or_(column.is_(None), *[column.ilike(f"%{term}%") for term in terms])
+
+
 def _suggestions_query(
     db: Session,
     mode: ServiceQuoteMode,
@@ -323,9 +332,9 @@ def _suggestions_query(
         or_(AgentCarrierRate.expiry_date.is_(None), AgentCarrierRate.expiry_date >= today),
     )
     if port_of_loading:
-        q = q.filter(or_(AgentCarrierRate.pol.is_(None), AgentCarrierRate.pol.ilike(f"%{port_of_loading}%")))
+        q = q.filter(_port_match_filter(AgentCarrierRate.pol, port_of_loading))
     if port_of_discharge:
-        q = q.filter(or_(AgentCarrierRate.pod.is_(None), AgentCarrierRate.pod.ilike(f"%{port_of_discharge}%")))
+        q = q.filter(_port_match_filter(AgentCarrierRate.pod, port_of_discharge))
     if loading_warehouse_id:
         q = q.filter(or_(AgentCarrierRate.loading_warehouse_id.is_(None), AgentCarrierRate.loading_warehouse_id == loading_warehouse_id))
     return q
@@ -408,6 +417,13 @@ def _quote_from_data(db: Session, data: dict, current_user: User) -> ServiceQuot
         ).first()
         if not clearance_rate:
             raise HTTPException(404, "Clearance rate not found")
+    if data.get("clearance_through_us"):
+        if not clearance_rate:
+            raise HTTPException(400, "Select a clearance agent rate when clearance through us is checked")
+        if not data.get("hs_code_ref_id") and not data.get("hs_code"):
+            raise HTTPException(400, "Select an HS/customs code when clearance through us is checked")
+        if _money(data.get("customs_value_usd")) <= 0:
+            raise HTTPException(400, "Enter customs value in USD when clearance through us is checked")
 
     effective_pol = data.get("port_of_loading") or (selected_rate.pol if selected_rate else None)
     city_fee = _find_city_fee_rule(
@@ -493,6 +509,8 @@ def _quote_from_data(db: Session, data: dict, current_user: User) -> ServiceQuot
         chargeable_weight_kg=data.get("chargeable_weight_kg"),
         cartons=data.get("cartons"),
         goods_description=data.get("goods_description"),
+        hs_code_ref_id=data.get("hs_code_ref_id"),
+        hs_code=data.get("hs_code"),
         clearance_through_us=bool(data.get("clearance_through_us")),
         delivery_through_us=bool(data.get("delivery_through_us")),
         clearance_agent_id=data.get("clearance_agent_id") or (clearance_rate.agent_id if clearance_rate else None),
@@ -741,6 +759,8 @@ def create_quote_from_cargo_line(
         "chargeable_weight_kg": line.chargeable_weight_kg,
         "cartons": line.cartons,
         "goods_description": _goods_description_from_line(line),
+        "hs_code_ref_id": payload.hs_code_ref_id,
+        "hs_code": line.hs_code or payload.hs_code,
         "clearance_through_us": bool(line.clearance_through_us) if payload.clearance_through_us is None else payload.clearance_through_us,
         "delivery_through_us": payload.delivery_through_us,
         "clearance_agent_id": payload.clearance_agent_id or line.clearance_agent_id,
@@ -935,6 +955,8 @@ def _quote_export_payload(quote: ServiceQuote) -> dict:
             "chargeable_weight_kg": quote.chargeable_weight_kg,
             "cartons": quote.cartons,
             "goods_description": quote.goods_description,
+            "hs_code_ref_id": quote.hs_code_ref_id,
+            "hs_code": quote.hs_code,
         },
         "pricing": {
             "currency": quote.currency,

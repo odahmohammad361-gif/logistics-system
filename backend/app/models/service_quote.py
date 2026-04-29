@@ -65,6 +65,8 @@ class ServiceQuote(Base):
     chargeable_weight_kg = Column(Numeric(12, 3), nullable=True)
     cartons = Column(Integer, nullable=True)
     goods_description = Column(Text, nullable=True)
+    hs_code_ref_id = Column(Integer, ForeignKey("hs_code_references.id", ondelete="SET NULL"), nullable=True, index=True)
+    hs_code = Column(String(30), nullable=True)
 
     clearance_through_us = Column(Boolean, nullable=False, default=False)
     delivery_through_us = Column(Boolean, nullable=False, default=False)
@@ -116,6 +118,7 @@ class ServiceQuote(Base):
     agent_carrier_rate = relationship("AgentCarrierRate")
     agent_quote = relationship("ShippingQuote")
     city_fee = relationship("ServiceQuoteCityFee")
+    hs_code_ref = relationship("HSCodeReference")
     created_by = relationship("User", foreign_keys=[created_by_id])
 
 

@@ -46,6 +46,7 @@ Logistics System
 │   ├── Suggested from current shipping agent rates
 │   ├── Optional city origin fee rule
 │   ├── Optional clearance-agent rate fees
+│   ├── HS/customs reference when clearance is through us
 │   ├── Generates client shipping invoice
 │   ├── Creates accounting money-out draft for expected buy cost
 │   ├── Printable quote
@@ -415,6 +416,7 @@ Update docs when any of these changed:
 │   ├── اقتراح من أسعار وكلاء الشحن الحالية
 │   ├── قاعدة اختيارية لرسوم مدينة المصدر
 │   ├── رسوم اختيارية من سعر وكيل التخليص
+│   ├── مرجع HS والجمارك عند اختيار التخليص عن طريقنا
 │   ├── إنشاء فاتورة شحن للعميل
 │   ├── إنشاء قيد دفع متوقع في الحسابات لتكلفة الشراء
 │   ├── طباعة العرض

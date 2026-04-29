@@ -225,6 +225,8 @@ export interface ServiceQuote {
   chargeable_weight_kg: number | null
   cartons: number | null
   goods_description: string | null
+  hs_code_ref_id: number | null
+  hs_code: string | null
   clearance_through_us: boolean
   delivery_through_us: boolean
   clearance_agent_id: number | null

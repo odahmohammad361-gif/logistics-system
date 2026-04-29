@@ -27,6 +27,8 @@ class ServiceQuoteBase(BaseModel):
     chargeable_weight_kg: Optional[Decimal] = Field(default=None, ge=0)
     cartons: Optional[int] = Field(default=None, ge=0)
     goods_description: Optional[str] = None
+    hs_code_ref_id: Optional[int] = None
+    hs_code: Optional[str] = None
     clearance_through_us: bool = False
     delivery_through_us: bool = False
     clearance_agent_id: Optional[int] = None
@@ -56,6 +58,14 @@ class ServiceQuoteBase(BaseModel):
             raise ValueError("This field is required")
         return text
 
+    @field_validator("cargo_source")
+    @classmethod
+    def validate_cargo_source(cls, value: str) -> str:
+        text = (value or "").strip()
+        if text not in {"outside_supplier", "client_ready_goods"}:
+            raise ValueError("Cargo source must be outside_supplier or client_ready_goods")
+        return text
+
 
 class ServiceQuoteCreate(ServiceQuoteBase):
     pass
@@ -81,6 +91,8 @@ class ServiceQuoteFromCargoLineCreate(BaseModel):
     delivery_through_us: bool = False
     clearance_agent_id: Optional[int] = None
     clearance_agent_rate_id: Optional[int] = None
+    hs_code_ref_id: Optional[int] = None
+    hs_code: Optional[str] = None
     customs_value_usd: Optional[Decimal] = Field(default=None, ge=0)
     city_fee_id: Optional[int] = None
     manual_sell_rate: Optional[Decimal] = Field(default=None, ge=0)
@@ -162,6 +174,8 @@ class ServiceQuoteResponse(BaseModel):
     chargeable_weight_kg: Optional[Decimal]
     cartons: Optional[int]
     goods_description: Optional[str]
+    hs_code_ref_id: Optional[int]
+    hs_code: Optional[str]
     clearance_through_us: bool
     delivery_through_us: bool
     clearance_agent_id: Optional[int]

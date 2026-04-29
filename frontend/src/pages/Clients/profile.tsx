@@ -25,8 +25,11 @@ import {
   suggestServiceQuoteRates,
   updateServiceQuote,
 } from '@/services/serviceQuoteService'
+import { getClearanceAgents } from '@/services/agentService'
+import { listHSCodeReferences } from '@/services/customsReferenceService'
+import { CHINA_ORIGIN_CITIES, getPortOptions } from '@/constants/logistics'
 import api from '@/services/api'
-import type { BookingCargoDocument, Invoice, InvoiceStatus, ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteSuggestion } from '@/types'
+import type { BookingCargoDocument, ClearanceAgent, ClearanceAgentRate, HSCodeReference, Invoice, InvoiceStatus, ServiceQuote, ServiceQuoteMode, ServiceQuoteScope, ServiceQuoteSuggestion } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -95,8 +98,13 @@ interface ServiceQuoteFormState {
   chargeable_weight_kg: string
   cartons: string
   goods_description: string
+  hs_code_ref_id: string
+  hs_code: string
+  customs_value_usd: string
   clearance_through_us: boolean
   delivery_through_us: boolean
+  clearance_agent_id: string
+  clearance_agent_rate_id: string
   manual_sell_rate: string
   manual_buy_rate: string
   destination_fees_sell: string
@@ -122,8 +130,13 @@ function defaultServiceQuoteForm(destinationCountry = ''): ServiceQuoteFormState
     chargeable_weight_kg: '',
     cartons: '',
     goods_description: '',
+    hs_code_ref_id: '',
+    hs_code: '',
+    customs_value_usd: '',
     clearance_through_us: false,
     delivery_through_us: false,
+    clearance_agent_id: '',
+    clearance_agent_rate_id: '',
     manual_sell_rate: '',
     manual_buy_rate: '',
     destination_fees_sell: '',
@@ -193,6 +206,35 @@ function quoteScopeLabel(scope: string, isAr: boolean) {
     factory_to_door: { en: 'Factory to door', ar: 'من المصنع إلى الباب' },
   }
   return labels[scope]?.[isAr ? 'ar' : 'en'] ?? scope
+}
+
+function countryKey(value?: string | null) {
+  const normalized = (value || '').toLowerCase()
+  if (normalized.includes('jordan') || normalized.includes('الأردن')) return 'Jordan'
+  if (normalized.includes('iraq') || normalized.includes('العراق')) return 'Iraq'
+  if (normalized.includes('china') || normalized.includes('الصين')) return 'China'
+  return value || ''
+}
+
+function modeToPortMode(mode: ServiceQuoteMode) {
+  return mode === 'AIR' ? 'air' : 'sea'
+}
+
+function optionMatches(value: string | null | undefined, target: string | null | undefined) {
+  if (!target) return true
+  if (!value) return true
+  return value.toLowerCase().includes(target.toLowerCase()) || target.toLowerCase().includes(value.toLowerCase())
+}
+
+function clearanceRateTotal(rate: ClearanceAgentRate | null | undefined) {
+  if (!rate) return 0
+  return [
+    rate.sell_clearance_fee,
+    rate.sell_transportation,
+    rate.sell_delivery_authorization,
+    rate.sell_inspection_ramp,
+    rate.sell_port_inspection,
+  ].reduce<number>((sum, value) => sum + Number(value || 0), 0)
 }
 
 // ── StatusChanger ─────────────────────────────────────────────────────────────
@@ -366,6 +408,18 @@ export default function ClientProfile() {
 
   const serviceQuotes = serviceQuotesData?.results ?? []
 
+  const { data: clearanceAgentsData } = useQuery({
+    queryKey: ['clearance-agents', 'service-quote'],
+    queryFn: () => getClearanceAgents({ page: 1, page_size: 100 }),
+    enabled: serviceQuoteOpen && serviceQuoteForm.clearance_through_us,
+  })
+
+  const { data: hsReferences = [] } = useQuery({
+    queryKey: ['hs-code-references', 'service-quote', countryKey(serviceQuoteForm.destination_country || client?.country)],
+    queryFn: () => listHSCodeReferences({ country: countryKey(serviceQuoteForm.destination_country || client?.country) || undefined }),
+    enabled: serviceQuoteOpen && serviceQuoteForm.clearance_through_us,
+  })
+
   const { data: packingListFiles = [], isLoading: plLoading } = useQuery({
     queryKey: ['client-packing-lists', clientId],
     enabled: !!clientId,
@@ -531,6 +585,14 @@ export default function ClientProfile() {
   }
 
   async function loadServiceQuoteSuggestions() {
+    if (serviceQuoteForm.mode === 'SEA_LCL' && !numOrNull(serviceQuoteForm.cbm)) {
+      window.alert(isAr ? 'أدخل CBM أولاً حتى نحسب سعر LCL لكل متر.' : 'Enter CBM first so LCL per-CBM rates can be calculated.')
+      return
+    }
+    if (serviceQuoteForm.mode === 'AIR' && !numOrNull(serviceQuoteForm.chargeable_weight_kg) && !numOrNull(serviceQuoteForm.gross_weight_kg)) {
+      window.alert(isAr ? 'أدخل الوزن المحسوب أو الوزن الإجمالي أولاً.' : 'Enter chargeable kg or gross kg first.')
+      return
+    }
     setServiceQuoteSuggesting(true)
     try {
       const rows = await suggestServiceQuoteRates({
@@ -546,6 +608,9 @@ export default function ClientProfile() {
       setServiceQuoteSuggestions(rows)
       if (rows[0]?.agent_carrier_rate_id) {
         setServiceQuoteForm((p) => ({ ...p, selected_rate_id: rows[0].agent_carrier_rate_id }))
+      } else {
+        setServiceQuoteForm((p) => ({ ...p, selected_rate_id: null }))
+        window.alert(isAr ? 'لا توجد أسعار مطابقة من أسعار وكلاء الشحن الحالية. أدخل السعر يدوياً.' : 'No matching current shipping-agent rates found. Enter the rate manually.')
       }
     } finally {
       setServiceQuoteSuggesting(false)
@@ -555,35 +620,67 @@ export default function ClientProfile() {
   async function submitServiceQuote(e: React.FormEvent) {
     e.preventDefault()
     const selected = serviceQuoteSuggestions.find((row) => row.agent_carrier_rate_id === serviceQuoteForm.selected_rate_id)
-    await createServiceQuoteMut.mutateAsync({
-      client_id: clientId,
-      mode: serviceQuoteForm.mode,
-      service_scope: serviceQuoteForm.service_scope,
-      cargo_source: serviceQuoteForm.cargo_source,
-      origin_country: 'China',
-      origin_city: serviceQuoteForm.origin_city || null,
-      pickup_address: serviceQuoteForm.pickup_address || null,
-      port_of_loading: serviceQuoteForm.port_of_loading || selected?.port_of_loading || null,
-      port_of_discharge: serviceQuoteForm.port_of_discharge || selected?.port_of_discharge || null,
-      destination_country: serviceQuoteForm.destination_country || null,
-      destination_city: serviceQuoteForm.destination_city || null,
-      container_size: serviceQuoteForm.mode === 'SEA_FCL' || serviceQuoteForm.mode === 'SEA_LCL' ? serviceQuoteForm.container_size || null : null,
-      cbm: numOrNull(serviceQuoteForm.cbm),
-      gross_weight_kg: numOrNull(serviceQuoteForm.gross_weight_kg),
-      chargeable_weight_kg: numOrNull(serviceQuoteForm.chargeable_weight_kg),
-      cartons: numOrNull(serviceQuoteForm.cartons),
-      goods_description: serviceQuoteForm.goods_description || null,
-      clearance_through_us: serviceQuoteForm.clearance_through_us,
-      delivery_through_us: serviceQuoteForm.delivery_through_us,
-      shipping_agent_id: selected?.agent_id ?? null,
-      agent_carrier_rate_id: serviceQuoteForm.selected_rate_id,
-      carrier_name: selected?.carrier_name ?? null,
-      manual_sell_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_sell_rate),
-      manual_buy_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_buy_rate),
-      destination_fees_sell: numOrNull(serviceQuoteForm.destination_fees_sell),
-      other_fees_sell: numOrNull(serviceQuoteForm.other_fees_sell),
-      notes: serviceQuoteForm.notes || null,
-    })
+    if (!selected && !numOrNull(serviceQuoteForm.manual_sell_rate)) {
+      window.alert(isAr ? 'اختر سعر من الاقتراحات أو أدخل سعر البيع اليدوي.' : 'Select a suggested rate or enter a manual sell rate.')
+      return
+    }
+    if (serviceQuoteForm.mode === 'SEA_LCL' && !numOrNull(serviceQuoteForm.cbm)) {
+      window.alert(isAr ? 'أدخل CBM لعرض LCL.' : 'Enter CBM for an LCL quote.')
+      return
+    }
+    if (serviceQuoteForm.clearance_through_us) {
+      if (!serviceQuoteForm.clearance_agent_id || !serviceQuoteForm.clearance_agent_rate_id) {
+        window.alert(isAr ? 'اختر وكيل التخليص وسعر التخليص.' : 'Select the clearance agent and clearance rate.')
+        return
+      }
+      if (!serviceQuoteForm.hs_code_ref_id) {
+        window.alert(isAr ? 'اختر الرمز الجمركي من مرجع HS.' : 'Select the HS/customs code.')
+        return
+      }
+      if (!numOrNull(serviceQuoteForm.customs_value_usd)) {
+        window.alert(isAr ? 'أدخل قيمة جمركية بالدولار لحساب رسوم التخليص.' : 'Enter customs value in USD for the clearance calculation.')
+        return
+      }
+    }
+    try {
+      await createServiceQuoteMut.mutateAsync({
+        client_id: clientId,
+        mode: serviceQuoteForm.mode,
+        service_scope: serviceQuoteForm.service_scope,
+        cargo_source: serviceQuoteForm.cargo_source,
+        origin_country: 'China',
+        origin_city: serviceQuoteForm.origin_city || null,
+        pickup_address: serviceQuoteForm.pickup_address || null,
+        port_of_loading: serviceQuoteForm.port_of_loading || selected?.port_of_loading || null,
+        port_of_discharge: serviceQuoteForm.port_of_discharge || selected?.port_of_discharge || null,
+        destination_country: serviceQuoteForm.destination_country || null,
+        destination_city: serviceQuoteForm.destination_city || null,
+        container_size: serviceQuoteForm.mode === 'SEA_FCL' || serviceQuoteForm.mode === 'SEA_LCL' ? serviceQuoteForm.container_size || null : null,
+        cbm: numOrNull(serviceQuoteForm.cbm),
+        gross_weight_kg: numOrNull(serviceQuoteForm.gross_weight_kg),
+        chargeable_weight_kg: numOrNull(serviceQuoteForm.chargeable_weight_kg),
+        cartons: numOrNull(serviceQuoteForm.cartons),
+        goods_description: serviceQuoteForm.goods_description || null,
+        hs_code_ref_id: serviceQuoteForm.hs_code_ref_id ? Number(serviceQuoteForm.hs_code_ref_id) : null,
+        hs_code: selectedHsReference?.hs_code || serviceQuoteForm.hs_code || null,
+        clearance_through_us: serviceQuoteForm.clearance_through_us,
+        delivery_through_us: serviceQuoteForm.delivery_through_us,
+        clearance_agent_id: serviceQuoteForm.clearance_agent_id ? Number(serviceQuoteForm.clearance_agent_id) : null,
+        clearance_agent_rate_id: serviceQuoteForm.clearance_agent_rate_id ? Number(serviceQuoteForm.clearance_agent_rate_id) : null,
+        customs_value_usd: numOrNull(serviceQuoteForm.customs_value_usd),
+        shipping_agent_id: selected?.agent_id ?? null,
+        agent_carrier_rate_id: serviceQuoteForm.selected_rate_id,
+        carrier_name: selected?.carrier_name ?? null,
+        manual_sell_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_sell_rate),
+        manual_buy_rate: serviceQuoteForm.selected_rate_id ? null : numOrNull(serviceQuoteForm.manual_buy_rate),
+        destination_fees_sell: numOrNull(serviceQuoteForm.destination_fees_sell),
+        other_fees_sell: numOrNull(serviceQuoteForm.other_fees_sell),
+        notes: serviceQuoteForm.notes || null,
+      })
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail
+      window.alert(typeof detail === 'string' ? detail : (isAr ? 'تعذر حفظ عرض الشحن. راجع البيانات المطلوبة.' : 'Could not save the shipping quote. Check the required fields.'))
+    }
   }
 
   function fmt(date: string) {
@@ -601,6 +698,27 @@ export default function ClientProfile() {
     { value: 'card', label: isAr ? 'بطاقة' : 'Card' },
     { value: 'other', label: isAr ? 'أخرى' : 'Other' },
   ]
+  const quotePortMode = modeToPortMode(serviceQuoteForm.mode)
+  const polGroups = getPortOptions(quotePortMode).filter((group) => group.group === 'China')
+  const podGroups = getPortOptions(quotePortMode).filter((group) => group.group !== 'China')
+  const selectedSuggestion = serviceQuoteSuggestions.find((row) => row.agent_carrier_rate_id === serviceQuoteForm.selected_rate_id)
+  const selectedSuggestionFees = (selectedSuggestion?.snapshot?.fees ?? {}) as Record<string, number>
+  const clearanceAgents = clearanceAgentsData?.results ?? []
+  const selectedClearanceAgent = clearanceAgents.find((agent: ClearanceAgent) => String(agent.id) === serviceQuoteForm.clearance_agent_id)
+  const clearanceRateOptions = (selectedClearanceAgent?.rates ?? []).filter((rate: ClearanceAgentRate) => {
+    const targetCountry = countryKey(serviceQuoteForm.destination_country || client?.country)
+    const expectedMode = serviceQuoteForm.mode === 'AIR' ? 'air' : 'sea'
+    return (
+      rate.is_active &&
+      rate.service_mode === expectedMode &&
+      optionMatches(rate.country, targetCountry) &&
+      optionMatches(rate.port, serviceQuoteForm.port_of_discharge) &&
+      (expectedMode === 'air' || optionMatches(rate.container_size, serviceQuoteForm.container_size)) &&
+      optionMatches(rate.carrier_name, selectedSuggestion?.carrier_name)
+    )
+  })
+  const selectedClearanceRate = clearanceRateOptions.find((rate) => String(rate.id) === serviceQuoteForm.clearance_agent_rate_id)
+  const selectedHsReference = (hsReferences as HSCodeReference[]).find((ref) => String(ref.id) === serviceQuoteForm.hs_code_ref_id)
 
   if (clientLoading) {
     return (
@@ -1024,7 +1142,7 @@ export default function ClientProfile() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'نوع الخدمة' : 'Mode'}</span>
-              <select value={serviceQuoteForm.mode} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, mode: e.target.value as ServiceQuoteMode, selected_rate_id: null }))} className="input-base [color-scheme:dark]">
+              <select value={serviceQuoteForm.mode} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, mode: e.target.value as ServiceQuoteMode, selected_rate_id: null, port_of_loading: '', port_of_discharge: '', clearance_agent_rate_id: '' }))} className="input-base [color-scheme:dark]">
                 <option value="SEA_LCL">{isAr ? 'بحري LCL' : 'Sea LCL'}</option>
                 <option value="SEA_FCL">{isAr ? 'بحري FCL' : 'Sea FCL'}</option>
                 <option value="AIR">{isAr ? 'جوي' : 'Air'}</option>
@@ -1042,7 +1160,6 @@ export default function ClientProfile() {
               <span className="text-xs text-brand-text-muted">{isAr ? 'مصدر البضاعة' : 'Cargo source'}</span>
               <select value={serviceQuoteForm.cargo_source} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, cargo_source: e.target.value }))} className="input-base [color-scheme:dark]">
                 <option value="outside_supplier">{isAr ? 'مصدر خارجي' : 'Outside supplier'}</option>
-                <option value="company_goods">{isAr ? 'من شركتنا' : 'Company goods'}</option>
                 <option value="client_ready_goods">{isAr ? 'بضاعة العميل' : 'Client goods'}</option>
               </select>
             </label>
@@ -1076,15 +1193,32 @@ export default function ClientProfile() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <label className="space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'مدينة المصدر' : 'Origin city'}</span>
-              <input value={serviceQuoteForm.origin_city} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, origin_city: e.target.value }))} className="input-base" placeholder="Foshan / Ningbo" />
+              <select value={serviceQuoteForm.origin_city} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, origin_city: e.target.value }))} className="input-base [color-scheme:dark]">
+                <option value="">{isAr ? 'اختر مدينة صينية' : 'Select China city'}</option>
+                {CHINA_ORIGIN_CITIES.map((city) => <option key={city} value={city}>{city}</option>)}
+              </select>
             </label>
             <label className="space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'ميناء التحميل' : 'POL'}</span>
-              <input value={serviceQuoteForm.port_of_loading} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_loading: e.target.value }))} className="input-base" />
+              <select value={serviceQuoteForm.port_of_loading} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_loading: e.target.value, selected_rate_id: null }))} className="input-base [color-scheme:dark]">
+                <option value="">{isAr ? 'اختر ميناء التحميل' : 'Select POL'}</option>
+                {polGroups.map((group) => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.options.map((port) => <option key={port} value={port}>{port}</option>)}
+                  </optgroup>
+                ))}
+              </select>
             </label>
             <label className="space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'ميناء التفريغ' : 'POD'}</span>
-              <input value={serviceQuoteForm.port_of_discharge} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_discharge: e.target.value }))} className="input-base" />
+              <select value={serviceQuoteForm.port_of_discharge} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, port_of_discharge: e.target.value, selected_rate_id: null }))} className="input-base [color-scheme:dark]">
+                <option value="">{isAr ? 'اختر ميناء التفريغ' : 'Select POD'}</option>
+                {podGroups.map((group) => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.options.map((port) => <option key={port} value={port}>{port}</option>)}
+                  </optgroup>
+                ))}
+              </select>
             </label>
             <label className="space-y-1.5">
               <span className="text-xs text-brand-text-muted">{isAr ? 'بلد الوجهة' : 'Destination'}</span>
@@ -1110,7 +1244,12 @@ export default function ClientProfile() {
                       <span className="text-sm font-semibold text-brand-text truncate">{isAr ? row.agent_name_ar || row.agent_name : row.agent_name}</span>
                       <span className="font-mono text-sm text-emerald-400">{fmtMoney(row.total_sell, row.currency)}</span>
                     </div>
-                    <p className="mt-1 text-xs text-brand-text-muted truncate">{row.carrier_name || '—'} · {row.sell_rate}/{row.rate_basis} · {row.chargeable_quantity} {row.rate_basis}</p>
+                    <p className="mt-1 text-xs text-brand-text-muted truncate">
+                      {row.carrier_name || '—'} · {quoteModeLabel(serviceQuoteForm.mode, isAr)} · {row.sell_rate}/{row.rate_basis} · {row.chargeable_quantity} {row.rate_basis}
+                    </p>
+                    <p className="mt-1 text-[11px] text-brand-text-muted truncate">
+                      {isAr ? 'رسوم المنشأ' : 'Origin fees'}: {fmtMoney(Number(row.origin_fees_sell || 0), row.currency)} · {isAr ? 'عبور' : 'Transit'}: {row.transit_days ?? '—'}
+                    </p>
                     <p className="mt-1 text-[11px] text-brand-text-muted truncate">{row.port_of_loading || '—'} → {row.port_of_discharge || '—'}</p>
                   </button>
                 ))}
@@ -1124,11 +1263,36 @@ export default function ClientProfile() {
                 <input type="number" min="0" step="0.01" value={serviceQuoteForm.manual_buy_rate} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, manual_buy_rate: e.target.value }))} className="input-base [color-scheme:dark]" placeholder={isAr ? 'سعر الشراء اليدوي' : 'Manual buy rate'} />
               </div>
             )}
+            {selectedSuggestion && (
+              <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
+                <p className="text-xs font-semibold text-amber-300 mb-2">
+                  {isAr ? 'رسوم المنشأ من سعر وكيل الشحن' : 'Origin Fees From Selected Forwarder Rate'}
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                  <span className="text-brand-text-muted">{isAr ? 'أيام العبور' : 'Transit'} <b className="text-brand-text">{selectedSuggestion.transit_days ?? '—'}</b></span>
+                  <span className="text-brand-text-muted">{isAr ? 'عمال تحميل' : 'Loading'} <b className="text-brand-text">{fmtMoney(Number(selectedSuggestionFees.loading || 0), selectedSuggestion.currency)}</b></span>
+                  <span className="text-brand-text-muted">B/L <b className="text-brand-text">{fmtMoney(Number(selectedSuggestionFees.bl || 0), selectedSuggestion.currency)}</b></span>
+                  <span className="text-brand-text-muted">{isAr ? 'نقل' : 'Trucking'} <b className="text-brand-text">{fmtMoney(Number(selectedSuggestionFees.trucking || 0), selectedSuggestion.currency)}</b></span>
+                  <span className="text-brand-text-muted">{isAr ? 'أخرى' : 'Other'} <b className="text-brand-text">{fmtMoney(Number(selectedSuggestionFees.other || 0), selectedSuggestion.currency)}</b></span>
+                </div>
+                <p className="mt-2 text-[11px] text-brand-text-muted">
+                  {isAr ? 'هذه الرسوم تدخل تلقائياً في عرض السعر عند اختيار هذا السعر.' : 'These fees are automatically included in the quote when this rate is selected.'}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="flex items-center gap-2 rounded-xl border border-brand-border bg-brand-surface px-3 py-3 text-sm text-brand-text">
-              <input type="checkbox" checked={serviceQuoteForm.clearance_through_us} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, clearance_through_us: e.target.checked }))} />
+              <input type="checkbox" checked={serviceQuoteForm.clearance_through_us} onChange={(e) => setServiceQuoteForm((p) => ({
+                ...p,
+                clearance_through_us: e.target.checked,
+                clearance_agent_id: e.target.checked ? p.clearance_agent_id : '',
+                clearance_agent_rate_id: e.target.checked ? p.clearance_agent_rate_id : '',
+                hs_code_ref_id: e.target.checked ? p.hs_code_ref_id : '',
+                hs_code: e.target.checked ? p.hs_code : '',
+                customs_value_usd: e.target.checked ? p.customs_value_usd : '',
+              }))} />
               {isAr ? 'التخليص عن طريقنا' : 'Clearance through us'}
             </label>
             <label className="flex items-center gap-2 rounded-xl border border-brand-border bg-brand-surface px-3 py-3 text-sm text-brand-text">
@@ -1137,6 +1301,72 @@ export default function ClientProfile() {
             </label>
             <input type="number" min="0" step="0.01" value={serviceQuoteForm.other_fees_sell} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, other_fees_sell: e.target.value }))} className="input-base [color-scheme:dark]" placeholder={isAr ? 'رسوم أخرى للبيع' : 'Other sell fees'} />
           </div>
+
+          {serviceQuoteForm.clearance_through_us && (
+            <div className="rounded-xl border border-brand-border bg-brand-surface p-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-brand-text">{isAr ? 'التخليص والجمارك' : 'Clearance & Customs'}</h4>
+                <p className="text-xs text-brand-text-muted">
+                  {isAr ? 'عند اختيار التخليص عن طريقنا يجب تحديد الوكيل، السعر، والرمز الجمركي.' : 'When clearance is through us, select the broker, rate, and HS/customs code.'}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-xs text-brand-text-muted">{isAr ? 'وكيل التخليص' : 'Clearance agent'}</span>
+                  <select value={serviceQuoteForm.clearance_agent_id} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, clearance_agent_id: e.target.value, clearance_agent_rate_id: '' }))} className="input-base [color-scheme:dark]">
+                    <option value="">{isAr ? 'اختر وكيل التخليص' : 'Select clearance agent'}</option>
+                    {clearanceAgents.map((agent: ClearanceAgent) => (
+                      <option key={agent.id} value={agent.id}>{isAr ? agent.name_ar || agent.name : agent.name} — {agent.country || '—'}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs text-brand-text-muted">{isAr ? 'سعر التخليص' : 'Clearance rate'}</span>
+                  <select value={serviceQuoteForm.clearance_agent_rate_id} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, clearance_agent_rate_id: e.target.value }))} className="input-base [color-scheme:dark]" disabled={!serviceQuoteForm.clearance_agent_id}>
+                    <option value="">{isAr ? 'اختر سعر التخليص المطابق' : 'Select matching clearance rate'}</option>
+                    {clearanceRateOptions.map((rate) => (
+                      <option key={rate.id} value={rate.id}>
+                        {(rate.service_mode || '').toUpperCase()} · {rate.country || '—'} · {rate.port || '—'} · {rate.container_size || (isAr ? 'كل الأحجام' : 'Any size')} · {fmtMoney(clearanceRateTotal(rate), 'USD')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs text-brand-text-muted">{isAr ? 'الرمز الجمركي / نوع البضاعة' : 'HS code / goods type'}</span>
+                  <select value={serviceQuoteForm.hs_code_ref_id} onChange={(e) => {
+                    const ref = (hsReferences as HSCodeReference[]).find((item) => String(item.id) === e.target.value)
+                    setServiceQuoteForm((p) => ({
+                      ...p,
+                      hs_code_ref_id: e.target.value,
+                      hs_code: ref?.hs_code || '',
+                      customs_value_usd: ref?.customs_estimated_value_usd ? String(ref.customs_estimated_value_usd) : p.customs_value_usd,
+                    }))
+                  }} className="input-base [color-scheme:dark]">
+                    <option value="">{isAr ? 'اختر من HS والجمارك' : 'Select from HS & Customs'}</option>
+                    {(hsReferences as HSCodeReference[]).map((ref) => (
+                      <option key={ref.id} value={ref.id}>
+                        {ref.hs_code} — {isAr ? ref.description_ar || ref.description : ref.description}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs text-brand-text-muted">{isAr ? 'القيمة الجمركية USD' : 'Customs value USD'}</span>
+                  <input type="number" min="0" step="0.01" value={serviceQuoteForm.customs_value_usd} onChange={(e) => setServiceQuoteForm((p) => ({ ...p, customs_value_usd: e.target.value }))} className="input-base [color-scheme:dark]" />
+                </label>
+              </div>
+              {selectedClearanceRate && (
+                <p className="text-xs text-emerald-300">
+                  {isAr ? 'إجمالي بيع التخليص التقريبي' : 'Approx clearance sell total'}: {fmtMoney(clearanceRateTotal(selectedClearanceRate), 'USD')}
+                </p>
+              )}
+              {serviceQuoteForm.clearance_agent_id && clearanceRateOptions.length === 0 && (
+                <p className="text-xs text-amber-300">
+                  {isAr ? 'لا يوجد سعر تخليص مطابق للوجهة/الحجم/الناقل. عدّل سعر الوكيل أو أدخل رسوم يدوية لاحقاً.' : 'No clearance rate matches destination/size/carrier. Update the agent rate or enter manual fees later.'}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2 border-t border-brand-border">
             <Button type="button" variant="secondary" onClick={() => setServiceQuoteOpen(false)}>{t('common.cancel')}</Button>
