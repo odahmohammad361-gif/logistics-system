@@ -24,6 +24,7 @@ from app.models.company_settings import CompanySettings
 from app.models.product import Product
 from app.models.accounting import AccountingDirection, AccountingStatus, AccountingEntry
 from app.models.customs_calculator import CustomsEstimate
+from app.models.service_quote import ServiceQuote, ServiceQuoteStatus
 from app.schemas.invoice import (
     InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse, InvoicePaymentCreate,
     InvoicePaymentResponse, InvoiceBankAccountResponse,
@@ -614,6 +615,13 @@ def delete_invoice(
     )
     db.query(CustomsEstimate).filter(CustomsEstimate.invoice_id == inv.id).update(
         {CustomsEstimate.invoice_id: None},
+        synchronize_session=False,
+    )
+    db.query(ServiceQuote).filter(ServiceQuote.invoice_id == inv.id).update(
+        {
+            ServiceQuote.invoice_id: None,
+            ServiceQuote.status: ServiceQuoteStatus.ACCEPTED.value,
+        },
         synchronize_session=False,
     )
     db.delete(inv)
